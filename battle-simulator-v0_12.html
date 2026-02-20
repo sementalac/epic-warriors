@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle Simulator - Epic Warriors</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323:wght@400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0805;
+            --panel: #1a1208;
+            --panel2: #221a0e;
+            --border: #4a3520;
+            --accent: #f0c040;
+            --text: #e8d5a0;
+            --dim: #7a6040;
+            --danger: #e04040;
+            --ok: #60d060;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'VT323', monospace;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--accent);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(240, 192, 64, 0.5);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--dim);
+            font-size: 1rem;
+            margin-bottom: 30px;
+        }
+
+        .armies-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .army-panel {
+            background: var(--panel);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .army-title {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .troop-selector {
+            margin-bottom: 15px;
+        }
+
+        .troop-selector label {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--dim);
+            margin-bottom: 5px;
+        }
+
+        .troop-selector select,
+        .troop-selector input {
+            width: 100%;
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px;
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+            border-radius: 4px;
+        }
+
+        .troop-stats {
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            font-size: 0.85rem;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--dim);
+        }
+
+        .stat-value {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .battle-controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 15px 40px;
+            font-family: 'VT323', monospace;
+            font-size: 1.3rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .battle-log {
+            background: var(--panel);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .log-title {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 3px solid var(--border);
+            padding-left: 12px;
+            font-size: 0.9rem;
+        }
+
+        .log-attack {
+            border-left-color: var(--danger);
+            color: #ff9999;
+        }
+
+        .log-miss {
+            border-left-color: var(--dim);
+            color: var(--dim);
+        }
+
+        .log-death {
+            border-left-color: var(--danger);
+            color: var(--danger);
+            font-weight: bold;
+        }
+
+        .log-victory {
+            border-left-color: var(--ok);
+            color: var(--ok);
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .groups-display {
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 15px;
+        }
+
+        .group-item {
+            padding: 5px;
+            margin: 3px 0;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>⚔️ SIMULADOR DE BATALLAS ⚔️</h1>
+        <p class="subtitle">Epic Warriors - Sistema de Combate</p>
+
+        <div class="armies-container">
+            <!-- Ejército 1 -->
+            <div class="army-panel">
+                <div class="army-title">⚔️ Atacante</div>
+
+                <div class="troop-selector">
+                    <label>Tipo de Tropa:</label>
+                    <select id="army1Type" onchange="updateStats(1)">
+                        <option value="aldeano">Aldeano</option>
+                        <option value="guerrero">Guerrero</option>
+                        <option value="mago">Mago</option>
+                        <option value="druida">Druida</option>
+                        <option value="explorador">Explorador</option>
+                    </select>
+                </div>
+
+                <div class="troop-selector">
+                    <label>Cantidad de Tropas:</label>
+                    <input type="number" id="army1Count" value="56" min="1" max="100000" onchange="updateGroups(1)">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                    <div class="troop-selector">
+                        <label>Nivel Tropa:</label>
+                        <input type="number" id="army1Level" value="1" min="1" max="100" onchange="updateStats(1)">
+                    </div>
+                    <div class="troop-selector">
+                        <label>Nivel Arma:</label>
+                        <input type="number" id="army1WeaponLevel" value="0" min="0" max="100"
+                            onchange="updateStats(1)">
+                    </div>
+                    <div class="troop-selector">
+                        <label>Nivel Armadura:</label>
+                        <input type="number" id="army1ArmorLevel" value="0" min="0" max="100" onchange="updateStats(1)">
+                    </div>
+                </div>
+
+                <div class="troop-stats" id="army1Stats"></div>
+
+                <div class="groups-display">
+                    <strong>Grupos formados:</strong>
+                    <div id="army1Groups"></div>
+                </div>
+            </div>
+
+            <!-- Ejército 2 -->
+            <div class="army-panel">
+                <div class="army-title">🛡️ Defensor</div>
+
+                <div class="troop-selector">
+                    <label>Tipo de Tropa:</label>
+                    <select id="army2Type" onchange="updateStats(2)">
+                        <option value="aldeano">Aldeano</option>
+                        <option value="guerrero">Guerrero</option>
+                        <option value="mago">Mago</option>
+                        <option value="druida">Druida</option>
+                        <option value="explorador">Explorador</option>
+                    </select>
+                </div>
+
+                <div class="troop-selector">
+                    <label>Cantidad de Tropas:</label>
+                    <input type="number" id="army2Count" value="30" min="1" max="100000" onchange="updateGroups(2)">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                    <div class="troop-selector">
+                        <label>Nivel Tropa:</label>
+                        <input type="number" id="army2Level" value="1" min="1" max="100" onchange="updateStats(2)">
+                    </div>
+                    <div class="troop-selector">
+                        <label>Nivel Arma:</label>
+                        <input type="number" id="army2WeaponLevel" value="0" min="0" max="100"
+                            onchange="updateStats(2)">
+                    </div>
+                    <div class="troop-selector">
+                        <label>Nivel Armadura:</label>
+                        <input type="number" id="army2ArmorLevel" value="0" min="0" max="100" onchange="updateStats(2)">
+                    </div>
+                </div>
+
+                <div class="troop-stats" id="army2Stats"></div>
+
+                <div class="groups-display">
+                    <strong>Grupos formados:</strong>
+                    <div id="army2Groups"></div>
+                </div>
+                <div class="troop-selector" style="margin-top:15px;border-top:1px solid var(--border);padding-top:12px;">
+                    <label style="color:var(--accent);">🏰 Nivel de Muralla (Defensor):</label>
+                    <input type="number" id="wallLevel" value="0" min="0" max="20" onchange="updateWallBonus()" style="width:80px;">
+                    <div id="wallBonusDisplay" style="color:var(--ok);font-size:.85rem;margin-top:4px;">Sin muralla</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="battle-controls">
+            <button class="btn" onclick="simulateBattle()">⚔️ INICIAR BATALLA</button>
+        </div>
+
+        <div class="battle-log">
+            <div class="log-title">📜 Registro de Batalla</div>
+            <div id="battleLog">
+                <p style="text-align: center; color: var(--dim);">Configura los ejércitos y presiona "Iniciar Batalla"
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // DEFINICIÓN DE TROPAS
+        // ============================================================
+        const TROOP_STATS = {
+            aldeano: {
+                name: 'Aldeano',
+                icon: '👤',
+                attackChance: 8,      // Posibilidad de ataque base
+                hp: 10,               // Vida por unidad
+                attacksPerTurn: 1,    // Número de ataques por turno
+                damage: 2,            // Daño por ataque
+                defense: 10,          // Defensa (umbral para ser golpeado)
+                armor: 0,             // Armadura (mejora defensa - Herrería)
+                weapon: 0,            // Arma (mejora daño - Herrería)
+                dexterity: 5,         // Destreza (determina orden de ataque)
+                speed: 1,             // Velocidad (casillas/hora en mapa)
+                capacity: 10          // Capacidad de carga (recursos)
+            },
+            guerrero: {
+                name: 'Guerrero',
+                icon: '⚔️',
+                attackChance: 12,
+                hp: 25,
+                attacksPerTurn: 1,
+                damage: 8,
+                defense: 14,
+                armor: 2,
+                weapon: 2,
+                dexterity: 8,
+                speed: 2,
+                capacity: 20
+            },
+            mago: {
+                name: 'Mago',
+                icon: '🧙',
+                attackChance: 15,
+                hp: 15,
+                attacksPerTurn: 2,
+                damage: 12,
+                defense: 10,
+                armor: 0,
+                weapon: 4,
+                dexterity: 12,
+                speed: 1,
+                capacity: 5
+            },
+            druida: {
+                name: 'Druida',
+                icon: '🌿',
+                attackChance: 14,
+                hp: 20,
+                attacksPerTurn: 1,
+                damage: 6,
+                defense: 12,
+                armor: 1,
+                weapon: 1,
+                dexterity: 10,
+                speed: 1,
+                capacity: 15
+            },
+            explorador: {
+                name: 'Explorador',
+                icon: '🏹',
+                attackChance: 16,
+                hp: 12,
+                attacksPerTurn: 2,
+                damage: 5,
+                defense: 11,
+                armor: 0,
+                weapon: 1,
+                dexterity: 15,
+                speed: 4,
+                capacity: 8
+            }
+        };
+
+        // ============================================================
+        // DIVISIÓN EN GRUPOS POR ÓRDENES DE MAGNITUD
+        // ============================================================
+        function divideIntoGroups(totalTroops) {
+            const groups = [];
+            let remaining = totalTroops;
+            let groupSize = 10;
+
+            while (remaining > 0) {
+                const size = Math.min(remaining, groupSize);
+                groups.push(size);
+                remaining -= size;
+                groupSize *= 10; // 10 → 100 → 1000 → 10000
+            }
+
+            return groups;
+        }
+
+        // ============================================================
+        // ACTUALIZAR ESTADÍSTICAS Y GRUPOS
+        // ============================================================
+        function updateStats(armyNum) {
+            const type = document.getElementById(`army${armyNum}Type`).value;
+            const stats = TROOP_STATS[type];
+            const statsDiv = document.getElementById(`army${armyNum}Stats`);
+
+            const level = parseInt(document.getElementById(`army${armyNum}Level`).value) || 1;
+            const weaponLvl = parseInt(document.getElementById(`army${armyNum}WeaponLevel`).value) || 0;
+            const armorLvl = parseInt(document.getElementById(`army${armyNum}ArmorLevel`).value) || 0;
+
+            // Modificadores: +1 daño por nivel de arma, +1 defensa por nivel de armadura
+            const effectiveDamage = stats.damage + weaponLvl;
+            const effectiveDefense = stats.defense + armorLvl;
+            // Troop level increases HP by 10% per level (example)
+            const effectiveHP = stats.hp * (1 + (level - 1) * 0.1);
+
+            statsDiv.innerHTML = `
+        <div class="stat-row"><span class="stat-label">Nombre:</span><span class="stat-value">${stats.icon} ${stats.name}</span></div>
+        <div class="stat-row"><span class="stat-label">Nivel Tropa:</span><span class="stat-value">${level}</span></div>
+        <div class="stat-row"><span class="stat-label">Posibilidad de Ataque:</span><span class="stat-value">${stats.attackChance}</span></div>
+        <div class="stat-row"><span class="stat-label">Vida (HP):</span><span class="stat-value">${effectiveHP.toFixed(1)}</span></div>
+        <div class="stat-row"><span class="stat-label">Ataques por Turno:</span><span class="stat-value">${stats.attacksPerTurn}</span></div>
+        <div class="stat-row"><span class="stat-label">Daño por Ataque:</span><span class="stat-value">${effectiveDamage} <span style="color:var(--ok)">(+${weaponLvl})</span></span></div>
+        <div class="stat-row"><span class="stat-label">Defensa:</span><span class="stat-value">${effectiveDefense} <span style="color:var(--ok)">(+${armorLvl})</span></span></div>
+        <div class="stat-row"><span class="stat-label">Destreza:</span><span class="stat-value">${stats.dexterity}</span></div>
+        <div class="stat-row"><span class="stat-label">Velocidad:</span><span class="stat-value">${stats.speed} casillas/h</span></div>
+        <div class="stat-row"><span class="stat-label">Capacidad:</span><span class="stat-value">${stats.capacity} recursos</span></div>
+      `;
+
+            updateGroups(armyNum);
+        }
+
+        function updateGroups(armyNum) {
+            const count = parseInt(document.getElementById(`army${armyNum}Count`).value) || 0;
+            const groups = divideIntoGroups(count);
+            const groupsDiv = document.getElementById(`army${armyNum}Groups`);
+
+            let html = '';
+            groups.forEach((size, index) => {
+                html += `<div class="group-item">Grupo ${index + 1}: ${size} unidades</div>`;
+            });
+
+            groupsDiv.innerHTML = html || '<div class="group-item">Sin grupos</div>';
+        }
+
+
+        // ============================================================
+        // MURALLA — bonus defensivo del defensor
+        // ============================================================
+        function getWallBonus(level) {
+            // Cada nivel de muralla da +2 de defensa a todas las tropas del defensor
+            return level * 2;
+        }
+
+        function updateWallBonus() {
+            const lvl = parseInt(document.getElementById('wallLevel').value) || 0;
+            const bonus = getWallBonus(lvl);
+            const el = document.getElementById('wallBonusDisplay');
+            if (!el) return;
+            el.textContent = lvl === 0 ? 'Sin muralla' : `Nivel ${lvl} → +${bonus} defensa para el Defensor`;
+        }
+
+        // ============================================================
+        // MOTOR DE COMBATE
+        // ============================================================
+        function simulateBattle() {
+            const log = document.getElementById('battleLog');
+            log.innerHTML = '';
+
+            // Obtener configuración de ejércitos
+            const army1Type = document.getElementById('army1Type').value;
+            const army1Count = parseInt(document.getElementById('army1Count').value) || 0;
+            const army2Type = document.getElementById('army2Type').value;
+            const army2Count = parseInt(document.getElementById('army2Count').value) || 0;
+
+            if (army1Count === 0 || army2Count === 0) {
+                addLog('⚠️ Ambos ejércitos deben tener al menos 1 tropa', 'log-miss');
+                return;
+            }
+
+            // Niveles
+            const army1Lvl = parseInt(document.getElementById('army1Level').value) || 1;
+            const army1Wpn = parseInt(document.getElementById('army1WeaponLevel').value) || 0;
+            const army1Arm = parseInt(document.getElementById('army1ArmorLevel').value) || 0;
+
+            const army2Lvl = parseInt(document.getElementById('army2Level').value) || 1;
+            const army2Wpn = parseInt(document.getElementById('army2WeaponLevel').value) || 0;
+            const army2Arm = parseInt(document.getElementById('army2ArmorLevel').value) || 0;
+
+            // Crear grupos
+            const wallLvl = parseInt(document.getElementById('wallLevel').value) || 0;
+            const wallBonus = getWallBonus(wallLvl);
+            const army1 = createArmy(1, army1Type, army1Count, army1Lvl, army1Wpn, army1Arm, 0);
+            const army2 = createArmy(2, army2Type, army2Count, army2Lvl, army2Wpn, army2Arm, wallBonus);
+
+            addLog(`⚔️ Atacante: ${army1Count} ${TROOP_STATS[army1Type].name}s (Niv ${army1Lvl}) en ${army1.length} grupos`, '');
+            addLog(`🛡️ Defensor: ${army2Count} ${TROOP_STATS[army2Type].name}s (Niv ${army2Lvl}) en ${army2.length} grupos${wallLvl > 0 ? ' — Muralla Niv ' + wallLvl + ' (+' + wallBonus + ' DEF)' : ''}`, '');
+            addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+
+            // Simular batalla
+            let turn = 1;
+            while (army1.length > 0 && army2.length > 0) {
+                addLog(`\n🎯 TURNO ${turn}`, 'log-attack');
+                executeTurn(army1, army2);
+                turn++;
+
+                if (turn > 200) {
+                    addLog('⚠️ Batalla detenida: demasiado larga', 'log-miss');
+                    break;
+                }
+            }
+
+            // Resultado
+            addLog('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', '');
+            if (army1.length > 0) {
+                const survivors = army1.reduce((sum, g) => sum + g.count, 0);
+                addLog(`🎉 VICTORIA DEL ATACANTE - ${survivors} supervivientes`, 'log-victory');
+            } else if (army2.length > 0) {
+                const survivors = army2.reduce((sum, g) => sum + g.count, 0);
+                addLog(`🎉 VICTORIA DEL DEFENSOR - ${survivors} supervivientes`, 'log-victory');
+            } else {
+                addLog('⚔️ EMPATE - Ambos ejércitos eliminados', 'log-victory');
+            }
+        }
+
+        function createArmy(armyId, type, count, level, weaponLvl, armorLvl, wallBonus = 0) {
+            const stats = TROOP_STATS[type];
+            const groupSizes = divideIntoGroups(count);
+
+            // Aplicar niveles y bonus de muralla
+            const effectiveHP = stats.hp * (1 + (level - 1) * 0.1);
+            const effectiveDamage = stats.damage + weaponLvl;
+            const effectiveDefense = stats.defense + armorLvl + wallBonus;
+
+            return groupSizes.map((size, index) => ({
+                armyId,
+                groupId: index + 1,
+                type,
+                stats: {
+                    ...stats,
+                    hp: effectiveHP,
+                    damage: effectiveDamage,
+                    defense: effectiveDefense
+                },
+                count: size,
+                totalHP: size * effectiveHP
+            }));
+        }
+
+        function executeTurn(army1, army2) {
+            // Combinar todos los grupos y ordenar por destreza (mayor primero)
+            // Si empate en destreza, menor cantidad ataca primero
+            // Si empate también en cantidad, aleatorio
+            const allGroups = [
+                ...army1.map(g => ({ ...g, army: army1, enemyArmy: army2 })),
+                ...army2.map(g => ({ ...g, army: army2, enemyArmy: army1 }))
+            ];
+
+            allGroups.sort((a, b) => {
+                if (b.stats.dexterity !== a.stats.dexterity) {
+                    return b.stats.dexterity - a.stats.dexterity; // Mayor destreza primero
+                }
+                if (a.count !== b.count) {
+                    return a.count - b.count; // Menor cantidad primero
+                }
+                return Math.random() - 0.5; // Aleatorio
+            });
+
+            // Ejecutar ataques en orden
+            allGroups.forEach(group => {
+                // Verificar si el grupo sigue vivo
+                if (group.count <= 0) return;
+
+                // Ejecutar todos los ataques del grupo
+                for (let i = 0; i < group.stats.attacksPerTurn; i++) {
+                    if (group.enemyArmy.length === 0) break; // No hay enemigos
+
+                    // Seleccionar grupo enemigo aleatorio
+                    const targetIndex = Math.floor(Math.random() * group.enemyArmy.length);
+                    const target = group.enemyArmy[targetIndex];
+
+                    // Tirada de ataque
+                    const attackRoll = group.stats.attackChance + Math.floor(Math.random() * 20) + 1;
+
+                    if (attackRoll > target.stats.defense) {
+                        // ACIERTA
+                        const totalDamage = group.count * group.stats.damage;
+                        target.totalHP -= totalDamage;
+
+                        const survivorsFloat = target.totalHP / target.stats.hp;
+                        const newCount = Math.max(0, Math.floor(survivorsFloat + 0.0001)); // epsilon para flotantes
+                        const killed = target.count - newCount;
+                        target.count = newCount;
+
+                        const armyIcon = group.armyId === 1 ? '⚔️' : '🛡️';
+                        const targetIcon = target.armyId === 1 ? '⚔️' : '🛡️';
+                        addLog(
+                            `${armyIcon} Grupo ${group.groupId} (${group.count} ${group.stats.icon}) ataca a ${targetIcon} Grupo ${target.groupId}: ` +
+                            `Tirada ${attackRoll} vs Def ${target.stats.defense} → ${totalDamage} daño → ${killed} bajas`,
+                            'log-attack'
+                        );
+
+                        // Eliminar grupo si murió
+                        if (target.count <= 0) {
+                            const idx = group.enemyArmy.indexOf(target);
+                            if (idx !== -1) {
+                                group.enemyArmy.splice(idx, 1);
+                                addLog(`💀 ${targetIcon} Grupo ${target.groupId} eliminado`, 'log-death');
+                            }
+                        }
+                    } else {
+                        // FALLA
+                        const armyIcon = group.armyId === 1 ? '⚔️' : '🛡️';
+                        const targetIcon = target.armyId === 1 ? '⚔️' : '🛡️';
+                        addLog(
+                            `${armyIcon} Grupo ${group.groupId} falla el ataque contra ${targetIcon} Grupo ${target.groupId}: ` +
+                            `Tirada ${attackRoll} vs Def ${target.stats.defense}`,
+                            'log-miss'
+                        );
+                    }
+                }
+            });
+        }
+
+        function addLog(message, className = '') {
+            const log = document.getElementById('battleLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${className}`;
+            entry.textContent = message;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Inicializar
+        updateStats(1);
+        updateStats(2);
+        updateWallBonus();
+    </script>
+</body>
+
+</html>
