@@ -3192,7 +3192,7 @@
       // ── GRANJA ───────────────────────────────────────────────
       {
         id: 'granja', name: 'Granja', icon: '🌾',
-        desc: 'Cada aldeano asignado produce provisiones/hora. Nivel 1 activo desde el inicio.',
+        desc: 'Produce provisiones según los aldeanos asignados. Nivel 1 = 6 provisiones/aldeano/h. Las provisiones se consumen al enviar tropas en misión y no se recuperan al volver.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3216,7 +3216,7 @@
 
       // ── ALMACENAMIENTO ───────────────────────────────────────
       {
-        id: 'almacen', name: 'Almacén', icon: '🏛️', desc: 'Aumenta la capacidad total de recursos.',
+        id: 'almacen', name: 'Almacén', icon: '🏛️', desc: 'Aumenta la capacidad de almacenamiento de madera, piedra, hierro y provisiones. Nivel 0 = 1.000 unidades, se dobla por nivel. La Esencia tiene límite separado.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3230,7 +3230,7 @@
       // ── MILITAR ──────────────────────────────────────────────
       {
         id: 'barracas', name: 'Barracas', icon: '🏰',
-        desc: 'Define la capacidad máxima de tropas normales. Nivel 1 = 50 plazas. Crece +20 por nivel.',
+        desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, +20 plazas por nivel. Las tropas en misión no ocupan plaza.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3242,7 +3242,7 @@
 
       {
         id: 'reclutamiento', name: 'Reclutamiento', icon: '⚔️',
-        desc: 'Produce aldeanos/hora (tropas normales). Nivel 1: 4 aldeanos/hora mínimo.',
+        desc: 'Genera aldeanos automáticamente. Nivel 1 = 1 aldeano cada ~5 min. Cada nivel reduce el intervalo un 10%. Los aldeanos se pierden si las Barracas están llenas.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3254,7 +3254,7 @@
 
       {
         id: 'muralla', name: 'Muralla', icon: '🏰',
-        desc: 'Fortifica la aldea. Cada nivel da +10% HP a todas las tropas defensoras en combate.',
+        desc: 'Escudo de la aldea con HP propio. El atacante debe destruirla antes de dañar a tus tropas. Nivel 1 = 500 HP de muralla, +500 HP por nivel. Nivel 10 = 5.000 HP.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3265,7 +3265,7 @@
       },
 
       {
-        id: 'lab', name: 'Laboratorio', icon: '📜', desc: 'Permite investigar nuevas tecnologías.',
+        id: 'lab', name: 'Laboratorio', icon: '📜', desc: 'Permite investigar nuevas tecnologías. Módulo en desarrollo — próximamente activo.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3276,7 +3276,7 @@
       },
       {
         id: 'cuarteles', name: 'Cuarteles', icon: '🎖️',
-        desc: 'Acelera el entrenamiento de tropas (excepto aldeanos y criaturas). Cada nivel reduce 1% el tiempo de entrenamiento.',
+        desc: 'Acelera el entrenamiento de tropas (excepto aldeanos y criaturas). Cada nivel reduce un 1% el tiempo de entrenamiento, hasta un máximo del 50% (nivel 50).',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3288,7 +3288,7 @@
 
       {
         id: 'torre', name: 'Torre de Vigía', icon: '🗼',
-        desc: 'Nivel 1 = rango 5 casillas. +5 por nivel. Necesaria para atacar, espiar y detectar enemigos.',
+        desc: 'Controla el alcance de tu aldea. Nivel 1 = 5 casillas de alcance, +5 por nivel. Sin Torre no puedes atacar, espiar ni fundar nuevas aldeas.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3299,7 +3299,7 @@
       },
       {
         id: 'torreinvocacion', name: 'Torre de Invocación', icon: '🔮',
-        desc: 'Permite invocar criaturas poderosas. Cada nivel reduce -5% tiempo de invocación.',
+        desc: 'Desbloquea la invocación de criaturas poderosas. Cada nivel reduce un 5% el tiempo de invocación. Necesitas Invocadores entrenados para invocar criaturas.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -4052,11 +4052,8 @@
       return groups;
     }
 
-    function createArmy(armyId, troops, murallaLevel) {
+    function createArmy(armyId, troops) {
       let army = [];
-      // Muralla: cada nivel da +10% HP a tropas defensoras (solo armyId=2)
-      let hpBonus = (armyId === 2 && murallaLevel) ? 1 + (murallaLevel * 0.1) : 1;
-      
       Object.keys(troops).forEach(type => {
         let entry = troops[type];
         // Soporte para caballeros NPC: { count, stats } en vez de número simple
@@ -4072,15 +4069,13 @@
         if (!stats) return;
         let groupSizes = divideIntoGroups(count);
         groupSizes.forEach((size, idx) => {
-          let baseHP = stats.hp;
-          let finalHP = Math.floor(baseHP * hpBonus);
           army.push({
             armyId,
             groupId: army.length + 1,
             type,
             stats: JSON.parse(JSON.stringify(stats)),
             count: size,
-            totalHP: size * finalHP  // HP con bonus de muralla aplicado
+            totalHP: size * stats.hp
           });
         });
       });
@@ -4299,6 +4294,31 @@
       }
     }
 
+    // Solo dispara los ataques de un ejército contra el otro (sin respuesta)
+    function executeTurnOneDirection(attackers, defenders, log) {
+      attackers.forEach(group => {
+        if (group.count <= 0 || defenders.length === 0) return;
+        for (let i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
+          if (defenders.length === 0) break;
+          let targetIndex = Math.floor(Math.random() * defenders.length);
+          let target = defenders[targetIndex];
+          let totalDamage = group.count * group.stats.damage;
+          let attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
+          if (attackRoll > target.stats.defense) {
+            target.totalHP -= totalDamage;
+            let newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
+            let killed = target.count - newCount;
+            target.count = newCount;
+            if (log) log.push(\`\${group.stats.icon} G\${group.groupId} atacó a \${target.stats.icon} G\${target.groupId}: \${totalDamage} daño, \${killed} bajas.\`);
+            if (target.count <= 0) {
+              let idx = defenders.indexOf(target);
+              if (idx !== -1) defenders.splice(idx, 1);
+            }
+          }
+        }
+      });
+    }
+
     function executeTurn(army1, army2, log) {
       let allGroups = [
         ...army1.map(g => ({ ...g, army: army1, enemyArmy: army2 })),
@@ -4344,19 +4364,36 @@
 
         function simulateBattle(army1Troops, army2Troops, defenderWallLevel) {
       let army1 = createArmy(1, army1Troops);
-      let army2 = createArmy(2, army2Troops, defenderWallLevel || 0);
+      let army2 = createArmy(2, army2Troops);
       let log = [];
       let turn = 1;
 
-      // Muralla del defensor (army2) — da +10% HP por nivel a las tropas
-      if (defenderWallLevel > 0) {
-        let hpBonus = Math.floor(defenderWallLevel * 10);
-        log.push(`🏰 Muralla nivel ${defenderWallLevel}: +${hpBonus}% HP a tropas defensoras`);
+      // MURALLA: escudo con HP propio. El atacante debe destruirla antes de llegar a las tropas.
+      // Nivel 1 = 500 HP, +500 por nivel. Nivel 10 = 5000 HP.
+      let wallHP = (defenderWallLevel && defenderWallLevel > 0) ? defenderWallLevel * 500 : 0;
+      let wallMaxHP = wallHP;
+      if (wallHP > 0) {
+        log.push(\`🏰 Muralla nivel \${defenderWallLevel}: \${wallHP} HP de escudo. El atacante debe destruirla primero.\`);
       }
 
-      while (army1.length > 0 && army2.length > 0 && turn <= 100) {
-        log.push(`--- Ronda ${turn} ---`);
-        executeTurn(army1, army2, log, null); // sin wallHPRef
+      while ((army1.length > 0 || wallHP > 0) && army2.length > 0 && turn <= 100) {
+        log.push(\`--- Ronda \${turn} ---\`);
+        if (wallHP > 0) {
+          // Fase 1: el atacante golpea la muralla, no a las tropas
+          let totalAttackerDmg = 0;
+          army1.forEach(group => {
+            if (group.count <= 0) return;
+            let attacks = group.stats.attacksPerTurn || 1;
+            totalAttackerDmg += group.count * group.stats.damage * attacks;
+          });
+          wallHP = Math.max(0, wallHP - totalAttackerDmg);
+          log.push(\`⚔️ Atacantes golpean la muralla: -\${totalAttackerDmg} daño → \${wallHP} HP restantes\`);
+          // Fase 2: defensores atacan a tropas enemigas aunque haya muralla
+          if (army1.length > 0) executeTurnOneDirection(army2, army1, log);
+        } else {
+          // Muralla caída: combate normal
+          executeTurn(army1, army2, log, null);
+        }
         turn++;
       }
 
@@ -5945,12 +5982,23 @@
       s.troops.aldeano = trpUpd.aldeano;
       await sbClient.from('troops').update(trpUpd).eq('village_id', v.id);
 
-      // 4b. Actualizar military_score en profiles (suma total de tropas)
-      // Esto mantiene el ranking actualizado sin necesitar queries pesadas
-      const totalTroops = Object.keys(TROOP_TYPES).reduce((sum, k) => sum + (trpUpd[k] || 0), 0);
-      await sbClient.from('profiles')
-        .update({ military_score: totalTroops })
-        .eq('id', currentUser.id);
+      // 4b. Actualizar military_score — suma TODAS las aldeas + criaturas del jugador
+      try {
+        const allVils = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
+        if (!allVils.error && allVils.data && allVils.data.length > 0) {
+          const vilIds = allVils.data.map(vv => vv.id);
+          const allTrps = await sbClient.from('troops').select('*').in('village_id', vilIds);
+          const allCrs  = await sbClient.from('creatures').select('*').in('village_id', vilIds);
+          let grandTotal = 0;
+          if (!allTrps.error && allTrps.data) {
+            allTrps.data.forEach(row => { Object.keys(TROOP_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
+          }
+          if (!allCrs.error && allCrs.data) {
+            allCrs.data.forEach(row => { Object.keys(CREATURE_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
+          }
+          await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
+        }
+      } catch(e) { console.warn('military_score update failed', e); }
 
       // 4c. Update Creatures
       const crUpd = {};
@@ -8638,7 +8686,7 @@
         } else if (isAlmacen) {
           var cap = Math.floor(1000 * Math.pow(2, lvl));
           plines = '<div class="pl" style="color:var(--accent)">📦 ' + fmt(cap) + ' unidades</div>'
-            + '<div class="pl none" style="font-size:.58rem;opacity:.7">(madera+piedra+hierro+prov.)</div>';
+            + '<div class="pl none" style="font-size:.58rem;opacity:.7">(madera+piedra+hierro+provisiones — la Esencia NO usa almacén)</div>';
 
         } else if (isGranja) {
           var provPerAld = 5 + lvl;
@@ -8685,9 +8733,15 @@
               ? '<div class="pl" style="color:var(--danger)">Sin reducción</div>'
               : '<div class="pl" style="color:var(--esencia)">🔮 -' + red + '% tiempo invocación</div>';
           } else if (id === 'muralla') {
+            var wallHPShow = lvl * 500;
             plines = lvl === 0
-              ? '<div class="pl" style="color:var(--danger)">Sin defensa</div>'
-              : '<div class="pl" style="color:var(--piedra)">🛡️ +' + (lvl * 2) + ' defensa</div>';
+              ? '<div class="pl" style="color:var(--danger)">Sin muralla — tropas expuestas</div>'
+              : '<div class="pl" style="color:var(--piedra)">🏰 ' + fmt(wallHPShow) + ' HP de escudo</div>'
+                + '<div class="pl" style="color:var(--dim);font-size:.58rem;">Atacantes deben destruirlo antes de dañar tropas</div>';
+          } else if (id === 'lab') {
+            plines = lvl === 0
+              ? '<div class="pl" style="color:var(--danger)">Sin nivel</div>'
+              : '<div class="pl" style="color:var(--gold)">📜 Investigación activa<br><span style="font-size:.58rem;color:var(--dim)">Próximamente disponible</span></div>';
           } else {
             plines = '<div class="pl none">—</div>';
           }
@@ -8759,6 +8813,28 @@
         var wk = curWorkers.esencia || 0;
         var total = curBaseProd.esencia + wk * curBonusProd.esencia;
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;✨ Base ' + fmt(curBaseProd.esencia) + '/h' + (wk ? ' + ' + wk + ' ald. → ' + fmt(total) + '/h total' : '');
+      } else if (id === 'torre') {
+        var rng = curLvl * 5;
+        modalSub = curLvl === 0
+          ? 'Sin nivel — sin alcance. Necesitas la Torre para atacar y espiar.'
+          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;👁️ Alcance actual: <b>' + rng + ' casillas</b>';
+      } else if (id === 'torreinvocacion') {
+        var red = curLvl * 5;
+        modalSub = curLvl === 0
+          ? 'Sin nivel — sin reducción de tiempo de invocación.'
+          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;🔮 Reducción actual: <b>-' + red + '%</b> tiempo de invocación';
+      } else if (id === 'cuarteles') {
+        var redCuar = Math.min(50, curLvl);
+        modalSub = curLvl === 0
+          ? 'Sin nivel — sin reducción de tiempo de entrenamiento.'
+          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;🎖️ Reducción actual: <b>-' + redCuar + '%</b> tiempo de entrenamiento (máx. 50%)';
+      } else if (id === 'muralla') {
+        var wallHPCur = curLvl * 500;
+        modalSub = curLvl === 0
+          ? 'Sin nivel — tus tropas están expuestas desde el primer golpe.'
+          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;🏰 Escudo actual: <b>' + fmt(wallHPCur) + ' HP</b> — el atacante los destruye antes de llegar a tus tropas';
+      } else if (id === 'lab') {
+        modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;📜 Módulo de Investigación — <span style="color:var(--gold)">Próximamente activo</span>';
       }
 
       // ── Botón footer ──────────────────────────────────────────
@@ -8784,6 +8860,9 @@
         + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715; Cerrar</button>'
         + '</div>'
         + '<div class="bld-modal-body">'
+        + '<div style="background:rgba(255,255,255,.04);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.75rem;color:var(--dim);line-height:1.5;border-left:3px solid var(--accent);">'
+        + def.desc
+        + '</div>'
         + '<div class="bld-modal-note">Costes en <span style="color:var(--danger)">rojo</span> = no puedes pagarlos ahora. Cada fila muestra el coste de subir ese nivel al siguiente.</div>'
         + '<table class="bld-lvl-table">'
         + '<thead><tr><th>Nivel</th>' + thExtra + '<th>Coste (subir)</th><th>Tiempo</th></tr></thead>'
