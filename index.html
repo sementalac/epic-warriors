@@ -5038,17 +5038,8 @@
             }
           });
 
-          // Restaurar provisiones: se descontó 1 por tropa normal al enviarlas
-          var provsRestored = 0;
-          Object.keys(accepted).forEach(function(k) {
-            if (TROOP_TYPES[k]) provsRestored += accepted[k] || 0;
-          });
-          if (provsRestored > 0) {
-            vs.resources.provisiones = Math.min(
-              (vs.resources.provisiones || 0) + provsRestored,
-              getCapacity(vs.buildings)
-            );
-          }
+          // Las provisiones NO se restauran al volver — se gastaron en el camino.
+          // Solo se recuperan por producción de granja.
 
           // Informe de llegada - aplicar botín con límites
           var lootReport = '';
