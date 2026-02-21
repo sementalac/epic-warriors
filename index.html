@@ -3668,10 +3668,13 @@
       
       Object.keys(tiers).sort().forEach(function(tier) {
         var tierInt = parseInt(tier);
+        // VISIBLE si el nivel de la Torre de Invocación >= tier
+        // INVOCABLE solo si además tienes los invocadores necesarios
+        var visible = torreLevel >= tierInt;
         var unlocked = invocadorLevel >= tierInt;
         
-        // Solo mostrar tiers desbloqueados (tier <= nivel invocador)
-        if (!unlocked) return;
+        // Ocultar solo si la torre no tiene nivel suficiente
+        if (!visible) return;
 
         html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;">';
         html += '<div style="font-size:.75rem;color:var(--dim);letter-spacing:.1em;margin-bottom:8px;">TIER ' + tier + '</div>';
@@ -3680,7 +3683,7 @@
           var canSummonResult = canSummon(c.key, vs);
           var isOk = canSummonResult.ok;
           
-          html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:4px;margin-bottom:6px;' + (!isOk ? 'opacity:.6;' : '') + '">';
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:4px;margin-bottom:6px;' + (!unlocked ? 'opacity:.5;filter:grayscale(.4);' : (!isOk ? 'opacity:.7;' : '')) + '">';
           // Icon clickable for stats
           html += '<button onclick="showCreatureStats(\'' + c.key + '\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:1.8rem;padding:0;line-height:1;flex-shrink:0;">' + c.data.icon + '</button>';
           html += '<div style="flex:1;min-width:0;">';
@@ -3688,7 +3691,11 @@
           html += '<div style="font-size:.68rem;color:var(--dim);margin-top:2px;">';
           html += '🧙‍♂️ ' + c.data.summonersNeeded + ' · ✨ ' + c.data.cost.esencia + ' · ⏱ ' + Math.floor(c.data.time/60) + 'min';
           html += '</div>';
-          if (!isOk) html += '<div style="font-size:.63rem;color:var(--danger);margin-top:2px;">' + escapeHtml(canSummonResult.reason) + '</div>';
+          if (!unlocked) {
+            html += '<div style="font-size:.63rem;color:var(--dim);margin-top:2px;">🔒 Requiere invocadores de nivel ' + tierInt + ' para invocar</div>';
+          } else if (!isOk) {
+            html += '<div style="font-size:.63rem;color:var(--danger);margin-top:2px;">' + escapeHtml(canSummonResult.reason) + '</div>';
+          }
           html += '</div>';
           // Quantity input + button
           html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">';
@@ -4296,22 +4303,22 @@
 
     // Solo dispara los ataques de un ejército contra el otro (sin respuesta)
     function executeTurnOneDirection(attackers, defenders, log) {
-      attackers.forEach(group => {
+      attackers.forEach(function(group) {
         if (group.count <= 0 || defenders.length === 0) return;
-        for (let i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
+        for (var i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
           if (defenders.length === 0) break;
-          let targetIndex = Math.floor(Math.random() * defenders.length);
-          let target = defenders[targetIndex];
-          let totalDamage = group.count * group.stats.damage;
-          let attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
+          var targetIndex = Math.floor(Math.random() * defenders.length);
+          var target = defenders[targetIndex];
+          var totalDamage = group.count * group.stats.damage;
+          var attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
           if (attackRoll > target.stats.defense) {
             target.totalHP -= totalDamage;
-            let newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
-            let killed = target.count - newCount;
+            var newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
+            var killed = target.count - newCount;
             target.count = newCount;
-            if (log) log.push(\`\${group.stats.icon} G\${group.groupId} atacó a \${target.stats.icon} G\${target.groupId}: \${totalDamage} daño, \${killed} bajas.\`);
+            if (log) log.push(group.stats.icon + ' G' + group.groupId + ' atacó a ' + target.stats.icon + ' G' + target.groupId + ': ' + totalDamage + ' daño, ' + killed + ' bajas.');
             if (target.count <= 0) {
-              let idx = defenders.indexOf(target);
+              var idx = defenders.indexOf(target);
               if (idx !== -1) defenders.splice(idx, 1);
             }
           }
@@ -4370,24 +4377,23 @@
 
       // MURALLA: escudo con HP propio. El atacante debe destruirla antes de llegar a las tropas.
       // Nivel 1 = 500 HP, +500 por nivel. Nivel 10 = 5000 HP.
-      let wallHP = (defenderWallLevel && defenderWallLevel > 0) ? defenderWallLevel * 500 : 0;
-      let wallMaxHP = wallHP;
+      var wallHP = (defenderWallLevel && defenderWallLevel > 0) ? defenderWallLevel * 500 : 0;
       if (wallHP > 0) {
-        log.push(\`🏰 Muralla nivel \${defenderWallLevel}: \${wallHP} HP de escudo. El atacante debe destruirla primero.\`);
+        log.push('🏰 Muralla nivel ' + defenderWallLevel + ': ' + wallHP + ' HP de escudo. El atacante debe destruirla primero.');
       }
 
       while ((army1.length > 0 || wallHP > 0) && army2.length > 0 && turn <= 100) {
-        log.push(\`--- Ronda \${turn} ---\`);
+        log.push('--- Ronda ' + turn + ' ---');
         if (wallHP > 0) {
           // Fase 1: el atacante golpea la muralla, no a las tropas
-          let totalAttackerDmg = 0;
-          army1.forEach(group => {
+          var totalAttackerDmg = 0;
+          army1.forEach(function(group) {
             if (group.count <= 0) return;
-            let attacks = group.stats.attacksPerTurn || 1;
+            var attacks = group.stats.attacksPerTurn || 1;
             totalAttackerDmg += group.count * group.stats.damage * attacks;
           });
           wallHP = Math.max(0, wallHP - totalAttackerDmg);
-          log.push(\`⚔️ Atacantes golpean la muralla: -\${totalAttackerDmg} daño → \${wallHP} HP restantes\`);
+          log.push('⚔️ Atacantes golpean la muralla: -' + totalAttackerDmg + ' daño → ' + wallHP + ' HP restantes');
           // Fase 2: defensores atacan a tropas enemigas aunque haya muralla
           if (army1.length > 0) executeTurnOneDirection(army2, army1, log);
         } else {
