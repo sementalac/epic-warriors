@@ -1,13 +1,15 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v0.84</title>
+  <title>Epic Warriors Online v0.87</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Datos estáticos del juego (NPC_CASTLES) — debe cargarse antes del script principal -->
+  <script src="game-data.js"></script>
   <style>
     :root {
       --madera: #d4923a;
@@ -2479,7 +2481,7 @@
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
           <div class="nav-item" onclick="showPage('defense',this)"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
-          <div class="nav-item" onclick="showPage('simulator',this)"><span class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
+          <div class="nav-item" onclick="window.open('battle-simulator-v0_21.html','_blank')"><span class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Ciencia</div>
@@ -2939,258 +2941,7 @@
     let isFlushing = false;
     let pendingFlush = false;
 
-    const NPC_CASTLES = [
-      { id: 'castle_1', name: 'Caballero #1', x: 229, y: 210, icon: '🏇', attacksPerTurn: 10, attackChance: 10, damage: 26, hp: 701, defense: 11, dexterity: 35, rewards: { experience: 1201 } },
-      { id: 'castle_2', name: 'Caballero #2', x: 138, y: 215, icon: '🏇', attacksPerTurn: 11, attackChance: 11, damage: 29, hp: 712, defense: 11, dexterity: 35, rewards: { experience: 1206 } },
-      { id: 'castle_3', name: 'Caballero #3', x: 93, y: 194, icon: '🏇', attacksPerTurn: 11, attackChance: 11, damage: 34, hp: 754, defense: 11, dexterity: 35, rewards: { experience: 1216 } },
-      { id: 'castle_4', name: 'Caballero #4', x: 202, y: 8, icon: '🏇', attacksPerTurn: 11, attackChance: 11, damage: 40, hp: 853, defense: 12, dexterity: 35, rewards: { experience: 1232 } },
-      { id: 'castle_5', name: 'Caballero #5', x: 147, y: 325, icon: '🏇', attacksPerTurn: 12, attackChance: 12, damage: 48, hp: 1043, defense: 12, dexterity: 35, rewards: { experience: 1256 } },
-      { id: 'castle_6', name: 'Caballero #6', x: 215, y: 174, icon: '🏇', attacksPerTurn: 12, attackChance: 12, damage: 58, hp: 1365, defense: 12, dexterity: 35, rewards: { experience: 1288 } },
-      { id: 'castle_7', name: 'Caballero #7', x: 261, y: 72, icon: '🏇', attacksPerTurn: 13, attackChance: 13, damage: 70, hp: 1863, defense: 12, dexterity: 35, rewards: { experience: 1330 } },
-      { id: 'castle_8', name: 'Caballero #8', x: 311, y: 251, icon: '🏇', attacksPerTurn: 13, attackChance: 13, damage: 84, hp: 2589, defense: 12, dexterity: 35, rewards: { experience: 1382 } },
-      { id: 'castle_9', name: 'Caballero #9', x: 201, y: 186, icon: '🏇', attacksPerTurn: 13, attackChance: 13, damage: 99, hp: 3595, defense: 12, dexterity: 35, rewards: { experience: 1444 } },
-      { id: 'castle_10', name: 'Caballero #10', x: 307, y: 154, icon: '🏇', attacksPerTurn: 14, attackChance: 14, damage: 116, hp: 4943, defense: 12, dexterity: 35, rewards: { experience: 1518 } },
-      { id: 'castle_11', name: 'Caballero #11', x: 189, y: 316, icon: '🏇', attacksPerTurn: 14, attackChance: 14, damage: 135, hp: 6696, defense: 13, dexterity: 35, rewards: { experience: 1603 } },
-      { id: 'castle_12', name: 'Caballero #12', x: 350, y: 302, icon: '🏇', attacksPerTurn: 14, attackChance: 14, damage: 155, hp: 8921, defense: 13, dexterity: 35, rewards: { experience: 1701 } },
-      { id: 'castle_13', name: 'Caballero #13', x: 263, y: 306, icon: '🏇', attacksPerTurn: 15, attackChance: 15, damage: 177, hp: 11691, defense: 13, dexterity: 36, rewards: { experience: 1812 } },
-      { id: 'castle_14', name: 'Caballero #14', x: 280, y: 59, icon: '🏇', attacksPerTurn: 15, attackChance: 15, damage: 201, hp: 15081, defense: 13, dexterity: 36, rewards: { experience: 1937 } },
-      { id: 'castle_15', name: 'Caballero #15', x: 336, y: 361, icon: '🏇', attacksPerTurn: 15, attackChance: 15, damage: 227, hp: 19171, defense: 13, dexterity: 36, rewards: { experience: 2076 } },
-      { id: 'castle_16', name: 'Caballero #16', x: 53, y: 169, icon: '🏇', attacksPerTurn: 16, attackChance: 16, damage: 254, hp: 24044, defense: 13, dexterity: 36, rewards: { experience: 2229 } },
-      { id: 'castle_17', name: 'Caballero #17', x: 266, y: 367, icon: '🏇', attacksPerTurn: 16, attackChance: 16, damage: 283, hp: 29786, defense: 14, dexterity: 36, rewards: { experience: 2398 } },
-      { id: 'castle_18', name: 'Caballero #18', x: 39, y: 157, icon: '🏇', attacksPerTurn: 16, attackChance: 16, damage: 313, hp: 36488, defense: 14, dexterity: 36, rewards: { experience: 2582 } },
-      { id: 'castle_19', name: 'Caballero #19', x: 254, y: 94, icon: '🏇', attacksPerTurn: 17, attackChance: 17, damage: 345, hp: 44243, defense: 14, dexterity: 36, rewards: { experience: 2783 } },
-      { id: 'castle_20', name: 'Caballero #20', x: 246, y: 1, icon: '🏇', attacksPerTurn: 17, attackChance: 17, damage: 379, hp: 53148, defense: 14, dexterity: 36, rewards: { experience: 2999 } },
-      { id: 'castle_21', name: 'Caballero #21', x: 345, y: 198, icon: '🏇', attacksPerTurn: 18, attackChance: 18, damage: 415, hp: 63303, defense: 14, dexterity: 36, rewards: { experience: 3233 } },
-      { id: 'castle_22', name: 'Caballero #22', x: 288, y: 361, icon: '🏇', attacksPerTurn: 18, attackChance: 18, damage: 452, hp: 74812, defense: 14, dexterity: 36, rewards: { experience: 3484 } },
-      { id: 'castle_23', name: 'Caballero #23', x: 224, y: 60, icon: '🏇', attacksPerTurn: 18, attackChance: 18, damage: 491, hp: 87780, defense: 14, dexterity: 36, rewards: { experience: 3752 } },
-      { id: 'castle_24', name: 'Caballero #24', x: 319, y: 45, icon: '🏇', attacksPerTurn: 19, attackChance: 19, damage: 531, hp: 102318, defense: 15, dexterity: 36, rewards: { experience: 4039 } },
-      { id: 'castle_25', name: 'Caballero #25', x: 98, y: 104, icon: '🏇', attacksPerTurn: 19, attackChance: 19, damage: 574, hp: 118538, defense: 15, dexterity: 36, rewards: { experience: 4344 } },
-      { id: 'castle_26', name: 'Caballero #26', x: 137, y: 132, icon: '🏇', attacksPerTurn: 19, attackChance: 19, damage: 617, hp: 136555, defense: 15, dexterity: 36, rewards: { experience: 4669 } },
-      { id: 'castle_27', name: 'Caballero #27', x: 105, y: 273, icon: '🏇', attacksPerTurn: 20, attackChance: 20, damage: 663, hp: 156489, defense: 15, dexterity: 36, rewards: { experience: 5012 } },
-      { id: 'castle_28', name: 'Caballero #28', x: 104, y: 294, icon: '🏇', attacksPerTurn: 20, attackChance: 20, damage: 710, hp: 178459, defense: 15, dexterity: 36, rewards: { experience: 5375 } },
-      { id: 'castle_29', name: 'Caballero #29', x: 368, y: 329, icon: '🏇', attacksPerTurn: 20, attackChance: 20, damage: 759, hp: 202592, defense: 15, dexterity: 36, rewards: { experience: 5758 } },
-      { id: 'castle_30', name: 'Caballero #30', x: 310, y: 323, icon: '🏇', attacksPerTurn: 21, attackChance: 21, damage: 809, hp: 229012, defense: 15, dexterity: 36, rewards: { experience: 6162 } },
-      { id: 'castle_31', name: 'Caballero #31', x: 144, y: 68, icon: '🏇', attacksPerTurn: 21, attackChance: 21, damage: 861, hp: 257852, defense: 16, dexterity: 36, rewards: { experience: 6586 } },
-      { id: 'castle_32', name: 'Caballero #32', x: 196, y: 31, icon: '🏇', attacksPerTurn: 22, attackChance: 22, damage: 915, hp: 289242, defense: 16, dexterity: 36, rewards: { experience: 7031 } },
-      { id: 'castle_33', name: 'Caballero #33', x: 243, y: 116, icon: '🏇', attacksPerTurn: 22, attackChance: 22, damage: 970, hp: 323318, defense: 16, dexterity: 36, rewards: { experience: 7498 } },
-      { id: 'castle_34', name: 'Caballero #34', x: 350, y: 141, icon: '🏇', attacksPerTurn: 22, attackChance: 22, damage: 1027, hp: 360219, defense: 16, dexterity: 36, rewards: { experience: 7987 } },
-      { id: 'castle_35', name: 'Caballero #35', x: 347, y: 145, icon: '🏇', attacksPerTurn: 23, attackChance: 23, damage: 1086, hp: 400085, defense: 16, dexterity: 36, rewards: { experience: 8497 } },
-      { id: 'castle_36', name: 'Caballero #36', x: 287, y: 35, icon: '🏇', attacksPerTurn: 23, attackChance: 23, damage: 1146, hp: 443058, defense: 16, dexterity: 36, rewards: { experience: 9030 } },
-      { id: 'castle_37', name: 'Caballero #37', x: 63, y: 85, icon: '🏇', attacksPerTurn: 23, attackChance: 23, damage: 1208, hp: 489286, defense: 16, dexterity: 36, rewards: { experience: 9586 } },
-      { id: 'castle_38', name: 'Caballero #38', x: 1, y: 316, icon: '🏇', attacksPerTurn: 24, attackChance: 24, damage: 1271, hp: 538915, defense: 17, dexterity: 37, rewards: { experience: 10164 } },
-      { id: 'castle_39', name: 'Caballero #39', x: 329, y: 136, icon: '🏇', attacksPerTurn: 24, attackChance: 24, damage: 1336, hp: 592098, defense: 17, dexterity: 37, rewards: { experience: 10766 } },
-      { id: 'castle_40', name: 'Caballero #40', x: 319, y: 7, icon: '🏇', attacksPerTurn: 24, attackChance: 24, damage: 1403, hp: 648988, defense: 17, dexterity: 37, rewards: { experience: 11392 } },
-      { id: 'castle_41', name: 'Caballero #41', x: 37, y: 209, icon: '🏇', attacksPerTurn: 25, attackChance: 25, damage: 1471, hp: 709740, defense: 17, dexterity: 37, rewards: { experience: 12041 } },
-      { id: 'castle_42', name: 'Caballero #42', x: 88, y: 366, icon: '🏇', attacksPerTurn: 25, attackChance: 25, damage: 1541, hp: 774513, defense: 17, dexterity: 37, rewards: { experience: 12715 } },
-      { id: 'castle_43', name: 'Caballero #43', x: 133, y: 189, icon: '🏇', attacksPerTurn: 25, attackChance: 25, damage: 1613, hp: 843468, defense: 17, dexterity: 37, rewards: { experience: 13413 } },
-      { id: 'castle_44', name: 'Caballero #44', x: 24, y: 249, icon: '🏇', attacksPerTurn: 26, attackChance: 26, damage: 1686, hp: 916768, defense: 18, dexterity: 37, rewards: { experience: 14136 } },
-      { id: 'castle_45', name: 'Caballero #45', x: 71, y: 18, icon: '🏇', attacksPerTurn: 26, attackChance: 26, damage: 1761, hp: 994578, defense: 18, dexterity: 37, rewards: { experience: 14884 } },
-      { id: 'castle_46', name: 'Caballero #46', x: 227, y: 87, icon: '🏇', attacksPerTurn: 27, attackChance: 27, damage: 1837, hp: 1077067, defense: 18, dexterity: 37, rewards: { experience: 15658 } },
-      { id: 'castle_47', name: 'Caballero #47', x: 274, y: 311, icon: '🏇', attacksPerTurn: 27, attackChance: 27, damage: 1915, hp: 1164406, defense: 18, dexterity: 37, rewards: { experience: 16547 } },
-      { id: 'castle_48', name: 'Caballero #48', x: 217, y: 80, icon: '🏇', attacksPerTurn: 27, attackChance: 27, damage: 1995, hp: 1256766, defense: 18, dexterity: 37, rewards: { experience: 17282 } },
-      { id: 'castle_49', name: 'Caballero #49', x: 261, y: 53, icon: '🏇', attacksPerTurn: 28, attackChance: 28, damage: 2076, hp: 1354323, defense: 18, dexterity: 37, rewards: { experience: 18134 } },
-      { id: 'castle_50', name: 'Caballero #50', x: 93, y: 33, icon: '🏇', attacksPerTurn: 28, attackChance: 28, damage: 2159, hp: 1457255, defense: 18, dexterity: 37, rewards: { experience: 19012 } },
-      { id: 'castle_51', name: 'Caballero #51', x: 357, y: 6, icon: '🏇', attacksPerTurn: 28, attackChance: 28, damage: 2243, hp: 1565740, defense: 19, dexterity: 37, rewards: { experience: 19916 } },
-      { id: 'castle_52', name: 'Caballero #52', x: 133, y: 313, icon: '🏇', attacksPerTurn: 29, attackChance: 29, damage: 2329, hp: 1679962, defense: 19, dexterity: 37, rewards: { experience: 20848 } },
-      { id: 'castle_53', name: 'Caballero #53', x: 344, y: 109, icon: '🏇', attacksPerTurn: 29, attackChance: 29, damage: 2417, hp: 1800103, defense: 19, dexterity: 37, rewards: { experience: 21807 } },
-      { id: 'castle_54', name: 'Caballero #54', x: 332, y: 99, icon: '🏇', attacksPerTurn: 29, attackChance: 29, damage: 2506, hp: 1926352, defense: 19, dexterity: 37, rewards: { experience: 22794 } },
-      { id: 'castle_55', name: 'Caballero #55', x: 163, y: 361, icon: '🏇', attacksPerTurn: 30, attackChance: 30, damage: 2597, hp: 2058895, defense: 19, dexterity: 37, rewards: { experience: 23808 } },
-      { id: 'castle_56', name: 'Caballero #56', x: 263, y: 251, icon: '🏇', attacksPerTurn: 30, attackChance: 30, damage: 2689, hp: 2197924, defense: 19, dexterity: 37, rewards: { experience: 24851 } },
-      { id: 'castle_57', name: 'Caballero #57', x: 98, y: 350, icon: '🏇', attacksPerTurn: 31, attackChance: 31, damage: 2783, hp: 2343632, defense: 19, dexterity: 37, rewards: { experience: 25922 } },
-      { id: 'castle_58', name: 'Caballero #58', x: 133, y: 288, icon: '🏇', attacksPerTurn: 31, attackChance: 31, damage: 2879, hp: 2496215, defense: 20, dexterity: 37, rewards: { experience: 27021 } },
-      { id: 'castle_59', name: 'Caballero #59', x: 282, y: 102, icon: '🏇', attacksPerTurn: 31, attackChance: 31, damage: 2976, hp: 2655869, defense: 20, dexterity: 37, rewards: { experience: 28149 } },
-      { id: 'castle_60', name: 'Caballero #60', x: 109, y: 151, icon: '🏇', attacksPerTurn: 32, attackChance: 32, damage: 3075, hp: 2822794, defense: 20, dexterity: 37, rewards: { experience: 29307 } },
-      { id: 'castle_61', name: 'Caballero #61', x: 375, y: 88, icon: '🏇', attacksPerTurn: 32, attackChance: 32, damage: 3175, hp: 2997192, defense: 20, dexterity: 37, rewards: { experience: 30493 } },
-      { id: 'castle_62', name: 'Caballero #62', x: 41, y: 250, icon: '🏇', attacksPerTurn: 32, attackChance: 32, damage: 3277, hp: 3179266, defense: 20, dexterity: 37, rewards: { experience: 31710 } },
-      { id: 'castle_63', name: 'Caballero #63', x: 304, y: 309, icon: '🏇', attacksPerTurn: 33, attackChance: 33, damage: 3381, hp: 3369223, defense: 20, dexterity: 38, rewards: { experience: 32956 } },
-      { id: 'castle_64', name: 'Caballero #64', x: 294, y: 156, icon: '🏇', attacksPerTurn: 33, attackChance: 33, damage: 3486, hp: 3567270, defense: 20, dexterity: 38, rewards: { experience: 34232 } },
-      { id: 'castle_65', name: 'Caballero #65', x: 134, y: 216, icon: '🏇', attacksPerTurn: 33, attackChance: 33, damage: 3593, hp: 3773618, defense: 21, dexterity: 38, rewards: { experience: 35539 } },
-      { id: 'castle_66', name: 'Caballero #66', x: 174, y: 327, icon: '🏇', attacksPerTurn: 34, attackChance: 34, damage: 3701, hp: 3988478, defense: 21, dexterity: 38, rewards: { experience: 36876 } },
-      { id: 'castle_67', name: 'Caballero #67', x: 224, y: 89, icon: '🏇', attacksPerTurn: 34, attackChance: 34, damage: 3811, hp: 4212066, defense: 21, dexterity: 38, rewards: { experience: 38243 } },
-      { id: 'castle_68', name: 'Caballero #68', x: 377, y: 114, icon: '🏇', attacksPerTurn: 34, attackChance: 34, damage: 3923, hp: 4444596, defense: 21, dexterity: 38, rewards: { experience: 39642 } },
-      { id: 'castle_69', name: 'Caballero #69', x: 259, y: 374, icon: '🏇', attacksPerTurn: 35, attackChance: 35, damage: 4036, hp: 4686287, defense: 21, dexterity: 38, rewards: { experience: 41072 } },
-      { id: 'castle_70', name: 'Caballero #70', x: 253, y: 268, icon: '🏇', attacksPerTurn: 35, attackChance: 35, damage: 4150, hp: 4937360, defense: 21, dexterity: 38, rewards: { experience: 42534 } },
-      { id: 'castle_71', name: 'Caballero #71', x: 193, y: 278, icon: '🏇', attacksPerTurn: 36, attackChance: 36, damage: 4267, hp: 5198037, defense: 22, dexterity: 38, rewards: { experience: 44027 } },
-      { id: 'castle_72', name: 'Caballero #72', x: 25, y: 336, icon: '🏇', attacksPerTurn: 36, attackChance: 36, damage: 4384, hp: 5468542, defense: 22, dexterity: 38, rewards: { experience: 45552 } },
-      { id: 'castle_73', name: 'Caballero #73', x: 16, y: 162, icon: '🏇', attacksPerTurn: 36, attackChance: 36, damage: 4504, hp: 5749102, defense: 22, dexterity: 38, rewards: { experience: 47110 } },
-      { id: 'castle_74', name: 'Caballero #74', x: 8, y: 247, icon: '🏇', attacksPerTurn: 37, attackChance: 37, damage: 4625, hp: 6039945, defense: 22, dexterity: 38, rewards: { experience: 48699 } },
-      { id: 'castle_75', name: 'Caballero #75', x: 317, y: 2, icon: '🏇', attacksPerTurn: 37, attackChance: 37, damage: 4748, hp: 6341300, defense: 22, dexterity: 38, rewards: { experience: 50322 } },
-      { id: 'castle_76', name: 'Caballero #76', x: 153, y: 203, icon: '🏇', attacksPerTurn: 37, attackChance: 37, damage: 4872, hp: 6653401, defense: 22, dexterity: 38, rewards: { experience: 51977 } },
-      { id: 'castle_77', name: 'Caballero #77', x: 310, y: 339, icon: '🏇', attacksPerTurn: 38, attackChance: 38, damage: 4997, hp: 6976481, defense: 22, dexterity: 38, rewards: { experience: 53665 } },
-      { id: 'castle_78', name: 'Caballero #78', x: 352, y: 46, icon: '🏇', attacksPerTurn: 38, attackChance: 38, damage: 5125, hp: 7310777, defense: 23, dexterity: 38, rewards: { experience: 55386 } },
-      { id: 'castle_79', name: 'Caballero #79', x: 18, y: 56, icon: '🏇', attacksPerTurn: 38, attackChance: 38, damage: 5254, hp: 7656526, defense: 23, dexterity: 38, rewards: { experience: 57141 } },
-      { id: 'castle_80', name: 'Caballero #80', x: 9, y: 352, icon: '🏇', attacksPerTurn: 39, attackChance: 39, damage: 5384, hp: 8013969, defense: 23, dexterity: 38, rewards: { experience: 58930 } },
-      { id: 'castle_81', name: 'Caballero #81', x: 107, y: 139, icon: '🏇', attacksPerTurn: 39, attackChance: 39, damage: 5516, hp: 8383347, defense: 23, dexterity: 38, rewards: { experience: 60752 } },
-      { id: 'castle_82', name: 'Caballero #82', x: 152, y: 265, icon: '🏇', attacksPerTurn: 40, attackChance: 40, damage: 5650, hp: 8764905, defense: 23, dexterity: 38, rewards: { experience: 62609 } },
-      { id: 'castle_83', name: 'Caballero #83', x: 197, y: 168, icon: '🏇', attacksPerTurn: 40, attackChance: 40, damage: 5785, hp: 9158887, defense: 23, dexterity: 38, rewards: { experience: 64499 } },
-      { id: 'castle_84', name: 'Caballero #84', x: 77, y: 98, icon: '🏇', attacksPerTurn: 40, attackChance: 40, damage: 5922, hp: 9565542, defense: 23, dexterity: 38, rewards: { experience: 66425 } },
-      { id: 'castle_85', name: 'Caballero #85', x: 236, y: 352, icon: '🏇', attacksPerTurn: 41, attackChance: 41, damage: 6060, hp: 9985119, defense: 24, dexterity: 38, rewards: { experience: 68385 } },
-      { id: 'castle_86', name: 'Caballero #86', x: 178, y: 323, icon: '🏇', attacksPerTurn: 41, attackChance: 41, damage: 6200, hp: 10417869, defense: 24, dexterity: 38, rewards: { experience: 70380 } },
-      { id: 'castle_87', name: 'Caballero #87', x: 284, y: 272, icon: '🏇', attacksPerTurn: 41, attackChance: 41, damage: 6342, hp: 10864046, defense: 24, dexterity: 38, rewards: { experience: 72410 } },
-      { id: 'castle_88', name: 'Caballero #88', x: 271, y: 201, icon: '🏇', attacksPerTurn: 42, attackChance: 42, damage: 6485, hp: 11323904, defense: 24, dexterity: 39, rewards: { experience: 74476 } },
-      { id: 'castle_89', name: 'Caballero #89', x: 99, y: 164, icon: '🏇', attacksPerTurn: 42, attackChance: 42, damage: 6629, hp: 11797700, defense: 24, dexterity: 39, rewards: { experience: 76577 } },
-      { id: 'castle_90', name: 'Caballero #90', x: 88, y: 24, icon: '🏇', attacksPerTurn: 42, attackChance: 42, damage: 6775, hp: 12285693, defense: 24, dexterity: 39, rewards: { experience: 78714 } },
-      { id: 'castle_91', name: 'Caballero #91', x: 244, y: 166, icon: '🏇', attacksPerTurn: 43, attackChance: 43, damage: 6923, hp: 12788145, defense: 24, dexterity: 39, rewards: { experience: 80887 } },
-      { id: 'castle_92', name: 'Caballero #92', x: 238, y: 132, icon: '🏇', attacksPerTurn: 43, attackChance: 43, damage: 7072, hp: 13305316, defense: 25, dexterity: 39, rewards: { experience: 83096 } },
-      { id: 'castle_93', name: 'Caballero #93', x: 282, y: 343, icon: '🏇', attacksPerTurn: 43, attackChance: 43, damage: 7223, hp: 13837471, defense: 25, dexterity: 39, rewards: { experience: 85341 } },
-      { id: 'castle_94', name: 'Caballero #94', x: 224, y: 331, icon: '🏇', attacksPerTurn: 44, attackChance: 44, damage: 7376, hp: 14384876, defense: 25, dexterity: 39, rewards: { experience: 87623 } },
-      { id: 'castle_95', name: 'Caballero #95', x: 160, y: 12, icon: '🏇', attacksPerTurn: 44, attackChance: 44, damage: 7530, hp: 14947800, defense: 25, dexterity: 39, rewards: { experience: 89941 } },
-      { id: 'castle_96', name: 'Caballero #96', x: 41, y: 87, icon: '🏇', attacksPerTurn: 45, attackChance: 45, damage: 7685, hp: 15526511, defense: 25, dexterity: 39, rewards: { experience: 92297 } },
-      { id: 'castle_97', name: 'Caballero #97', x: 253, y: 173, icon: '🏇', attacksPerTurn: 45, attackChance: 45, damage: 7843, hp: 16121281, defense: 25, dexterity: 39, rewards: { experience: 94690 } },
-      { id: 'castle_98', name: 'Caballero #98', x: 352, y: 370, icon: '🏇', attacksPerTurn: 45, attackChance: 45, damage: 8001, hp: 16732383, defense: 26, dexterity: 39, rewards: { experience: 97120 } },
-      { id: 'castle_99', name: 'Caballero #99', x: 343, y: 65, icon: '🏇', attacksPerTurn: 46, attackChance: 46, damage: 8161, hp: 17360093, defense: 26, dexterity: 39, rewards: { experience: 99588 } },
-      { id: 'castle_100', name: 'Caballero #100', x: 334, y: 130, icon: '🏇', attacksPerTurn: 46, attackChance: 46, damage: 8323, hp: 18004686, defense: 26, dexterity: 39, rewards: { experience: 102093 } },
-      { id: 'castle_101', name: 'Caballero #101', x: 221, y: 198, icon: '🏇', attacksPerTurn: 46, attackChance: 46, damage: 8487, hp: 18666441, defense: 26, dexterity: 39, rewards: { experience: 104636 } },
-      { id: 'castle_102', name: 'Caballero #102', x: 206, y: 120, icon: '🏇', attacksPerTurn: 47, attackChance: 47, damage: 8652, hp: 19345639, defense: 26, dexterity: 39, rewards: { experience: 107217 } },
-      { id: 'castle_103', name: 'Caballero #103', x: 223, y: 217, icon: '🏇', attacksPerTurn: 47, attackChance: 47, damage: 8818, hp: 20042562, defense: 26, dexterity: 39, rewards: { experience: 109837 } },
-      { id: 'castle_104', name: 'Caballero #104', x: 269, y: 188, icon: '🏇', attacksPerTurn: 47, attackChance: 47, damage: 8986, hp: 20757492, defense: 26, dexterity: 39, rewards: { experience: 112495 } },
-      { id: 'castle_105', name: 'Caballero #105', x: 49, y: 371, icon: '🏇', attacksPerTurn: 48, attackChance: 48, damage: 9156, hp: 21490717, defense: 27, dexterity: 39, rewards: { experience: 115192 } },
-      { id: 'castle_106', name: 'Caballero #106', x: 259, y: 172, icon: '🏇', attacksPerTurn: 48, attackChance: 48, damage: 9327, hp: 22242522, defense: 27, dexterity: 39, rewards: { experience: 117928 } },
-      { id: 'castle_107', name: 'Caballero #107', x: 362, y: 293, icon: '🏇', attacksPerTurn: 49, attackChance: 49, damage: 9500, hp: 23013196, defense: 27, dexterity: 39, rewards: { experience: 120702 } },
-      { id: 'castle_108', name: 'Caballero #108', x: 30, y: 120, icon: '🏇', attacksPerTurn: 49, attackChance: 49, damage: 9674, hp: 23803031, defense: 27, dexterity: 39, rewards: { experience: 123516 } },
-      { id: 'castle_109', name: 'Caballero #109', x: 131, y: 329, icon: '🏇', attacksPerTurn: 49, attackChance: 49, damage: 9850, hp: 24612319, defense: 27, dexterity: 39, rewards: { experience: 126370 } },
-      { id: 'castle_110', name: 'Caballero #110', x: 12, y: 169, icon: '🏇', attacksPerTurn: 50, attackChance: 50, damage: 10027, hp: 25441353, defense: 27, dexterity: 39, rewards: { experience: 129263 } },
-      { id: 'castle_111', name: 'Caballero #111', x: 57, y: 148, icon: '🏇', attacksPerTurn: 50, attackChance: 50, damage: 10206, hp: 26290430, defense: 27, dexterity: 39, rewards: { experience: 132195 } },
-      { id: 'castle_112', name: 'Caballero #112', x: 324, y: 73, icon: '🏇', attacksPerTurn: 50, attackChance: 50, damage: 10387, hp: 27159846, defense: 28, dexterity: 39, rewards: { experience: 135168 } },
-      { id: 'castle_113', name: 'Caballero #113', x: 41, y: 121, icon: '🏇', attacksPerTurn: 51, attackChance: 51, damage: 10569, hp: 28049901, defense: 28, dexterity: 40, rewards: { experience: 138181 } },
-      { id: 'castle_114', name: 'Caballero #114', x: 258, y: 21, icon: '🏇', attacksPerTurn: 51, attackChance: 51, damage: 10752, hp: 28960896, defense: 28, dexterity: 40, rewards: { experience: 141234 } },
-      { id: 'castle_115', name: 'Caballero #115', x: 201, y: 62, icon: '🏇', attacksPerTurn: 51, attackChance: 51, damage: 10938, hp: 29893133, defense: 28, dexterity: 40, rewards: { experience: 144327 } },
-      { id: 'castle_116', name: 'Caballero #116', x: 353, y: 138, icon: '🏇', attacksPerTurn: 52, attackChance: 52, damage: 11124, hp: 30846916, defense: 28, dexterity: 40, rewards: { experience: 147461 } },
-      { id: 'castle_117', name: 'Caballero #117', x: 22, y: 39, icon: '🏇', attacksPerTurn: 52, attackChance: 52, damage: 11313, hp: 31822551, defense: 28, dexterity: 40, rewards: { experience: 150636 } },
-      { id: 'castle_118', name: 'Caballero #118', x: 74, y: 318, icon: '🏇', attacksPerTurn: 52, attackChance: 52, damage: 11502, hp: 32820346, defense: 28, dexterity: 40, rewards: { experience: 153853 } },
-      { id: 'castle_119', name: 'Caballero #119', x: 173, y: 140, icon: '🏇', attacksPerTurn: 53, attackChance: 53, damage: 11694, hp: 33840609, defense: 29, dexterity: 40, rewards: { experience: 157110 } },
-      { id: 'castle_120', name: 'Caballero #120', x: 333, y: 317, icon: '🏇', attacksPerTurn: 53, attackChance: 53, damage: 11887, hp: 34883652, defense: 29, dexterity: 40, rewards: { experience: 160409 } },
-      { id: 'castle_121', name: 'Caballero #121', x: 222, y: 63, icon: '🏇', attacksPerTurn: 54, attackChance: 54, damage: 12081, hp: 35949786, defense: 29, dexterity: 40, rewards: { experience: 163749 } },
-      { id: 'castle_122', name: 'Caballero #122', x: 104, y: 192, icon: '🏇', attacksPerTurn: 54, attackChance: 54, damage: 12277, hp: 37039326, defense: 29, dexterity: 40, rewards: { experience: 167131 } },
-      { id: 'castle_123', name: 'Caballero #123', x: 258, y: 237, icon: '🏇', attacksPerTurn: 54, attackChance: 54, damage: 12475, hp: 38152587, defense: 29, dexterity: 40, rewards: { experience: 170554 } },
-      { id: 'castle_124', name: 'Caballero #124', x: 37, y: 229, icon: '🏇', attacksPerTurn: 55, attackChance: 55, damage: 12674, hp: 39289887, defense: 29, dexterity: 40, rewards: { experience: 174020 } },
-      { id: 'castle_125', name: 'Caballero #125', x: 294, y: 185, icon: '🏇', attacksPerTurn: 55, attackChance: 55, damage: 12874, hp: 40451545, defense: 30, dexterity: 40, rewards: { experience: 177528 } },
-      { id: 'castle_126', name: 'Caballero #126', x: 284, y: 201, icon: '🏇', attacksPerTurn: 55, attackChance: 55, damage: 13077, hp: 41637881, defense: 30, dexterity: 40, rewards: { experience: 181079 } },
-      { id: 'castle_127', name: 'Caballero #127', x: 65, y: 363, icon: '🏇', attacksPerTurn: 56, attackChance: 56, damage: 13280, hp: 42849217, defense: 30, dexterity: 40, rewards: { experience: 184672 } },
-      { id: 'castle_128', name: 'Caballero #128', x: 291, y: 184, icon: '🏇', attacksPerTurn: 56, attackChance: 56, damage: 13486, hp: 44085877, defense: 30, dexterity: 40, rewards: { experience: 188308 } },
-      { id: 'castle_129', name: 'Caballero #129', x: 286, y: 184, icon: '🏇', attacksPerTurn: 56, attackChance: 56, damage: 13693, hp: 45348187, defense: 30, dexterity: 40, rewards: { experience: 191987 } },
-      { id: 'castle_130', name: 'Caballero #130', x: 333, y: 52, icon: '🏇', attacksPerTurn: 57, attackChance: 57, damage: 13901, hp: 46636473, defense: 30, dexterity: 40, rewards: { experience: 195709 } },
-      { id: 'castle_131', name: 'Caballero #131', x: 110, y: 72, icon: '🏇', attacksPerTurn: 57, attackChance: 57, damage: 14111, hp: 47951063, defense: 30, dexterity: 40, rewards: { experience: 199474 } },
-      { id: 'castle_132', name: 'Caballero #132', x: 378, y: 13, icon: '🏇', attacksPerTurn: 58, attackChance: 58, damage: 14322, hp: 49292289, defense: 31, dexterity: 40, rewards: { experience: 203282 } },
-      { id: 'castle_133', name: 'Caballero #133', x: 212, y: 205, icon: '🏇', attacksPerTurn: 58, attackChance: 58, damage: 14535, hp: 50660482, defense: 31, dexterity: 40, rewards: { experience: 207134 } },
-      { id: 'castle_134', name: 'Caballero #134', x: 42, y: 289, icon: '🏇', attacksPerTurn: 58, attackChance: 58, damage: 14750, hp: 52055975, defense: 31, dexterity: 40, rewards: { experience: 211030 } },
-      { id: 'castle_135', name: 'Caballero #135', x: 150, y: 284, icon: '🏇', attacksPerTurn: 59, attackChance: 59, damage: 14966, hp: 53479103, defense: 31, dexterity: 40, rewards: { experience: 214970 } },
-      { id: 'castle_136', name: 'Caballero #136', x: 201, y: 248, icon: '🏇', attacksPerTurn: 59, attackChance: 59, damage: 15184, hp: 54930203, defense: 31, dexterity: 40, rewards: { experience: 218954 } },
-      { id: 'castle_137', name: 'Caballero #137', x: 33, y: 246, icon: '🏇', attacksPerTurn: 59, attackChance: 59, damage: 15403, hp: 56409612, defense: 31, dexterity: 40, rewards: { experience: 222982 } },
-      { id: 'castle_138', name: 'Caballero #138', x: 295, y: 259, icon: '🏇', attacksPerTurn: 60, attackChance: 60, damage: 15623, hp: 57917670, defense: 31, dexterity: 41, rewards: { experience: 227054 } },
-      { id: 'castle_139', name: 'Caballero #139', x: 240, y: 137, icon: '🏇', attacksPerTurn: 60, attackChance: 60, damage: 15846, hp: 59454718, defense: 32, dexterity: 41, rewards: { experience: 231171 } },
-      { id: 'castle_140', name: 'Caballero #140', x: 288, y: 55, icon: '🏇', attacksPerTurn: 60, attackChance: 60, damage: 16070, hp: 61021100, defense: 32, dexterity: 41, rewards: { experience: 235333 } },
-      { id: 'castle_141', name: 'Caballero #141', x: 281, y: 70, icon: '🏇', attacksPerTurn: 61, attackChance: 61, damage: 16295, hp: 62617158, defense: 32, dexterity: 41, rewards: { experience: 239540 } },
-      { id: 'castle_142', name: 'Caballero #142', x: 280, y: 210, icon: '🏇', attacksPerTurn: 61, attackChance: 61, damage: 16522, hp: 64243240, defense: 32, dexterity: 41, rewards: { experience: 243791 } },
-      { id: 'castle_143', name: 'Caballero #143', x: 51, y: 90, icon: '🏇', attacksPerTurn: 61, attackChance: 61, damage: 16750, hp: 65899692, defense: 32, dexterity: 41, rewards: { experience: 248088 } },
-      { id: 'castle_144', name: 'Caballero #144', x: 208, y: 362, icon: '🏇', attacksPerTurn: 62, attackChance: 62, damage: 16980, hp: 67596863, defense: 32, dexterity: 41, rewards: { experience: 252430 } },
-      { id: 'castle_145', name: 'Caballero #145', x: 310, y: 93, icon: '🏇', attacksPerTurn: 62, attackChance: 62, damage: 17212, hp: 69305104, defense: 32, dexterity: 41, rewards: { experience: 256818 } },
-      { id: 'castle_146', name: 'Caballero #146', x: 304, y: 360, icon: '🏇', attacksPerTurn: 63, attackChance: 63, damage: 17445, hp: 71054767, defense: 33, dexterity: 41, rewards: { experience: 261252 } },
-      { id: 'castle_147', name: 'Caballero #147', x: 349, y: 347, icon: '🏇', attacksPerTurn: 63, attackChance: 63, damage: 17679, hp: 72836205, defense: 33, dexterity: 41, rewards: { experience: 265731 } },
-      { id: 'castle_148', name: 'Caballero #148', x: 343, y: 346, icon: '🏇', attacksPerTurn: 63, attackChance: 63, damage: 17915, hp: 74649773, defense: 33, dexterity: 41, rewards: { experience: 270256 } },
-      { id: 'castle_149', name: 'Caballero #149', x: 65, y: 165, icon: '🏇', attacksPerTurn: 64, attackChance: 64, damage: 18153, hp: 76495828, defense: 33, dexterity: 41, rewards: { experience: 274828 } },
-      { id: 'castle_150', name: 'Caballero #150', x: 272, y: 58, icon: '🏇', attacksPerTurn: 64, attackChance: 64, damage: 18392, hp: 78374727, defense: 33, dexterity: 41, rewards: { experience: 279446 } },
-      { id: 'castle_151', name: 'Caballero #151', x: 105, y: 79, icon: '🏇', attacksPerTurn: 64, attackChance: 64, damage: 18633, hp: 80286831, defense: 33, dexterity: 41, rewards: { experience: 284110 } },
-      { id: 'castle_152', name: 'Caballero #152', x: 371, y: 199, icon: '🏇', attacksPerTurn: 65, attackChance: 65, damage: 18875, hp: 82232500, defense: 33, dexterity: 41, rewards: { experience: 288821 } },
-      { id: 'castle_153', name: 'Caballero #153', x: 152, y: 128, icon: '🏇', attacksPerTurn: 65, attackChance: 65, damage: 19119, hp: 84212097, defense: 34, dexterity: 41, rewards: { experience: 293579 } },
-      { id: 'castle_154', name: 'Caballero #154', x: 311, y: 97, icon: '🏇', attacksPerTurn: 65, attackChance: 65, damage: 19364, hp: 86225986, defense: 34, dexterity: 41, rewards: { experience: 298383 } },
-      { id: 'castle_155', name: 'Caballero #155', x: 186, y: 58, icon: '🏇', attacksPerTurn: 66, attackChance: 66, damage: 19611, hp: 88274532, defense: 34, dexterity: 41, rewards: { experience: 303235 } },
-      { id: 'castle_156', name: 'Caballero #156', x: 18, y: 228, icon: '🏇', attacksPerTurn: 66, attackChance: 66, damage: 19859, hp: 90358103, defense: 34, dexterity: 41, rewards: { experience: 308134 } },
-      { id: 'castle_157', name: 'Caballero #157', x: 170, y: 215, icon: '🏇', attacksPerTurn: 67, attackChance: 67, damage: 20109, hp: 92477067, defense: 34, dexterity: 41, rewards: { experience: 313080 } },
-      { id: 'castle_158', name: 'Caballero #158', x: 377, y: 246, icon: '🏇', attacksPerTurn: 67, attackChance: 67, damage: 20361, hp: 94631795, defense: 34, dexterity: 41, rewards: { experience: 318074 } },
-      { id: 'castle_159', name: 'Caballero #159', x: 107, y: 86, icon: '🏇', attacksPerTurn: 67, attackChance: 67, damage: 20614, hp: 96822656, defense: 35, dexterity: 41, rewards: { experience: 323116 } },
-      { id: 'castle_160', name: 'Caballero #160', x: 202, y: 198, icon: '🏇', attacksPerTurn: 68, attackChance: 68, damage: 20868, hp: 99050026, defense: 35, dexterity: 41, rewards: { experience: 328205 } },
-      { id: 'castle_161', name: 'Caballero #161', x: 253, y: 36, icon: '🏇', attacksPerTurn: 68, attackChance: 68, damage: 21124, hp: 101314278, defense: 35, dexterity: 41, rewards: { experience: 333342 } },
-      { id: 'castle_162', name: 'Caballero #162', x: 27, y: 376, icon: '🏇', attacksPerTurn: 68, attackChance: 68, damage: 21382, hp: 103615787, defense: 35, dexterity: 41, rewards: { experience: 338528 } },
-      { id: 'castle_163', name: 'Caballero #163', x: 239, y: 266, icon: '🏇', attacksPerTurn: 69, attackChance: 69, damage: 21641, hp: 105954932, defense: 35, dexterity: 42, rewards: { experience: 343762 } },
-      { id: 'castle_164', name: 'Caballero #164', x: 19, y: 267, icon: '🏇', attacksPerTurn: 69, attackChance: 69, damage: 21901, hp: 108332092, defense: 35, dexterity: 42, rewards: { experience: 349044 } },
-      { id: 'castle_165', name: 'Caballero #165', x: 62, y: 369, icon: '🏇', attacksPerTurn: 69, attackChance: 69, damage: 22164, hp: 110747646, defense: 35, dexterity: 42, rewards: { experience: 354375 } },
-      { id: 'castle_166', name: 'Caballero #166', x: 273, y: 64, icon: '🏇', attacksPerTurn: 70, attackChance: 70, damage: 22427, hp: 113201976, defense: 36, dexterity: 42, rewards: { experience: 359755 } },
-      { id: 'castle_167', name: 'Caballero #167', x: 1, y: 60, icon: '🏇', attacksPerTurn: 70, attackChance: 70, damage: 22692, hp: 115695467, defense: 36, dexterity: 42, rewards: { experience: 365183 } },
-      { id: 'castle_168', name: 'Caballero #168', x: 52, y: 37, icon: '🏇', attacksPerTurn: 70, attackChance: 70, damage: 22959, hp: 118228501, defense: 36, dexterity: 42, rewards: { experience: 370661 } },
-      { id: 'castle_169', name: 'Caballero #169', x: 92, y: 375, icon: '🏇', attacksPerTurn: 71, attackChance: 71, damage: 23227, hp: 120801466, defense: 36, dexterity: 42, rewards: { experience: 376188 } },
-      { id: 'castle_170', name: 'Caballero #170', x: 313, y: 101, icon: '🏇', attacksPerTurn: 71, attackChance: 71, damage: 23497, hp: 123414750, defense: 36, dexterity: 42, rewards: { experience: 381764 } },
-      { id: 'castle_171', name: 'Caballero #171', x: 194, y: 208, icon: '🏇', attacksPerTurn: 72, attackChance: 72, damage: 23768, hp: 126068740, defense: 36, dexterity: 42, rewards: { experience: 387389 } },
-      { id: 'castle_172', name: 'Caballero #172', x: 348, y: 205, icon: '🏇', attacksPerTurn: 72, attackChance: 72, damage: 24041, hp: 128763828, defense: 36, dexterity: 42, rewards: { experience: 393065 } },
-      { id: 'castle_173', name: 'Caballero #173', x: 183, y: 219, icon: '🏇', attacksPerTurn: 72, attackChance: 72, damage: 24316, hp: 131500106, defense: 37, dexterity: 42, rewards: { experience: 398790 } },
-      { id: 'castle_174', name: 'Caballero #174', x: 18, y: 90, icon: '🏇', attacksPerTurn: 73, attackChance: 73, damage: 24592, hp: 134278866, defense: 37, dexterity: 42, rewards: { experience: 404565 } },
-      { id: 'castle_175', name: 'Caballero #175', x: 65, y: 101, icon: '🏇', attacksPerTurn: 73, attackChance: 73, damage: 24869, hp: 137099604, defense: 37, dexterity: 42, rewards: { experience: 410390 } },
-      { id: 'castle_176', name: 'Caballero #176', x: 160, y: 278, icon: '🏇', attacksPerTurn: 73, attackChance: 73, damage: 25148, hp: 139963016, defense: 37, dexterity: 42, rewards: { experience: 416265 } },
-      { id: 'castle_177', name: 'Caballero #177', x: 48, y: 144, icon: '🏇', attacksPerTurn: 74, attackChance: 74, damage: 25428, hp: 142869499, defense: 37, dexterity: 42, rewards: { experience: 422190 } },
-      { id: 'castle_178', name: 'Caballero #178', x: 314, y: 208, icon: '🏇', attacksPerTurn: 74, attackChance: 74, damage: 25710, hp: 145819453, defense: 37, dexterity: 42, rewards: { experience: 428166 } },
-      { id: 'castle_179', name: 'Caballero #179', x: 88, y: 6, icon: '🏇', attacksPerTurn: 74, attackChance: 74, damage: 25994, hp: 148813278, defense: 37, dexterity: 42, rewards: { experience: 434193 } },
-      { id: 'castle_180', name: 'Caballero #180', x: 77, y: 76, icon: '🏇', attacksPerTurn: 75, attackChance: 75, damage: 26279, hp: 151851376, defense: 38, dexterity: 42, rewards: { experience: 440271 } },
-      { id: 'castle_181', name: 'Caballero #181', x: 339, y: 149, icon: '🏇', attacksPerTurn: 75, attackChance: 75, damage: 26566, hp: 154934150, defense: 38, dexterity: 42, rewards: { experience: 446399 } },
-      { id: 'castle_182', name: 'Caballero #182', x: 116, y: 317, icon: '🏇', attacksPerTurn: 76, attackChance: 76, damage: 26854, hp: 158062004, defense: 38, dexterity: 42, rewards: { experience: 452578 } },
-      { id: 'castle_183', name: 'Caballero #183', x: 327, y: 217, icon: '🏇', attacksPerTurn: 76, attackChance: 76, damage: 27143, hp: 161235346, defense: 38, dexterity: 42, rewards: { experience: 458809 } },
-      { id: 'castle_184', name: 'Caballero #184', x: 219, y: 69, icon: '🏇', attacksPerTurn: 76, attackChance: 76, damage: 27434, hp: 164454582, defense: 38, dexterity: 42, rewards: { experience: 465091 } },
-      { id: 'castle_185', name: 'Caballero #185', x: 215, y: 131, icon: '🏇', attacksPerTurn: 77, attackChance: 77, damage: 27727, hp: 167720121, defense: 38, dexterity: 42, rewards: { experience: 471425 } },
-      { id: 'castle_186', name: 'Caballero #186', x: 208, y: 38, icon: '🏇', attacksPerTurn: 77, attackChance: 77, damage: 28021, hp: 171032374, defense: 39, dexterity: 42, rewards: { experience: 477810 } },
-      { id: 'castle_187', name: 'Caballero #187', x: 41, y: 264, icon: '🏇', attacksPerTurn: 77, attackChance: 77, damage: 28317, hp: 174391752, defense: 39, dexterity: 42, rewards: { experience: 484247 } },
-      { id: 'castle_188', name: 'Caballero #188', x: 144, y: 111, icon: '🏇', attacksPerTurn: 78, attackChance: 78, damage: 28614, hp: 177798669, defense: 39, dexterity: 43, rewards: { experience: 490736 } },
-      { id: 'castle_189', name: 'Caballero #189', x: 301, y: 108, icon: '🏇', attacksPerTurn: 78, attackChance: 78, damage: 28913, hp: 181253539, defense: 39, dexterity: 43, rewards: { experience: 497276 } },
-      { id: 'castle_190', name: 'Caballero #190', x: 348, y: 220, icon: '🏇', attacksPerTurn: 78, attackChance: 78, damage: 29213, hp: 184756777, defense: 39, dexterity: 43, rewards: { experience: 503869 } },
-      { id: 'castle_191', name: 'Caballero #191', x: 182, y: 46, icon: '🏇', attacksPerTurn: 79, attackChance: 79, damage: 29515, hp: 188308801, defense: 39, dexterity: 43, rewards: { experience: 510515 } },
-      { id: 'castle_192', name: 'Caballero #192', x: 337, y: 174, icon: '🏇', attacksPerTurn: 79, attackChance: 79, damage: 29818, hp: 191910030, defense: 39, dexterity: 43, rewards: { experience: 517213 } },
-      { id: 'castle_193', name: 'Caballero #193', x: 114, y: 97, icon: '🏇', attacksPerTurn: 79, attackChance: 79, damage: 30123, hp: 195560884, defense: 40, dexterity: 43, rewards: { experience: 523963 } },
-      { id: 'castle_194', name: 'Caballero #194', x: 380, y: 236, icon: '🏇', attacksPerTurn: 80, attackChance: 80, damage: 30429, hp: 199261784, defense: 40, dexterity: 43, rewards: { experience: 530766 } },
-      { id: 'castle_195', name: 'Caballero #195', x: 158, y: 282, icon: '🏇', attacksPerTurn: 80, attackChance: 80, damage: 30737, hp: 203013152, defense: 40, dexterity: 43, rewards: { experience: 537622 } },
-      { id: 'castle_196', name: 'Caballero #196', x: 258, y: 28, icon: '🏇', attacksPerTurn: 81, attackChance: 81, damage: 31047, hp: 206815413, defense: 40, dexterity: 43, rewards: { experience: 544531 } },
-      { id: 'castle_197', name: 'Caballero #197', x: 138, y: 344, icon: '🏇', attacksPerTurn: 81, attackChance: 81, damage: 31358, hp: 210668993, defense: 40, dexterity: 43, rewards: { experience: 551493 } },
-      { id: 'castle_198', name: 'Caballero #198', x: 352, y: 84, icon: '🏇', attacksPerTurn: 81, attackChance: 81, damage: 31670, hp: 214574318, defense: 40, dexterity: 43, rewards: { experience: 558509 } },
-      { id: 'castle_199', name: 'Caballero #199', x: 340, y: 185, icon: '🏇', attacksPerTurn: 82, attackChance: 82, damage: 31984, hp: 218531816, defense: 40, dexterity: 43, rewards: { experience: 565578 } },
-      { id: 'castle_200', name: 'Caballero #200', x: 334, y: 77, icon: '🏇', attacksPerTurn: 82, attackChance: 82, damage: 32299, hp: 222541918, defense: 41, dexterity: 43, rewards: { experience: 572700 } },
-      { id: 'castle_201', name: 'Caballero #201', x: 82, y: 107, icon: '🏇', attacksPerTurn: 82, attackChance: 82, damage: 32616, hp: 226605053, defense: 41, dexterity: 43, rewards: { experience: 579876 } },
-      { id: 'castle_202', name: 'Caballero #202', x: 265, y: 232, icon: '🏇', attacksPerTurn: 83, attackChance: 83, damage: 32935, hp: 230721655, defense: 41, dexterity: 43, rewards: { experience: 587106 } },
-      { id: 'castle_203', name: 'Caballero #203', x: 313, y: 27, icon: '🏇', attacksPerTurn: 83, attackChance: 83, damage: 33255, hp: 234892156, defense: 41, dexterity: 43, rewards: { experience: 594390 } },
-      { id: 'castle_204', name: 'Caballero #204', x: 87, y: 343, icon: '🏇', attacksPerTurn: 83, attackChance: 83, damage: 33576, hp: 239116993, defense: 41, dexterity: 43, rewards: { experience: 601728 } },
-      { id: 'castle_205', name: 'Caballero #205', x: 209, y: 220, icon: '🏇', attacksPerTurn: 84, attackChance: 84, damage: 33899, hp: 243396600, defense: 41, dexterity: 43, rewards: { experience: 609121 } },
-      { id: 'castle_206', name: 'Caballero #206', x: 200, y: 351, icon: '🏇', attacksPerTurn: 84, attackChance: 84, damage: 34224, hp: 247731417, defense: 41, dexterity: 43, rewards: { experience: 616567 } },
-      { id: 'castle_207', name: 'Caballero #207', x: 249, y: 225, icon: '🏇', attacksPerTurn: 85, attackChance: 85, damage: 34550, hp: 252121881, defense: 42, dexterity: 43, rewards: { experience: 624068 } },
-      { id: 'castle_208', name: 'Caballero #208', x: 303, y: 110, icon: '🏇', attacksPerTurn: 85, attackChance: 85, damage: 34877, hp: 256568434, defense: 42, dexterity: 43, rewards: { experience: 631624 } },
-      { id: 'castle_209', name: 'Caballero #209', x: 79, y: 202, icon: '🏇', attacksPerTurn: 85, attackChance: 85, damage: 35207, hp: 261071517, defense: 42, dexterity: 43, rewards: { experience: 639234 } },
-      { id: 'castle_210', name: 'Caballero #210', x: 288, y: 306, icon: '🏇', attacksPerTurn: 86, attackChance: 86, damage: 35537, hp: 265631572, defense: 42, dexterity: 43, rewards: { experience: 646900 } },
-      { id: 'castle_211', name: 'Caballero #211', x: 339, y: 296, icon: '🏇', attacksPerTurn: 86, attackChance: 86, damage: 35869, hp: 270249046, defense: 42, dexterity: 43, rewards: { experience: 654620 } },
-      { id: 'castle_212', name: 'Caballero #212', x: 340, y: 259, icon: '🏇', attacksPerTurn: 86, attackChance: 86, damage: 36203, hp: 274924382, defense: 42, dexterity: 43, rewards: { experience: 662396 } },
-      { id: 'castle_213', name: 'Caballero #213', x: 5, y: 183, icon: '🏇', attacksPerTurn: 87, attackChance: 87, damage: 36538, hp: 279658028, defense: 43, dexterity: 44, rewards: { experience: 670226 } },
-      { id: 'castle_214', name: 'Caballero #214', x: 54, y: 216, icon: '🏇', attacksPerTurn: 87, attackChance: 87, damage: 36875, hp: 284450433, defense: 43, dexterity: 44, rewards: { experience: 678113 } },
-      { id: 'castle_215', name: 'Caballero #215', x: 372, y: 379, icon: '🏇', attacksPerTurn: 87, attackChance: 87, damage: 37213, hp: 289302046, defense: 43, dexterity: 44, rewards: { experience: 686054 } },
-      { id: 'castle_216', name: 'Caballero #216', x: 364, y: 93, icon: '🏇', attacksPerTurn: 88, attackChance: 88, damage: 37553, hp: 294213318, defense: 43, dexterity: 44, rewards: { experience: 694052 } },
-      { id: 'castle_217', name: 'Caballero #217', x: 198, y: 284, icon: '🏇', attacksPerTurn: 88, attackChance: 88, damage: 37894, hp: 299184702, defense: 43, dexterity: 44, rewards: { experience: 702105 } },
-      { id: 'castle_218', name: 'Caballero #218', x: 240, y: 116, icon: '🏇', attacksPerTurn: 88, attackChance: 88, damage: 38236, hp: 304216650, defense: 43, dexterity: 44, rewards: { experience: 710204 } },
-      { id: 'castle_219', name: 'Caballero #219', x: 134, y: 196, icon: '🏇', attacksPerTurn: 89, attackChance: 89, damage: 38581, hp: 309309619, defense: 43, dexterity: 44, rewards: { experience: 718379 } },
-      { id: 'castle_220', name: 'Caballero #220', x: 15, y: 372, icon: '🏇', attacksPerTurn: 89, attackChance: 89, damage: 38926, hp: 314464064, defense: 44, dexterity: 44, rewards: { experience: 726601 } },
-      { id: 'castle_221', name: 'Caballero #221', x: 66, y: 258, icon: '🏇', attacksPerTurn: 90, attackChance: 90, damage: 39274, hp: 319680443, defense: 44, dexterity: 44, rewards: { experience: 734879 } },
-      { id: 'castle_222', name: 'Caballero #222', x: 46, y: 201, icon: '🏇', attacksPerTurn: 90, attackChance: 90, damage: 39622, hp: 324959214, defense: 44, dexterity: 44, rewards: { experience: 743213 } },
-      { id: 'castle_223', name: 'Caballero #223', x: 254, y: 303, icon: '🏇', attacksPerTurn: 90, attackChance: 90, damage: 39973, hp: 330300839, defense: 44, dexterity: 44, rewards: { experience: 751604 } },
-      { id: 'castle_224', name: 'Caballero #224', x: 246, y: 348, icon: '🏇', attacksPerTurn: 91, attackChance: 91, damage: 40324, hp: 335705778, defense: 44, dexterity: 44, rewards: { experience: 760051 } },
-      { id: 'castle_225', name: 'Caballero #225', x: 245, y: 162, icon: '🏇', attacksPerTurn: 91, attackChance: 91, damage: 40678, hp: 341174494, defense: 44, dexterity: 44, rewards: { experience: 768555 } },
-      { id: 'castle_226', name: 'Caballero #226', x: 238, y: 310, icon: '🏇', attacksPerTurn: 91, attackChance: 91, damage: 41033, hp: 346707451, defense: 44, dexterity: 44, rewards: { experience: 777117 } },
-      { id: 'castle_227', name: 'Caballero #227', x: 122, y: 154, icon: '🏇', attacksPerTurn: 92, attackChance: 92, damage: 41389, hp: 352305115, defense: 45, dexterity: 44, rewards: { experience: 785735 } },
-      { id: 'castle_228', name: 'Caballero #228', x: 332, y: 52, icon: '🏇', attacksPerTurn: 92, attackChance: 92, damage: 41747, hp: 357973987, defense: 45, dexterity: 44, rewards: { experience: 794414 } },
-      { id: 'castle_229', name: 'Caballero #229', x: 107, y: 167, icon: '🏇', attacksPerTurn: 92, attackChance: 92, damage: 42106, hp: 363696431, defense: 45, dexterity: 44, rewards: { experience: 803143 } },
-      { id: 'castle_230', name: 'Caballero #230', x: 158, y: 210, icon: '🏇', attacksPerTurn: 93, attackChance: 93, damage: 42467, hp: 369491020, defense: 45, dexterity: 44, rewards: { experience: 811934 } },
-      { id: 'castle_231', name: 'Caballero #231', x: 37, y: 246, icon: '🏇', attacksPerTurn: 93, attackChance: 93, damage: 42829, hp: 375352190, defense: 45, dexterity: 44, rewards: { experience: 820782 } },
-      { id: 'castle_232', name: 'Caballero #232', x: 357, y: 229, icon: '🏇', attacksPerTurn: 94, attackChance: 94, damage: 43193, hp: 381280413, defense: 45, dexterity: 44, rewards: { experience: 829687 } },
-      { id: 'castle_233', name: 'Caballero #233', x: 31, y: 203, icon: '🏇', attacksPerTurn: 94, attackChance: 94, damage: 43558, hp: 387276162, defense: 45, dexterity: 44, rewards: { experience: 838651 } },
-      { id: 'castle_234', name: 'Caballero #234', x: 74, y: 306, icon: '🏇', attacksPerTurn: 94, attackChance: 94, damage: 43925, hp: 393339911, defense: 46, dexterity: 44, rewards: { experience: 847672 } },
-      { id: 'castle_235', name: 'Caballero #235', x: 231, y: 258, icon: '🏇', attacksPerTurn: 95, attackChance: 95, damage: 44294, hp: 399472137, defense: 46, dexterity: 44, rewards: { experience: 856752 } },
-      { id: 'castle_236', name: 'Caballero #236', x: 228, y: 141, icon: '🏇', attacksPerTurn: 95, attackChance: 95, damage: 44663, hp: 405673315, defense: 46, dexterity: 44, rewards: { experience: 865890 } },
-      { id: 'castle_237', name: 'Caballero #237', x: 275, y: 279, icon: '🏇', attacksPerTurn: 95, attackChance: 95, damage: 45035, hp: 411943925, defense: 46, dexterity: 44, rewards: { experience: 875086 } },
-      { id: 'castle_238', name: 'Caballero #238', x: 324, y: 227, icon: '🏇', attacksPerTurn: 96, attackChance: 96, damage: 45408, hp: 418284446, defense: 46, dexterity: 45, rewards: { experience: 884340 } },
-      { id: 'castle_239', name: 'Caballero #239', x: 305, y: 100, icon: '🏇', attacksPerTurn: 96, attackChance: 96, damage: 45782, hp: 424695358, defense: 46, dexterity: 45, rewards: { experience: 893653 } },
-      { id: 'castle_240', name: 'Caballero #240', x: 88, y: 132, icon: '🏇', attacksPerTurn: 96, attackChance: 96, damage: 46158, hp: 431177144, defense: 47, dexterity: 45, rewards: { experience: 903025 } },
-      { id: 'castle_241', name: 'Caballero #241', x: 140, y: 12, icon: '🏇', attacksPerTurn: 97, attackChance: 97, damage: 46535, hp: 437730286, defense: 47, dexterity: 45, rewards: { experience: 912456 } },
-      { id: 'castle_242', name: 'Caballero #242', x: 299, y: 351, icon: '🏇', attacksPerTurn: 97, attackChance: 97, damage: 46914, hp: 444355270, defense: 47, dexterity: 45, rewards: { experience: 921946 } },
-      { id: 'castle_243', name: 'Caballero #243', x: 21, y: 3, icon: '🏇', attacksPerTurn: 97, attackChance: 97, damage: 47295, hp: 451052581, defense: 47, dexterity: 45, rewards: { experience: 931494 } },
-      { id: 'castle_244', name: 'Caballero #244', x: 225, y: 110, icon: '🏇', attacksPerTurn: 98, attackChance: 98, damage: 47677, hp: 457822707, defense: 47, dexterity: 45, rewards: { experience: 941102 } },
-      { id: 'castle_245', name: 'Caballero #245', x: 334, y: 117, icon: '🏇', attacksPerTurn: 98, attackChance: 98, damage: 48060, hp: 464666136, defense: 47, dexterity: 45, rewards: { experience: 950770 } },
-      { id: 'castle_246', name: 'Caballero #246', x: 58, y: 251, icon: '🏇', attacksPerTurn: 99, attackChance: 99, damage: 48445, hp: 471583356, defense: 47, dexterity: 45, rewards: { experience: 960496 } },
-      { id: 'castle_247', name: 'Caballero #247', x: 162, y: 358, icon: '🏇', attacksPerTurn: 99, attackChance: 99, damage: 48832, hp: 478574860, defense: 48, dexterity: 45, rewards: { experience: 970283 } },
-      { id: 'castle_248', name: 'Caballero #248', x: 318, y: 108, icon: '🏇', attacksPerTurn: 99, attackChance: 99, damage: 49219, hp: 485641140, defense: 48, dexterity: 45, rewards: { experience: 980129 } },
-      { id: 'castle_249', name: 'Caballero #249', x: 318, y: 168, icon: '🏇', attacksPerTurn: 100, attackChance: 100, damage: 49609, hp: 492782688, defense: 48, dexterity: 45, rewards: { experience: 990034 } },
-      { id: 'castle_250', name: 'Caballero #250', x: 142, y: 61, icon: '🏇', attacksPerTurn: 100, attackChance: 100, damage: 50000, hp: 500000000, defense: 48, dexterity: 45, rewards: { experience: 1000000 } },
-    ];
+    // NPC_CASTLES cargado desde game-data.js (ver <head> del HTML)
     let playerObjectives = []; // Progress for current user
 
     // ============================================================
@@ -3290,11 +3041,6 @@
       }
     };
 
-    // ============================================================
-    // CREATURE TYPES - Invocadas en Torre de Invocación
-    // NO ocupan barracas, NO consumen provisiones, capacity=0
-    // Requieren invocadores presentes en aldea
-    // ============================================================
     const CREATURE_TYPES = {
       orco: {
         name: 'Orco', icon: '👹', tier: 1,
@@ -3924,9 +3670,9 @@
         var tierInt = parseInt(tier);
         var unlocked = invocadorLevel >= tierInt;
         
-        // HIDE tiers above player level entirely
+        // Solo mostrar tiers desbloqueados (tier <= nivel invocador)
         if (!unlocked) return;
-        
+
         html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;">';
         html += '<div style="font-size:.75rem;color:var(--dim);letter-spacing:.1em;margin-bottom:8px;">TIER ' + tier + '</div>';
         
@@ -4712,14 +4458,24 @@
     // TODO: Implementar sistema completo de XP y niveles
     // ============================================================
     function getTroopLevel(troopType) {
-      // Placeholder: devuelve nivel 1 por ahora
-      // En el futuro, leer de tabla troop_levels o similar
+      // Para invocadores: nivel basado en cantidad entrenada
+      // tier 1: siempre; tier 2: 100+; tier 3: 400+; tier 4: 1000+
+      if (troopType === 'invocador') {
+        var count = (activeVillage && activeVillage.state && activeVillage.state.troops && activeVillage.state.troops.invocador) || 0;
+        if (count >= 1000) return 4;
+        if (count >= 400)  return 3;
+        if (count >= 100)  return 2;
+        return 1;
+      }
       return 1;
     }
     
     function getCreatureLevel(creatureType) {
-      // Placeholder: devuelve nivel 1 por ahora
-      return 1;
+      // Nivel de criatura = nivel de Torre de Invocación
+      var torreLevel = (activeVillage && activeVillage.state && activeVillage.state.buildings &&
+                        activeVillage.state.buildings.torreinvocacion &&
+                        activeVillage.state.buildings.torreinvocacion.level) || 0;
+      return Math.max(1, torreLevel);
     }
 
     // ============================================================
@@ -5010,10 +4766,11 @@
     // ============================================================
     // MISSIONS & TRAVEL
     // ============================================================
-    async function cancelMission(finishAtStr) {
+    async function cancelMission(missionRef) {
       if (!activeVillage) return;
       var vs = activeVillage.state;
-      var idx = vs.mission_queue.findIndex(m => m.finish_at === finishAtStr);
+      // Buscar por mid (nuevo) con fallback a finish_at (misiones guardadas antes de v0.92)
+      var idx = vs.mission_queue.findIndex(m => m.mid === missionRef || m.finish_at === missionRef);
       if (idx === -1) { showNotif('Misión no encontrada', 'err'); return; }
 
       var m = vs.mission_queue[idx];
@@ -5098,6 +4855,7 @@
       vs.resources.provisiones = Math.max(0, vs.resources.provisiones - totalUnits);
 
       vs.mission_queue.push({
+        mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), // ID único
         type, tx, ty, targetId, troops,
         finish_at: finishAt,
         start_at: new Date().toISOString()
@@ -5150,7 +4908,7 @@
               continue; // tropas quedan en guest_troops
             } else if (m.type === 'transport') {
               await executeTransport(m);
-              continue; // tropas se quedan en destino (propias) o vuelven solas (aliado — simplificado: recursos llegan, no movemos tropas físicamente)
+              // NO hacer continue - permitir que las tropas vuelvan
             } else if (m.type === 'return_reinforce') {
               // Tropas volviendo de refuerzo a su aldea origen
               // Se añaden a las tropas del activeVillage (que es el origen)
@@ -5280,6 +5038,18 @@
             }
           });
 
+          // Restaurar provisiones: se descontó 1 por tropa normal al enviarlas
+          var provsRestored = 0;
+          Object.keys(accepted).forEach(function(k) {
+            if (TROOP_TYPES[k]) provsRestored += accepted[k] || 0;
+          });
+          if (provsRestored > 0) {
+            vs.resources.provisiones = Math.min(
+              (vs.resources.provisiones || 0) + provsRestored,
+              getCapacity(vs.buildings)
+            );
+          }
+
           // Informe de llegada - aplicar botín con límites
           var lootReport = '';
           if (m.loot) {
@@ -5331,13 +5101,12 @@
       }
 
       if (changed) {
-        // Seguridad extra: descartar cualquier misión con finish_at hace más de 2 horas
-        // (indicio de misión atascada que nunca se resolvió)
-        var twoHoursAgo = Date.now() - 2 * 3600 * 1000;
+        // Descartar solo misiones con finish_at hace más de 7 días (datos corruptos, no offline legítimo)
+        var sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
         remaining = remaining.filter(function(m) {
           var ft = new Date(m.finish_at).getTime();
-          if (ft < twoHoursAgo) {
-            console.warn('resolveMissions: descartando misión atascada', m);
+          if (ft < sevenDaysAgo) {
+            console.warn('resolveMissions: descartando misión corrupta (>7 días)', m);
             return false;
           }
           return true;
@@ -5348,7 +5117,7 @@
     }
 
     async function executeSpyMission(m) {
-      var target = NPC_CASTLES.find(c => c.id === m.targetId);
+      var target = (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).find(c => c.id === m.targetId);
       if (target) {
         var obj = playerObjectives.find(o => o.objective_id === target.id);
         var alreadyCleared = obj && obj.status === 'cleared';
@@ -5374,7 +5143,7 @@
     }
 
     async function executeAttackMission(m) {
-      var target = NPC_CASTLES.find(c => c.id === m.targetId);
+      var target = (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).find(c => c.id === m.targetId);
       if (!target) return;
 
       // Comprobar si ya fue derrotado por este jugador
@@ -5503,23 +5272,7 @@
       await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' BATALLA: ' + target.name, reportHTML);
     }
 
-    async function updateObjective(id, status) {
-      if (!currentUser) return;
-      var obj = playerObjectives.find(o => o.objective_id === id);
-      if (obj) {
-        if (obj.status === 'cleared' && status !== 'cleared') return; // Don't downgrade
-        var r = await sbClient.from('player_objectives').update({ status: status, updated_at: new Date().toISOString() }).eq('id', obj.id);
-        if (!r.error) obj.status = status;
-      } else {
-        var r = await sbClient.from('player_objectives').insert({
-          user_id: currentUser.id,
-          objective_id: id,
-          status: status
-        }).select().single();
-        if (!r.error && r.data) playerObjectives.push(r.data);
-      }
-      renderMap(); // Refresh visuals
-    }
+    // updateObjective definida más abajo (única versión — upsert)
 
     function resolveQueue(vs) {
       if (!vs.build_queue) return vs;
@@ -5787,7 +5540,10 @@
 
         // Refresh UI
         populateVillageSel();
+        // Usar _initSwitch para no pisar el sessionStorage durante el arranque
+        window._suppressSessionSave = true;
         switchVillage(activeVillage.id);
+        window._suppressSessionSave = false;
 
       } catch (e) {
         console.error('initGame error:', e);
@@ -5818,19 +5574,21 @@
       }
 
       // Restaurar posición tras F5 (sessionStorage)
-      // Reintenta hasta que myVillages esté cargado (máx 5 segundos)
-      (function restoreSession(attempts) {
+      // Espera 200ms para que initGame termine del todo antes de restaurar
+      setTimeout(function restoreSession(attempts) {
         try {
           var lastVillage = sessionStorage.getItem('EW_lastVillage');
           var lastPage    = sessionStorage.getItem('EW_lastPage');
           if (!lastVillage && !lastPage) return; // nada que restaurar
 
-          if (lastVillage && myVillages.length === 0 && attempts < 50) {
-            // Villages aún no cargadas — reintentar en 100ms
+          if (myVillages.length === 0 && attempts < 50) {
             return setTimeout(function(){ restoreSession(attempts + 1); }, 100);
           }
+
           if (lastVillage && myVillages.find(function(v){ return v.id === lastVillage; })) {
+            window._suppressSessionSave = true;  // no pisar el valor al restaurar
             switchVillage(lastVillage);
+            window._suppressSessionSave = false;
           }
           if (lastPage && lastPage !== 'overview') {
             var navEl = document.querySelector('.nav-item[onclick*="\'' + lastPage + '\'"]');
@@ -5839,8 +5597,8 @@
           var cx = sessionStorage.getItem('EW_camX');
           var cy = sessionStorage.getItem('EW_camY');
           if (cx && cy) { mapCamX = parseInt(cx); mapCamY = parseInt(cy); }
-        } catch(e) {}
-      })(0);
+        } catch(e) { console.warn('restoreSession error:', e); }
+      }, 200);
     }
 
     // ============================================================
@@ -5909,7 +5667,7 @@
 
         // SELF-HEALING: If buildings missing
         if (!blds) {
-          const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 0, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0 };
+          const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0 };
           const { data: newBlds, error: insErr } = await sbClient.from('buildings').insert(defBlds).select().single();
           if (!insErr) blds = newBlds;
           else {
@@ -5957,7 +5715,7 @@
 
         // If data is missing (maybe insert failed too), try to recover using defaults so the game doesn't break
         const safeRes = res || { madera: 500, piedra: 300, hierro: 100, prov: 0, esencia: 0 };
-        const safeBlds = blds || { aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 0, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, torreinvocacion: 0 };
+        const safeBlds = blds || { aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, torreinvocacion: 0 };
         const safeTrp = trp || {}; // Si no hay fila de troops, empezar en 0 — no hardcodear 50
 
         // MAPPING: SQL -> Game State JSON
@@ -5982,14 +5740,14 @@
           buildings: {},
           build_queue: v.build_queue || null,
           mission_queue: (v.mission_queue || []).filter(function(m) {
-            // Descartar misiones con finish_at hace más de 2 horas — no se pueden recuperar
+            // Descartar solo misiones con finish_at hace más de 7 días (corruptas)
             var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
-            return (Date.now() - ft) < 2 * 3600 * 1000;
+            return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
           }),
           summoning_queue: (v.summoning_queue || []),
           training_queue: (v.training_queue || []).filter(function(t) {
             var ft = t.finish_at ? new Date(t.finish_at).getTime() : 0;
-            return (Date.now() - ft) < 2 * 3600 * 1000;
+            return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
           }),
           last_updated: safeRes.last_update || new Date().toISOString(),
           last_aldeano_at: v.last_aldeano_at || null, // timer discreto de aldeanos
@@ -6013,9 +5771,15 @@
 
         // Map buildings flat columns -> nested objects
         // Columns: aserradero, cantera, etc.
-        const bldKeys = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas', 'circulo', 'reclutamiento', 'muralla', 'lab', 'torreinvocacion'];
+        // bldKeys derivado de BUILDINGS — añadir edificio nuevo solo en BUILDINGS[]
+        const bldKeys = BUILDINGS.map(b => b.id);
+        // Edificios activos desde nivel 1 (starter); el resto arrancan en 0 (no construidos)
+        const starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
         bldKeys.forEach(k => {
-          state.buildings[k] = { level: safeBlds[k] || 1 };
+          var raw = safeBlds[k];
+          // Si la columna existe en DB, usar ese valor. Si no existe aún (edificio nuevo), defaultear correctamente.
+          var lvl = (raw !== undefined && raw !== null) ? Number(raw) : (starterBlds.includes(k) ? 1 : 0);
+          state.buildings[k] = { level: lvl };
         });
 
         // Attach state to village object
@@ -6077,9 +5841,20 @@
         resetUiAnimation();
         var sel = document.getElementById('villageSel');
         if (sel) sel.value = v.id;
-        // Guardar aldea seleccionada para restaurar tras F5
-        try { sessionStorage.setItem('EW_lastVillage', v.id); } catch(e) {}
+        // Guardar aldea seleccionada para restaurar tras F5 (no durante arranque)
+        if (!window._suppressSessionSave) { try { sessionStorage.setItem('EW_lastVillage', v.id); } catch(e) {} }
         tick();
+        // Re-renderizar la página activa si es sensible a la aldea seleccionada
+        var activePage = document.querySelector('.page.active');
+        if (activePage) {
+          var pid = activePage.id;
+          if (pid === 'page-recursos')   { renderRecursos && renderRecursos(); }
+          if (pid === 'page-buildings')  { renderBuildings && renderBuildings(calcRes(activeVillage.state)); }
+          if (pid === 'page-fleet')      { renderTroops && renderTroops(); renderTrainingQueue && renderTrainingQueue(); }
+          if (pid === 'page-creatures')  { renderCreatures && renderCreatures(); renderSummoningQueue && renderSummoningQueue(); }
+          if (pid === 'page-map')        { renderMap && renderMap(); }
+          if (pid === 'page-overview')   { renderReinforcementsPanel && renderReinforcementsPanel(); }
+        }
       }
     }
 
@@ -6787,7 +6562,7 @@
           div.className = 'queue-item mission';
           div.style.borderLeftColor = color;
           var cancelBtn = (m.type !== 'return' && m.type !== 'found' && m.type !== 'move' && m.type !== 'reinforce' && m.type !== 'transport' && m.type !== 'return_reinforce')
-            ? '<button onclick="cancelMission(\''+m.finish_at+'\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar</button>'
+            ? '<button onclick="cancelMission(\'' + (m.mid || m.finish_at) + '\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar</button>'
             : '';
           div.innerHTML = '<div class="queue-icon">' + icon + '</div>'
             + '<div class="queue-info"><div class="queue-name">' + name + '</div>'
@@ -6859,7 +6634,7 @@
       var size = r * 2 + 1;
 
       var npcLookup = {};
-      NPC_CASTLES.forEach(function (n) { npcLookup[n.x + ',' + n.y] = n; });
+      (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).forEach(function (n) { npcLookup[n.x + ',' + n.y] = n; });
 
       // Construir lookup de aldeas por coordenada
       var lookup = {};
@@ -7406,6 +7181,11 @@
       return cap;
     }
 
+    // ============================================================
+    // MOVER TROPAS - 2 PASOS
+    // Paso 1: Seleccionar tropas → Paso 2: Seleccionar recursos (opcional)
+    // Las tropas SE QUEDAN permanentemente en destino
+    // ============================================================
     function openMoveModal(destVillageId, destVillageName, tx, ty, isAllyDest) {
       if (!activeVillage) return;
       var vs = activeVillage.state;
@@ -7413,66 +7193,230 @@
       var troops = vs.troops || {};
       var aldLibres = res.aldeanos_libres || 0;
       var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
+      
+      // PASO 1: Seleccionar tropas
       var troopRows = '';
+      var hasTroops = false;
       Object.keys(TROOP_TYPES).forEach(function(k) {
         var count = (k === 'aldeano') ? aldLibres : (troops[k] || 0);
         if (count <= 0) return;
+        hasTroops = true;
+        var capInfo = (TROOP_TYPES[k].capacity || 0) > 0 ? ' • Cap: ' + TROOP_TYPES[k].capacity : '';
         troopRows += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-          + '<span>' + TROOP_TYPES[k].icon + ' ' + TROOP_TYPES[k].name + ' (' + count + ' disp.)</span>'
-          + '<input type="number" id="mv_' + k + '" value="0" min="0" max="' + count + '" style="width:64px;" oninput="calcMoveETA(' + tx + ',' + ty + ')">'
+          + '<span>' + TROOP_TYPES[k].icon + ' ' + TROOP_TYPES[k].name + ' (' + count + ' disp.)<span style="color:var(--dim);font-size:.7rem;">' + capInfo + '</span></span>'
+          + '<input type="number" id="mv_troop_' + k + '" value="0" min="0" max="' + count + '" style="width:64px;" oninput="calcMoveCapacity()">'
           + '</div>';
       });
+      
+      // Agregar criaturas
       var creatures = vs.creatures || defaultCreatures();
       Object.keys(CREATURE_TYPES).forEach(function(k) {
         var count = creatures[k] || 0;
         if (count <= 0) return;
+        hasTroops = true;
         troopRows += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-          + '<span>' + CREATURE_TYPES[k].icon + ' ' + CREATURE_TYPES[k].name + ' (' + count + ' disp.)</span>'
-          + '<input type="number" id="mv_' + k + '" value="0" min="0" max="' + count + '" style="width:64px;" oninput="calcMoveETA(' + tx + ',' + ty + ')">'
+          + '<span>' + CREATURE_TYPES[k].icon + ' ' + CREATURE_TYPES[k].name + ' (' + count + ' disponibles)</span>'
+          + '<input type="number" id="mv_troop_' + k + '" value="0" min="0" max="' + count + '" style="width:64px;" oninput="calcMoveCapacity()">'
           + '</div>';
       });
-      var titleTxt = isAllyDest ? 'Enviar Refuerzo' : 'Mover Tropas';
+      
+      if (!hasTroops) {
+        showNotif('No tienes tropas disponibles.', 'err');
+        return;
+      }
+      
+      var titleTxt = isAllyDest ? '🛡️ Enviar refuerzo' : '⚔ Mover tropas';
       var note = isAllyDest
-        ? '<div style="font-size:.68rem;color:var(--accent2);margin-bottom:8px;">Las tropas se quedar\u00e1n en la aldea aliada. T\u00fa o el aliado pod\u00e9is llamarlas de vuelta.</div>'
-        : '<div style="font-size:.68rem;color:var(--accent);margin-bottom:8px;">Las tropas pasar\u00e1n a ser de esta aldea permanentemente.</div>';
+        ? '<div style="font-size:.72rem;color:var(--accent2);margin-bottom:10px;">Las tropas se quedarán en la aldea aliada. Tú o el aliado podéis llamarlas de vuelta.</div>'
+        : '<div style="font-size:.72rem;color:var(--accent);margin-bottom:10px;">Las tropas pasarán a ser de esta aldea permanentemente.</div>';
+      
       var html = '<div class="bld-modal-overlay" id="moveOverlay" onclick="closeMoveOverlay(event)">'
         + '<div class="bld-modal" style="max-width:420px;">'
-        + '<div class="bld-modal-head"><div class="bld-modal-icon">' + (isAllyDest ? '\u{1f6e1}\ufe0f' : '\u2694') + '</div>'
+        + '<div class="bld-modal-head"><div class="bld-modal-icon">' + (isAllyDest ? '🛡️' : '⚔') + '</div>'
         + '<div><div class="bld-modal-title">' + titleTxt + '</div>'
-        + '<div class="bld-modal-sub">Hacia ' + escapeHtml(destVillageName) + '</div></div>'
+        + '<div class="bld-modal-sub">Paso 1/2: Selecciona tropas • Hacia ' + escapeHtml(destVillageName) + '</div></div>'
         + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715;</button>'
         + '</div><div class="bld-modal-body" style="padding:15px;">' + note
-        + (troopRows || '<p style="color:var(--dim);">Sin tropas disponibles.</p>')
+        + '<div style="font-size:.68rem;color:var(--accent);margin-bottom:6px;">Capacidad de carga: <b id="mvCapDisplay">0</b> unidades</div>'
+        + troopRows
         + '</div><div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);">'
-        + '<div style="font-size:.68rem;color:var(--dim);">\ud83d\udccd Distancia: ' + dist + ' casillas</div>'
-        + '<div id="moveETA" style="font-size:.8rem;color:var(--accent);">Selecciona tropas para ver ETA</div>'
+        + '<div style="font-size:.68rem;color:var(--dim);">📍 Distancia: ' + dist + ' casillas</div>'
+        + '<div id="mvTroopETA" style="font-size:.8rem;color:var(--dim);">Selecciona tropas para ver ETA</div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn avail" onclick="executeMoveClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Confirmar</button>'
+        + '<button class="bld-footer-btn avail" onclick="moveStep2(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
         + '</div></div></div>';
+      
+      window._moveDest = { vid: destVillageId, name: destVillageName, tx: tx, ty: ty, isAlly: isAllyDest, dist: dist };
+      
       var wrap = document.getElementById('bldModal');
-      wrap.innerHTML = html; wrap.style.display = 'block';
+      wrap.innerHTML = html;
+      wrap.style.display = 'block';
     }
-
-    function calcMoveETA(destX, destY) {
-      var dist = Math.max(Math.abs(destX - activeVillage.x), Math.abs(destY - activeVillage.y));
+    
+    function calcMoveCapacity() {
+      var totalCap = 0;
       var minSpeed = Infinity;
+      var hasTroops = false;
+      
       Object.keys(TROOP_TYPES).forEach(function(k) {
-        var el = document.getElementById('mv_' + k);
-        if (el && parseInt(el.value) > 0 && TROOP_TYPES[k].speed < minSpeed) minSpeed = TROOP_TYPES[k].speed;
+        var el = document.getElementById('mv_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          hasTroops = true;
+          totalCap += qty * (TROOP_TYPES[k].capacity || 0);
+          var spd = TROOP_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
       });
+      
       Object.keys(CREATURE_TYPES).forEach(function(k) {
-        var el = document.getElementById('mv_' + k);
-        if (el && parseInt(el.value) > 0 && CREATURE_TYPES[k].speed < minSpeed) minSpeed = CREATURE_TYPES[k].speed;
+        var el = document.getElementById('mv_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          hasTroops = true;
+          // Criaturas NO tienen capacidad de carga
+          var spd = CREATURE_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
       });
-      var etaEl = document.getElementById('moveETA');
-      if (!etaEl) return;
-      if (!isFinite(minSpeed)) { etaEl.textContent = 'Selecciona tropas para ver ETA'; etaEl.style.color = 'var(--dim)'; return; }
-      var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
-      var arr = new Date(Date.now() + secs * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-      etaEl.textContent = '\u23f1 ' + fmtTime(secs) + ' \u00b7 Llegada ~' + arr;
-      etaEl.style.color = 'var(--accent)';
+      
+      var capEl = document.getElementById('mvCapDisplay');
+      if (capEl) capEl.textContent = totalCap;
+      
+      var etaEl = document.getElementById('mvTroopETA');
+      if (etaEl) {
+        if (!hasTroops) {
+          etaEl.textContent = 'Selecciona tropas para ver ETA';
+          etaEl.style.color = 'var(--dim)';
+        } else {
+          var dist = (window._moveDest && window._moveDest.dist) || 0;
+          var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
+          var arr = new Date(Date.now() + secs * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          etaEl.textContent = '⏱ ' + fmtTime(secs) + ' • Llegada ~' + arr + ' (vel: ' + minSpeed + ')';
+          etaEl.style.color = 'var(--accent)';
+        }
+      }
     }
-
+    
+    function moveStep2(destVillageId, destVillageName, tx, ty, isAllyDest) {
+      // Recoger tropas seleccionadas
+      var selectedTroops = {};
+      var totalCap = 0;
+      var minSpeed = Infinity;
+      var hasTroops = false;
+      
+      Object.keys(TROOP_TYPES).forEach(function(k) {
+        var el = document.getElementById('mv_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          selectedTroops[k] = qty;
+          hasTroops = true;
+          totalCap += qty * (TROOP_TYPES[k].capacity || 0);
+          var spd = TROOP_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
+      });
+      
+      Object.keys(CREATURE_TYPES).forEach(function(k) {
+        var el = document.getElementById('mv_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          selectedTroops[k] = qty;
+          hasTroops = true;
+          var spd = CREATURE_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
+      });
+      
+      if (!hasTroops) {
+        showNotif('Selecciona al menos una tropa.', 'err');
+        return;
+      }
+      
+      // PASO 2: Seleccionar recursos (opcional)
+      var vs = activeVillage.state;
+      var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
+      
+      var resRows = '';
+      if (totalCap > 0) {
+        var resKeys = ['madera','piedra','hierro','provisiones','esencia'];
+        var resIcons = {madera:'🌲',piedra:'⛰️',hierro:'⚙️',provisiones:'🌾',esencia:'✨'};
+        resKeys.forEach(function(rk) {
+          var have = Math.floor(vs.resources[rk] || 0);
+          if (have <= 0) return;
+          resRows += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+            + '<span>' + resIcons[rk] + ' ' + rk.charAt(0).toUpperCase() + rk.slice(1) + ' (' + fmt(have) + ' disp.)</span>'
+            + '<input type="number" id="mv_' + rk + '" value="0" min="0" max="' + Math.min(have, totalCap) + '" style="width:80px;" oninput="calcMoveLoad()">'
+            + '</div>';
+        });
+      }
+      
+      var troopSummary = '';
+      Object.keys(selectedTroops).forEach(function(k) {
+        var typeData = TROOP_TYPES[k] || CREATURE_TYPES[k];
+        troopSummary += (typeData.icon || '') + ' ' + selectedTroops[k] + ' ' + (typeData.name || k) + ' • ';
+      });
+      troopSummary = troopSummary.slice(0, -3);
+      
+      var titleTxt = isAllyDest ? '🛡️ Enviar refuerzo' : '⚔ Mover tropas';
+      var note = isAllyDest
+        ? 'Las tropas se quedarán en la aldea aliada hasta que las llames de vuelta.'
+        : 'Las tropas pasarán a ser de esta aldea permanentemente.';
+      
+      var html = '<div class="bld-modal-overlay" id="moveOverlay" onclick="closeMoveOverlay(event)">'
+        + '<div class="bld-modal" style="max-width:420px;">'
+        + '<div class="bld-modal-head"><div class="bld-modal-icon">' + (isAllyDest ? '🛡️' : '⚔') + '</div>'
+        + '<div><div class="bld-modal-title">' + titleTxt + '</div>'
+        + '<div class="bld-modal-sub">Paso 2/2: Recursos (opcional) • Hacia ' + escapeHtml(destVillageName) + '</div></div>'
+        + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715;</button>'
+        + '</div><div class="bld-modal-body" style="padding:15px;">'
+        + '<div style="font-size:.7rem;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:var(--panel2);border-radius:4px;">' + troopSummary + '</div>'
+        + '<div style="font-size:.68rem;color:var(--accent2);margin-bottom:8px;">' + note + '</div>';
+      
+      if (totalCap > 0 && resRows) {
+        html += '<div style="font-size:.68rem;color:var(--accent);margin-bottom:6px;">Capacidad: <b id="mvCapDisplay2">' + totalCap + '</b> uds • Cargado: <b id="mvLoadDisplay" style="color:var(--ok)">0</b></div>'
+          + resRows;
+      } else if (totalCap > 0) {
+        html += '<p style="color:var(--dim);font-size:.75rem;">Sin recursos disponibles para enviar.</p>';
+      } else {
+        html += '<p style="color:var(--dim);font-size:.75rem;">Las tropas seleccionadas no tienen capacidad de carga.</p>';
+      }
+      
+      html += '</div><div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);">'
+        + '<div style="font-size:.68rem;color:var(--dim);">📍 ' + dist + ' casillas • ETA: <span id="mvETA">' + fmtTime(Math.ceil((dist / minSpeed) * MISSION_FACTOR)) + '</span></div>'
+        + '<div id="mvWarning" style="font-size:.68rem;color:var(--danger);min-height:14px;"></div>'
+        + '</div><div class="bld-modal-footer">'
+        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openMoveModal(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
+        + '<button class="bld-footer-btn avail" onclick="executeMoveClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Enviar tropas</button>'
+        + '</div></div></div>';
+      
+      window._moveTotalCap = totalCap;
+      window._moveMinSpeed = minSpeed;
+      window._moveDist = dist;
+      window._moveSelectedTroops = selectedTroops;
+      
+      var wrap = document.getElementById('bldModal');
+      wrap.innerHTML = html;
+      wrap.style.display = 'block';
+      if (totalCap > 0) calcMoveLoad();
+    }
+    
+    function calcMoveLoad() {
+      var load = 0;
+      ['madera','piedra','hierro','provisiones','esencia'].forEach(function(rk) {
+        var el = document.getElementById('mv_' + rk);
+        if (el) load += parseInt(el.value) || 0;
+      });
+      var loadEl = document.getElementById('mvLoadDisplay');
+      var warnEl = document.getElementById('mvWarning');
+      if (loadEl) { loadEl.textContent = load; loadEl.style.color = load > (window._moveTotalCap || 0) ? 'var(--danger)' : 'var(--ok)'; }
+      if (warnEl) warnEl.textContent = load > (window._moveTotalCap || 0) ? '⚠ Sobrepasa la capacidad de carga' : '';
+    }
+    
     function closeMoveOverlay(event) {
       if (event.target.id === 'moveOverlay') document.getElementById('bldModal').style.display = 'none';
     }
@@ -7481,54 +7425,97 @@
       if (!activeVillage) return;
       var vs = activeVillage.state;
       var res = calcRes(vs);
-      var selectedTroops = {}; var total = 0;
-      Object.keys(TROOP_TYPES).forEach(function(k) {
-        var el = document.getElementById('mv_' + k);
-        if (el) { var v = parseInt(el.value) || 0; if (v > 0) { selectedTroops[k] = v; total += v; } }
-      });
-      Object.keys(CREATURE_TYPES).forEach(function(k) {
-        var el = document.getElementById('mv_' + k);
-        if (el) { var v = parseInt(el.value) || 0; if (v > 0) { selectedTroops[k] = v; total += v; } }
-      });
-      if (total <= 0) { showNotif('Selecciona al menos una tropa.', 'err'); return; }
-      if (selectedTroops.aldeano && selectedTroops.aldeano > (res.aldeanos_libres || 0)) {
-        showNotif('No tienes suficientes aldeanos libres.', 'err'); return;
+      
+      // Usar tropas pre-seleccionadas del paso 1
+      var selectedTroops = window._moveSelectedTroops || {};
+      if (Object.keys(selectedTroops).length === 0) {
+        showNotif('No hay tropas seleccionadas.', 'err');
+        return;
       }
+      
+      // Validar que tenemos las tropas
+      var aldLibres = res.aldeanos_libres || 0;
       for (var k in selectedTroops) {
-        if (k === 'aldeano') continue;
-        if (TROOP_TYPES[k] && selectedTroops[k] > (vs.troops[k] || 0)) {
-          showNotif('No tienes suficientes ' + TROOP_TYPES[k].name + 's.', 'err'); return;
+        var needed = selectedTroops[k];
+        var available = 0;
+        if (k === 'aldeano') {
+          available = aldLibres;
+        } else if (TROOP_TYPES[k]) {
+          available = vs.troops[k] || 0;
+        } else if (CREATURE_TYPES[k]) {
+          available = (vs.creatures && vs.creatures[k]) || 0;
         }
-        if (CREATURE_TYPES[k] && selectedTroops[k] > ((vs.creatures && vs.creatures[k]) || 0)) {
-          showNotif('No tienes suficientes ' + CREATURE_TYPES[k].name + 's.', 'err'); return;
+        if (needed > available) {
+          var typeData = TROOP_TYPES[k] || CREATURE_TYPES[k];
+          showNotif('No tienes suficientes ' + (typeData ? typeData.name : k) + 's.', 'err');
+          return;
         }
       }
-      document.getElementById('bldModal').style.display = 'none';
-      var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
-      var minSpeed = 999;
-      Object.keys(selectedTroops).forEach(function(k) {
-        var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-        if (td && td.speed < minSpeed) minSpeed = td.speed;
+      
+      // Recoger recursos opcionales
+      var cargo = {}; var totalLoad = 0;
+      ['madera','piedra','hierro','provisiones','esencia'].forEach(function(rk) {
+        var el = document.getElementById('mv_' + rk);
+        var v = parseInt((el && el.value) || 0);
+        if (v > 0) { cargo[rk] = v; totalLoad += v; }
       });
-      if (minSpeed === 999) minSpeed = 1;
+      
+      // Validar capacidad si hay recursos
+      if (totalLoad > 0) {
+        var totalCap = window._moveTotalCap || 0;
+        if (totalLoad > totalCap) {
+          showNotif('Sobrepasa la capacidad de carga.', 'err');
+          return;
+        }
+        for (var rk in cargo) {
+          if (cargo[rk] > Math.floor(vs.resources[rk] || 0)) {
+            showNotif('No tienes suficientes ' + rk + '.', 'err');
+            return;
+          }
+        }
+      }
+      
+      document.getElementById('bldModal').style.display = 'none';
+      
+      var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
+      var minSpeed = window._moveMinSpeed || 1;
       var seconds = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
       var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
+      
       snapshotResources(vs);
+      
+      // Descontar recursos
+      for (var rk in cargo) {
+        vs.resources[rk] = Math.max(0, (vs.resources[rk] || 0) - cargo[rk]);
+      }
+      
+      // Descontar tropas
       Object.keys(selectedTroops).forEach(function(k) {
-        if (TROOP_TYPES[k]) vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - selectedTroops[k]);
-        else if (CREATURE_TYPES[k]) vs.creatures[k] = Math.max(0, ((vs.creatures && vs.creatures[k]) || 0) - selectedTroops[k]);
+        if (k === 'aldeano') {
+          vs.resources.aldeanos = Math.max(0, (vs.resources.aldeanos || 0) - selectedTroops[k]);
+          vs.troops.aldeano = vs.resources.aldeanos;
+        } else if (TROOP_TYPES[k]) {
+          vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - selectedTroops[k]);
+        } else if (CREATURE_TYPES[k]) {
+          vs.creatures[k] = Math.max(0, ((vs.creatures && vs.creatures[k]) || 0) - selectedTroops[k]);
+        }
       });
+      
       if (!vs.mission_queue) vs.mission_queue = [];
       vs.mission_queue.push({
         type: isAllyDest ? 'reinforce' : 'move',
         tx: tx, ty: ty, targetId: destVillageId,
-        troops: selectedTroops, finish_at: finishAt,
+        troops: selectedTroops,
+        cargo: cargo, // Recursos opcionales
+        finish_at: finishAt,
         start_at: new Date().toISOString(),
         origin_village_id: activeVillage.id,
         origin_owner_id: currentUser.id
       });
+      
       await flushVillage();
-      showNotif((isAllyDest ? '\u{1f6e1}\ufe0f Refuerzo enviado' : '\u2694 Tropas en camino') + ' \u00b7 ' + fmtTime(seconds), 'ok');
+      var cargoMsg = totalLoad > 0 ? ' (con ' + totalLoad + ' recursos)' : '';
+      showNotif((isAllyDest ? '🛡️ Refuerzo enviado' : '⚔ Tropas en camino') + cargoMsg + ' • ' + fmtTime(seconds), 'ok');
       tick();
     }
 
@@ -7544,6 +7531,11 @@
       return isFinite(minSpeed) ? minSpeed : 1;
     }
 
+    // ============================================================
+    // TRANSPORTE DE MATERIAL - 2 PASOS
+    // Paso 1: Seleccionar tropas → Paso 2: Seleccionar recursos
+    // Las tropas VAN, DEJAN recursos y VUELVEN
+    // ============================================================
     function openTransportModal(destVillageId, destVillageName, tx, ty, isAllyDest) {
       if (!activeVillage) return;
       var vs = activeVillage.state;
@@ -7551,47 +7543,165 @@
       var troops = vs.troops || {};
       var aldLibres = res.aldeanos_libres || 0;
       var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
-      var totalCap = 0; var capRows = '';
+      
+      // PASO 1: Seleccionar tropas
+      var troopRows = '';
+      var hasTroops = false;
       Object.keys(TROOP_TYPES).forEach(function(k) {
         var count = (k === 'aldeano') ? aldLibres : (troops[k] || 0);
-        var cap = (TROOP_TYPES[k].capacity || 0) * count;
-        if (count > 0) { totalCap += cap; capRows += '<div style="font-size:.62rem;color:var(--dim);">' + TROOP_TYPES[k].icon + ' ' + count + ' ' + TROOP_TYPES[k].name + 's \u2192 ' + cap + ' uds</div>'; }
+        if (count <= 0) return;
+        if ((TROOP_TYPES[k].capacity || 0) <= 0) return; // Solo tropas con capacidad
+        hasTroops = true;
+        troopRows += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+          + '<span>' + TROOP_TYPES[k].icon + ' ' + TROOP_TYPES[k].name + ' (' + count + ' disp.) <span style="color:var(--dim);font-size:.7rem;">• Cap: ' + TROOP_TYPES[k].capacity + '</span></span>'
+          + '<input type="number" id="tr_troop_' + k + '" value="0" min="0" max="' + count + '" style="width:64px;" oninput="calcTransportCapacity()">'
+          + '</div>';
       });
+      
+      if (!hasTroops) {
+        showNotif('No tienes tropas con capacidad de carga disponibles.', 'err');
+        return;
+      }
+      
+      var html = '<div class="bld-modal-overlay" id="transportOverlay" onclick="closeTransportOverlay(event)">'
+        + '<div class="bld-modal" style="max-width:420px;">'
+        + '<div class="bld-modal-head"><div class="bld-modal-icon">📦</div>'
+        + '<div><div class="bld-modal-title">Transporte de material</div>'
+        + '<div class="bld-modal-sub">Paso 1/2: Selecciona tropas • Hacia ' + escapeHtml(destVillageName) + '</div></div>'
+        + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715;</button>'
+        + '</div><div class="bld-modal-body" style="padding:15px;">'
+        + '<div style="font-size:.72rem;color:var(--accent2);margin-bottom:10px;">Las tropas irán, dejarán el material y volverán automáticamente.</div>'
+        + '<div style="font-size:.68rem;color:var(--accent);margin-bottom:6px;">Capacidad total: <b id="trCapDisplay">0</b> unidades</div>'
+        + troopRows
+        + '</div><div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);">'
+        + '<div style="font-size:.68rem;color:var(--dim);">📍 Distancia: ' + dist + ' casillas</div>'
+        + '<div id="trTroopETA" style="font-size:.8rem;color:var(--dim);">Selecciona tropas para ver ETA</div>'
+        + '</div><div class="bld-modal-footer">'
+        + '<button class="bld-footer-btn avail" onclick="transportStep2(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
+        + '</div></div></div>';
+      
+      window._transportDest = { vid: destVillageId, name: destVillageName, tx: tx, ty: ty, isAlly: isAllyDest, dist: dist };
+      
+      var wrap = document.getElementById('bldModal');
+      wrap.innerHTML = html;
+      wrap.style.display = 'block';
+    }
+    
+    function calcTransportCapacity() {
+      var totalCap = 0;
+      var minSpeed = Infinity;
+      var hasTroops = false;
+      
+      Object.keys(TROOP_TYPES).forEach(function(k) {
+        var el = document.getElementById('tr_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          hasTroops = true;
+          totalCap += qty * (TROOP_TYPES[k].capacity || 0);
+          var spd = TROOP_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
+      });
+      
+      var capEl = document.getElementById('trCapDisplay');
+      if (capEl) capEl.textContent = totalCap;
+      
+      var etaEl = document.getElementById('trTroopETA');
+      if (etaEl) {
+        if (!hasTroops) {
+          etaEl.textContent = 'Selecciona tropas para ver ETA';
+          etaEl.style.color = 'var(--dim)';
+        } else {
+          var dist = (window._transportDest && window._transportDest.dist) || 0;
+          var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
+          var arr = new Date(Date.now() + secs * 1000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          etaEl.textContent = '⏱ Ida: ' + fmtTime(secs) + ' • Vuelta: ' + fmtTime(secs) + ' • Llegada ~' + arr + ' (vel: ' + minSpeed + ')';
+          etaEl.style.color = 'var(--accent)';
+        }
+      }
+    }
+    
+    function transportStep2(destVillageId, destVillageName, tx, ty, isAllyDest) {
+      // Recoger tropas seleccionadas
+      var selectedTroops = {};
+      var totalCap = 0;
+      var minSpeed = Infinity;
+      var hasTroops = false;
+      
+      Object.keys(TROOP_TYPES).forEach(function(k) {
+        var el = document.getElementById('tr_troop_' + k);
+        if (!el) return;
+        var qty = parseInt(el.value) || 0;
+        if (qty > 0) {
+          selectedTroops[k] = qty;
+          hasTroops = true;
+          totalCap += qty * (TROOP_TYPES[k].capacity || 0);
+          var spd = TROOP_TYPES[k].speed || 1;
+          if (spd < minSpeed) minSpeed = spd;
+        }
+      });
+      
+      if (!hasTroops) {
+        showNotif('Selecciona al menos una tropa.', 'err');
+        return;
+      }
+      
+      // PASO 2: Seleccionar recursos
+      var vs = activeVillage.state;
+      var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
+      
       var resRows = '';
       var resKeys = ['madera','piedra','hierro','provisiones','esencia'];
-      var resIcons = {madera:'\ud83c\udf32',piedra:'\u26f0\ufe0f',hierro:'\u2699\ufe0f',provisiones:'\ud83c\udf3e',esencia:'\u2728'};
+      var resIcons = {madera:'🌲',piedra:'⛰️',hierro:'⚙️',provisiones:'🌾',esencia:'✨'};
       resKeys.forEach(function(rk) {
         var have = Math.floor(vs.resources[rk] || 0);
         if (have <= 0) return;
         resRows += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
           + '<span>' + resIcons[rk] + ' ' + rk.charAt(0).toUpperCase() + rk.slice(1) + ' (' + fmt(have) + ' disp.)</span>'
-          + '<input type="number" id="tr_' + rk + '" value="0" min="0" max="' + have + '" style="width:80px;" oninput="calcTransportLoad()">'
+          + '<input type="number" id="tr_' + rk + '" value="0" min="0" max="' + Math.min(have, totalCap) + '" style="width:80px;" oninput="calcTransportLoad()">'
           + '</div>';
       });
-      var returnNote = isAllyDest ? 'las tropas volver\u00e1n autom\u00e1ticamente.' : 'las tropas se quedan en esa aldea.';
-      var html = '<div class="bld-modal-overlay" id="moveOverlay" onclick="closeMoveOverlay(event)">'
+      
+      var troopSummary = '';
+      Object.keys(selectedTroops).forEach(function(k) {
+        troopSummary += TROOP_TYPES[k].icon + ' ' + selectedTroops[k] + ' ' + TROOP_TYPES[k].name + '(s) • ';
+      });
+      troopSummary = troopSummary.slice(0, -3); // quitar último •
+      
+      var html = '<div class="bld-modal-overlay" id="transportOverlay" onclick="closeTransportOverlay(event)">'
         + '<div class="bld-modal" style="max-width:420px;">'
-        + '<div class="bld-modal-head"><div class="bld-modal-icon">\ud83d\udce6</div>'
-        + '<div><div class="bld-modal-title">' + (isAllyDest ? 'Enviar Recursos' : 'Transportar Recursos') + '</div>'
-        + '<div class="bld-modal-sub">Hacia ' + escapeHtml(destVillageName) + '</div></div>'
+        + '<div class="bld-modal-head"><div class="bld-modal-icon">📦</div>'
+        + '<div><div class="bld-modal-title">Transporte de material</div>'
+        + '<div class="bld-modal-sub">Paso 2/2: Selecciona recursos • Hacia ' + escapeHtml(destVillageName) + '</div></div>'
         + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715;</button>'
         + '</div><div class="bld-modal-body" style="padding:15px;">'
-        + '<div style="font-size:.68rem;color:var(--accent);margin-bottom:6px;">Capacidad: <b id="trCapDisplay">' + totalCap + '</b> uds \u00b7 Cargado: <b id="trLoadDisplay" style="color:var(--ok)">0</b></div>'
-        + '<div style="margin-bottom:8px;">' + capRows + '</div>'
+        + '<div style="font-size:.7rem;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:var(--panel2);border-radius:4px;">' + troopSummary + '</div>'
+        + '<div style="font-size:.68rem;color:var(--accent);margin-bottom:6px;">Capacidad: <b id="trCapDisplay2">' + totalCap + '</b> uds • Cargado: <b id="trLoadDisplay" style="color:var(--ok)">0</b></div>'
         + (resRows || '<p style="color:var(--dim);">Sin recursos disponibles.</p>')
-        + '<div style="font-size:.68rem;color:var(--accent2);margin-top:8px;">Al llegar, ' + returnNote + '</div>'
         + '</div><div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);">'
-        + '<div style="font-size:.68rem;color:var(--dim);">\ud83d\udccd ' + dist + ' casillas \u00b7 ETA: <span id="trETA">\u2014</span></div>'
+        + '<div style="font-size:.68rem;color:var(--dim);">📍 ' + dist + ' casillas • ETA: <span id="trETA">' + fmtTime(Math.ceil((dist / minSpeed) * MISSION_FACTOR)) + '</span></div>'
         + '<div id="trWarning" style="font-size:.68rem;color:var(--danger);min-height:14px;"></div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn avail" onclick="executeTransportClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Confirmar env\u00edo</button>'
+        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openTransportModal(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
+        + '<button class="bld-footer-btn avail" onclick="executeTransportClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Enviar transporte</button>'
         + '</div></div></div>';
+      
       window._transportTotalCap = totalCap;
-      window._transportMinSpeed = _calcMinTroopSpeed(troops, aldLibres);
+      window._transportMinSpeed = minSpeed;
       window._transportDist = dist;
+      window._transportSelectedTroops = selectedTroops;
+      
       var wrap = document.getElementById('bldModal');
-      wrap.innerHTML = html; wrap.style.display = 'block';
+      wrap.innerHTML = html;
+      wrap.style.display = 'block';
       calcTransportLoad();
+    }
+    
+    function closeTransportOverlay(event) {
+      if (event.target.id === 'transportOverlay') {
+        document.getElementById('bldModal').style.display = 'none';
+      }
     }
 
     function calcTransportLoad() {
@@ -7616,33 +7726,79 @@
       var vs = activeVillage.state;
       var res = calcRes(vs);
       var aldLibres = res.aldeanos_libres || 0;
+      
+      // Validar tropas seleccionadas
+      var selectedTroops = window._transportSelectedTroops || {};
+      if (Object.keys(selectedTroops).length === 0) {
+        showNotif('No hay tropas seleccionadas.', 'err');
+        return;
+      }
+      
+      // Validar que tenemos las tropas
+      for (var k in selectedTroops) {
+        var needed = selectedTroops[k];
+        var available = (k === 'aldeano') ? aldLibres : (vs.troops[k] || 0);
+        if (needed > available) {
+          showNotif('No tienes suficientes ' + TROOP_TYPES[k].name + 's.', 'err');
+          return;
+        }
+      }
+      
+      // Recoger recursos seleccionados
       var cargo = {}; var totalLoad = 0;
       ['madera','piedra','hierro','provisiones','esencia'].forEach(function(rk) {
         var el = document.getElementById('tr_' + rk);
         var v = parseInt((el && el.value) || 0);
         if (v > 0) { cargo[rk] = v; totalLoad += v; }
       });
+      
       if (totalLoad <= 0) { showNotif('Selecciona al menos un recurso.', 'err'); return; }
       if (totalLoad > (window._transportTotalCap || 0)) { showNotif('Sobrepasa la capacidad de carga.', 'err'); return; }
+      
       for (var rk in cargo) {
         if (cargo[rk] > Math.floor(vs.resources[rk] || 0)) { showNotif('No tienes suficientes ' + rk + '.', 'err'); return; }
       }
+      
       document.getElementById('bldModal').style.display = 'none';
-      var minSpeed = _calcMinTroopSpeed(vs.troops || {}, aldLibres);
+      
+      var minSpeed = window._transportMinSpeed || 1;
       var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
       var seconds = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
       var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
+      
       snapshotResources(vs);
+      
+      // Descontar recursos
       for (var rk in cargo) vs.resources[rk] = Math.max(0, (vs.resources[rk] || 0) - cargo[rk]);
+      
+      // Descontar tropas temporalmente
+      for (var k in selectedTroops) {
+        if (k === 'aldeano') {
+          vs.resources.aldeanos = Math.max(0, (vs.resources.aldeanos || 0) - selectedTroops[k]);
+          vs.troops.aldeano = vs.resources.aldeanos; // mantener sincronizado
+        } else {
+          vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - selectedTroops[k]);
+        }
+      }
+      
       if (!vs.mission_queue) vs.mission_queue = [];
       vs.mission_queue.push({
-        type: 'transport', tx: tx, ty: ty, targetId: destVillageId,
-        troops: {}, cargo: cargo, is_ally: isAllyDest,
-        finish_at: finishAt, start_at: new Date().toISOString(),
-        origin_village_id: activeVillage.id
+        type: 'transport',
+        status: 'going', // 'going' -> 'returning'
+        tx: tx,
+        ty: ty,
+        targetId: destVillageId,
+        troops: selectedTroops,
+        resources: cargo,
+        is_ally: isAllyDest,
+        finish_at: finishAt,
+        start_at: new Date().toISOString(),
+        origin_village_id: activeVillage.id,
+        minSpeed: minSpeed
       });
+      
       await flushVillage();
-      showNotif('\ud83d\udce6 Caravana en camino \u00b7 ' + fmtTime(seconds), 'ok');
+      showNotif('📦 Transporte en camino • ' + fmtTime(seconds), 'ok');
       tick();
     }
 
@@ -7655,6 +7811,33 @@
           return;
         }
         var dvs = destVillage.state;
+        
+        // Entregar recursos si hay cargo
+        var cargoMsg = '';
+        if (m.cargo && Object.keys(m.cargo).length > 0) {
+          var rr = await sbClient.from('resources').select('madera,piedra,hierro,prov,esencia').eq('village_id', m.targetId).single();
+          if (!rr.error) {
+            var newRes = {
+              madera:      (Number(rr.data.madera) || 0) + (m.cargo.madera || 0),
+              piedra:      (Number(rr.data.piedra) || 0) + (m.cargo.piedra || 0),
+              hierro:      (Number(rr.data.hierro) || 0) + (m.cargo.hierro || 0),
+              prov:        (Number(rr.data.prov)   || 0) + (m.cargo.provisiones || 0),
+              esencia:     (Number(rr.data.esencia)|| 0) + (m.cargo.esencia || 0),
+              last_update: new Date().toISOString()
+            };
+            await sbClient.from('resources').update(newRes).eq('village_id', m.targetId);
+            dvs.resources.madera = newRes.madera;
+            dvs.resources.piedra = newRes.piedra;
+            dvs.resources.hierro = newRes.hierro;
+            dvs.resources.provisiones = newRes.prov;
+            dvs.resources.esencia = newRes.esencia;
+            
+            var cargoList = Object.keys(m.cargo).filter(function(k){ return m.cargo[k] > 0; })
+              .map(function(k){ return fmt(m.cargo[k]) + ' ' + k; }).join(', ');
+            cargoMsg = '\n📦 Entregaron: ' + cargoList;
+          }
+        }
+        
         var freeSlots = Math.max(0, getBarracksCapacity(dvs.buildings) - getBarracksUsed(dvs));
         var slotsNeeded = 0;
         Object.keys(m.troops).forEach(function(k) {
@@ -7688,7 +7871,7 @@
         }
         var rejMsg = anyRejected ? '\n\u26a0\ufe0f Algunas tropas volvieron (barracas llenas en destino).' : '';
         await sendSystemReport(currentUser.id, '\u2694 TROPAS TRASLADADAS',
-          'Tropas llegaron a ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + '] y ya son de esa aldea.' + rejMsg);
+          'Tropas llegaron a ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + '] y ya son de esa aldea.' + cargoMsg + rejMsg);
         renderMap();
       } catch(e) { console.error('executeMove error:', e); }
     }
@@ -9894,7 +10077,46 @@
         console.warn('visibilitychange sync error:', e);
       }
     });
-  </script>
+  
+/* --- TRANSPORTE UI — helpers llamados desde HTML inline --- */
+function updateTransportUI() {
+    let totalCap = 0;
+    let totalTroops = 0;
+    Object.keys(TROOP_TYPES).forEach(id => {
+        const input = document.getElementById('mUnits_' + id);
+        if (input) {
+            const val = parseInt(input.value) || 0;
+            totalCap += val * (TROOP_TYPES[id].capacity || 0);
+            totalTroops += val;
+        }
+    });
+    const capSpan = document.getElementById('displayCap');
+    const costSpan = document.getElementById('displayCost');
+    if(capSpan) capSpan.innerText = totalCap;
+    if(costSpan) costSpan.innerText = totalTroops;
+    validateTransportRes();
+}
+
+function validateTransportRes() {
+    const cap = parseInt(document.getElementById('displayCap')?.innerText) || 0;
+    const w = parseInt(document.getElementById('mWood')?.value) || 0;
+    const s = parseInt(document.getElementById('mStone')?.value) || 0;
+    const i = parseInt(document.getElementById('mIron')?.value) || 0;
+    const btn = document.getElementById('btnSendMission');
+    if (btn) {
+        if ((w + s + i) > cap) {
+            btn.innerText = "¡EXCESO CARGA!";
+            btn.disabled = true;
+        } else {
+            btn.innerText = "¡Enviar!";
+            btn.disabled = false;
+        }
+    }
+}
+// processMissions eliminado: resolveMissions (tick cada segundo) gestiona todos los tipos de misión incluyendo transport.
+
+
+</script>
 
 
   <div id="bldModal" style="display:none"></div>
@@ -9985,7 +10207,7 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v0.84</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v0.87</div>
 </body>
 
 </html>

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Batallas — Epic Warriors</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:     #07060a;
+      --panel:  #110f1a;
+      --panel2: #1a1726;
+      --border: #2e2a42;
+      --accent: #c8a0ff;
+      --gold:   #f0c040;
+      --text:   #d8cef0;
+      --dim:    #6a6080;
+      --danger: #e05060;
+      --ok:     #50d090;
+      --atk:    #ff6060;
+      --def:    #60b0ff;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:var(--bg); color:var(--text); font-family:'VT323',monospace; min-height:100vh; }
+
+    .header { text-align:center; padding:28px 20px 8px; }
+    .header h1 { font-size:2.8rem; color:var(--gold); text-shadow:0 0 20px rgba(240,192,64,.35); letter-spacing:.08em; }
+    .header p  { color:var(--dim); font-size:.95rem; margin-top:4px; }
+
+    .main { max-width:1500px; margin:0 auto; padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .full { grid-column:1/-1; }
+
+    /* Army panel */
+    .army-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .army-panel.atk { border-top:3px solid var(--atk); }
+    .army-panel.def { border-top:3px solid var(--def); }
+    .panel-head { padding:12px 16px; background:var(--panel2); border-bottom:1px solid var(--border); font-size:1.3rem; }
+    .panel-head.atk { color:var(--atk); }
+    .panel-head.def { color:var(--def); }
+    .panel-body { padding:14px 16px; }
+
+    .sec-label {
+      font-size:.68rem; color:var(--dim); letter-spacing:.12em;
+      padding:4px 0; border-bottom:1px solid var(--border); margin:12px 0 8px;
+    }
+    .sec-label:first-child { margin-top:0; }
+
+    /* Troop table */
+    .troop-table { width:100%; border-collapse:collapse; }
+    .troop-table th {
+      font-size:.65rem; color:var(--dim); letter-spacing:.08em;
+      text-align:right; padding:2px 6px 6px; font-weight:normal;
+    }
+    .troop-table th:first-child { text-align:left; }
+    .troop-table td { padding:3px 4px; vertical-align:middle; }
+    .troop-table tr:hover td { background:rgba(255,255,255,.02); }
+
+    .t-name { font-size:.82rem; color:var(--text); white-space:nowrap; padding-left:2px; }
+    .t-icon { font-size:1rem; text-align:center; width:26px; }
+
+    .t-input {
+      width:62px; background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:3px; color:var(--gold); font-family:'VT323',monospace;
+      font-size:.88rem; padding:2px 5px; text-align:right;
+    }
+    .t-input.qty  { color:var(--gold); }
+    .t-input.wpn  { color:#90d0ff; width:46px; }
+    .t-input.arm  { color:#90ffb0; width:46px; }
+    .t-input.lvl  { color:var(--accent); width:46px; }
+    .t-input:focus { outline:none; border-color:var(--accent); }
+    .t-input[disabled] { opacity:.3; cursor:not-allowed; }
+
+    .col-h-qty { color:var(--gold) !important; }
+    .col-h-wpn { color:#90d0ff !important; }
+    .col-h-arm { color:#90ffb0 !important; }
+    .col-h-lvl { color:var(--accent) !important; }
+
+    /* Summary */
+    .summary { background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:8px 12px; margin-top:12px; font-size:.78rem; }
+    .sum-row { display:flex; justify-content:space-between; padding:2px 0; }
+    .sum-k { color:var(--dim); }
+    .sum-v { color:var(--gold); }
+
+    /* Wall */
+    .wall-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px 18px; display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+    .wall-panel label { color:var(--dim); font-size:.9rem; }
+    .wall-input { width:66px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'VT323',monospace; font-size:1.1rem; padding:4px 8px; }
+    .wall-info { color:var(--ok); font-size:.85rem; }
+
+    /* Buttons */
+    .btn-row { text-align:center; padding:4px 0; }
+    .btn-sim { background:linear-gradient(135deg,var(--gold),#c07800); color:#000; border:none; padding:13px 48px; font-family:'VT323',monospace; font-size:1.35rem; border-radius:6px; cursor:pointer; letter-spacing:.06em; box-shadow:0 4px 18px rgba(240,192,64,.22); transition:all .15s; }
+    .btn-sim:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(240,192,64,.32); }
+    .btn-sim:active { transform:translateY(1px); }
+    .btn-clr { background:transparent; color:var(--dim); border:1px solid var(--border); padding:13px 22px; font-family:'VT323',monospace; font-size:1.1rem; border-radius:6px; cursor:pointer; margin-left:10px; transition:all .15s; }
+    .btn-clr:hover { color:var(--text); border-color:var(--dim); }
+
+    /* Log */
+    .log-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .log-head { padding:10px 16px; background:var(--panel2); border-bottom:1px solid var(--border); font-size:1.05rem; color:var(--accent); display:flex; justify-content:space-between; align-items:center; }
+    .log-body { max-height:520px; overflow-y:auto; padding:8px; font-size:.78rem; line-height:1.5; }
+    .log-body::-webkit-scrollbar { width:5px; }
+    .log-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    .le { padding:2px 8px; margin:1px 0; border-left:3px solid transparent; border-radius:0 3px 3px 0; }
+    .la  { border-color:var(--atk);    color:#ffaaaa; background:rgba(224,80,96,.04); }
+    .ld  { border-color:var(--def);    color:#aaccff; background:rgba(96,176,255,.04); }
+    .lm  { border-color:var(--border); color:var(--dim); }
+    .lx  { border-color:var(--danger); color:var(--danger); }
+    .lt  { border-color:var(--accent); color:var(--accent); padding:5px 8px; margin:6px 0 1px; background:rgba(200,160,255,.04); font-size:.85rem; }
+    .ls  { color:var(--border); font-size:.68rem; padding:1px 8px; }
+    .lv  { border-color:var(--ok); color:var(--ok); font-size:1rem; padding:8px 16px; margin:10px 0; background:rgba(80,208,144,.06); text-align:center; }
+    .li  { border-color:var(--dim); color:var(--dim); }
+    .empty-log { text-align:center; color:var(--dim); padding:36px 0; font-size:.9rem; }
+
+    /* Result card */
+    .res-card { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px; padding:10px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; }
+    .res-side { padding:8px 10px; border-radius:4px; }
+    .res-side.atk { background:rgba(224,80,96,.07); border:1px solid rgba(224,80,96,.18); }
+    .res-side.def { background:rgba(96,176,255,.07); border:1px solid rgba(96,176,255,.18); }
+    .res-title { font-size:.95rem; margin-bottom:5px; }
+    .res-title.atk { color:var(--atk); }
+    .res-title.def { color:var(--def); }
+    .res-row { font-size:.75rem; display:flex; justify-content:space-between; padding:1px 0; color:var(--dim); }
+    .res-row .al { color:var(--ok); }
+    .res-row .dd { color:var(--danger); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚔ SIMULADOR DE BATALLAS ⚔</h1>
+  <p>Epic Warriors — Ejército vs Ejército</p>
+</div>
+
+<div class="main">
+
+  <!-- ATACANTE -->
+  <div class="army-panel atk">
+    <div class="panel-head atk">⚔️ Atacante</div>
+    <div class="panel-body">
+      <div class="sec-label">TROPAS — Cantidad · Niv · Arma · Armadura</div>
+      <table class="troop-table">
+        <thead><tr>
+          <th></th><th></th>
+          <th class="col-h-qty">Cant.</th>
+          <th class="col-h-lvl">Niv</th>
+          <th class="col-h-wpn">Arma</th>
+          <th class="col-h-arm">Arm.</th>
+        </tr></thead>
+        <tbody id="atk-troop-body"></tbody>
+      </table>
+
+      <div class="sec-label">CRIATURAS — Cantidad (stats fijos)</div>
+      <table class="troop-table">
+        <thead><tr><th></th><th></th><th class="col-h-qty">Cant.</th></tr></thead>
+        <tbody id="atk-creature-body"></tbody>
+      </table>
+
+      <div class="summary">
+        <div class="sum-row"><span class="sum-k">Total unidades</span><span class="sum-v" id="atk-total">0</span></div>
+        <div class="sum-row"><span class="sum-k">Poder estimado</span><span class="sum-v" id="atk-power">0</span></div>
+        <div class="sum-row"><span class="sum-k">Grupos</span><span class="sum-v" id="atk-groups">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEFENSOR -->
+  <div class="army-panel def">
+    <div class="panel-head def">🛡️ Defensor</div>
+    <div class="panel-body">
+      <div class="sec-label">TROPAS — Cantidad · Niv · Arma · Armadura</div>
+      <table class="troop-table">
+        <thead><tr>
+          <th></th><th></th>
+          <th class="col-h-qty">Cant.</th>
+          <th class="col-h-lvl">Niv</th>
+          <th class="col-h-wpn">Arma</th>
+          <th class="col-h-arm">Arm.</th>
+        </tr></thead>
+        <tbody id="def-troop-body"></tbody>
+      </table>
+
+      <div class="sec-label">CRIATURAS — Cantidad (stats fijos)</div>
+      <table class="troop-table">
+        <thead><tr><th></th><th></th><th class="col-h-qty">Cant.</th></tr></thead>
+        <tbody id="def-creature-body"></tbody>
+      </table>
+
+      <div class="summary">
+        <div class="sum-row"><span class="sum-k">Total unidades</span><span class="sum-v" id="def-total">0</span></div>
+        <div class="sum-row"><span class="sum-k">Poder estimado</span><span class="sum-v" id="def-power">0</span></div>
+        <div class="sum-row"><span class="sum-k">Grupos</span><span class="sum-v" id="def-groups">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MURALLA -->
+  <div class="full">
+    <div class="wall-panel">
+      <label>🏰 Nivel de Muralla (Defensor):</label>
+      <input class="wall-input" type="number" id="wallLevel" value="0" min="0" max="20" oninput="updateWallInfo()">
+      <div class="wall-info" id="wallInfo">Sin muralla</div>
+    </div>
+  </div>
+
+  <!-- BOTONES -->
+  <div class="full btn-row">
+    <button class="btn-sim" onclick="runSimulation()">⚔️ INICIAR BATALLA</button>
+    <button class="btn-clr" onclick="clearLog()">Limpiar log</button>
+  </div>
+
+  <!-- LOG -->
+  <div class="full">
+    <div class="log-panel">
+      <div class="log-head">
+        <span>📜 Registro de Batalla</span>
+        <span id="logStats" style="font-size:.78rem;color:var(--dim);"></span>
+      </div>
+      <div class="log-body" id="battleLog">
+        <div class="empty-log">Configura los ejércitos y pulsa "Iniciar Batalla"</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// DATOS
+// ============================================================
+const TROOPS = {
+  aldeano:    { name:'Aldeano',    icon:'👤', attackChance:8,  hp:10,  attacksPerTurn:1, damage:2,  defense:10, dexterity:5  },
+  soldado:    { name:'Soldado',    icon:'⚔️', attackChance:12, hp:25,  attacksPerTurn:1, damage:8,  defense:14, dexterity:8  },
+  mago:       { name:'Mago',       icon:'🧙', attackChance:15, hp:15,  attacksPerTurn:2, damage:12, defense:10, dexterity:12 },
+  druida:     { name:'Druida',     icon:'🌿', attackChance:14, hp:20,  attacksPerTurn:1, damage:6,  defense:12, dexterity:10 },
+  explorador: { name:'Explorador', icon:'🏹', attackChance:16, hp:12,  attacksPerTurn:2, damage:5,  defense:11, dexterity:15 },
+  asesino:    { name:'Asesino',    icon:'🗡️', attackChance:18, hp:18,  attacksPerTurn:2, damage:14, defense:12, dexterity:18 },
+  paladin:    { name:'Paladín',    icon:'🛡️', attackChance:10, hp:40,  attacksPerTurn:1, damage:10, defense:18, dexterity:6  },
+  chaman:     { name:'Chamán',     icon:'🔮', attackChance:13, hp:22,  attacksPerTurn:2, damage:10, defense:11, dexterity:11 },
+  invocador:  { name:'Invocador',  icon:'🧿', attackChance:11, hp:20,  attacksPerTurn:1, damage:6,  defense:12, dexterity:9  },
+};
+
+const CREATURES = {
+  orco:     { name:'Orco',     icon:'👹', attackChance:10, hp:30,  attacksPerTurn:1, damage:10, defense:12, dexterity:6  },
+  hada:     { name:'Hada',     icon:'🧚', attackChance:14, hp:20,  attacksPerTurn:2, damage:8,  defense:10, dexterity:15 },
+  golem:    { name:'Gólem',    icon:'🗿', attackChance:8,  hp:80,  attacksPerTurn:1, damage:18, defense:18, dexterity:4  },
+  espectro: { name:'Espectro', icon:'👻', attackChance:16, hp:50,  attacksPerTurn:1, damage:22, defense:8,  dexterity:18 },
+  grifo:    { name:'Grifo',    icon:'🦅', attackChance:14, hp:120, attacksPerTurn:2, damage:28, defense:14, dexterity:16 },
+  hidra:    { name:'Hidra',    icon:'🐉', attackChance:12, hp:180, attacksPerTurn:3, damage:20, defense:16, dexterity:10 },
+  fenix:    { name:'Fénix',    icon:'🔥', attackChance:16, hp:200, attacksPerTurn:2, damage:45, defense:12, dexterity:20 },
+  behemot:  { name:'Behemot',  icon:'🦏', attackChance:10, hp:350, attacksPerTurn:1, damage:55, defense:22, dexterity:6  },
+  dragon:   { name:'Dragón',   icon:'🐲', attackChance:18, hp:500, attacksPerTurn:3, damage:80, defense:20, dexterity:14 },
+  arconte:  { name:'Arconte',  icon:'👼', attackChance:20, hp:400, attacksPerTurn:2, damage:70, defense:25, dexterity:18 },
+};
+
+// ============================================================
+// BUILD UI
+// ============================================================
+function buildTroopRows(tbodyId, side) {
+  const tb = document.getElementById(tbodyId);
+  let html = '';
+  Object.keys(TROOPS).forEach(k => {
+    const t = TROOPS[k];
+    html += `<tr>
+      <td class="t-icon">${t.icon}</td>
+      <td class="t-name">${t.name}</td>
+      <td><input class="t-input qty" type="number" id="${side}_qty_${k}" value="0" min="0" oninput="updateSummary('${side}')"></td>
+      <td><input class="t-input lvl" type="number" id="${side}_lvl_${k}" value="1" min="1" max="100" oninput="updateSummary('${side}')"></td>
+      <td><input class="t-input wpn" type="number" id="${side}_wpn_${k}" value="0" min="0" max="100" oninput="updateSummary('${side}')"></td>
+      <td><input class="t-input arm" type="number" id="${side}_arm_${k}" value="0" min="0" max="100" oninput="updateSummary('${side}')"></td>
+    </tr>`;
+  });
+  tb.innerHTML = html;
+}
+
+function buildCreatureRows(tbodyId, side) {
+  const tb = document.getElementById(tbodyId);
+  let html = '';
+  Object.keys(CREATURES).forEach(k => {
+    const t = CREATURES[k];
+    html += `<tr>
+      <td class="t-icon">${t.icon}</td>
+      <td class="t-name">${t.name}</td>
+      <td><input class="t-input qty" type="number" id="${side}_qty_${k}" value="0" min="0" oninput="updateSummary('${side}')"></td>
+    </tr>`;
+  });
+  tb.innerHTML = html;
+}
+
+buildTroopRows('atk-troop-body', 'atk');
+buildCreatureRows('atk-creature-body', 'atk');
+buildTroopRows('def-troop-body', 'def');
+buildCreatureRows('def-creature-body', 'def');
+
+// ============================================================
+// SUMMARY
+// ============================================================
+function getComp(side) {
+  const comp = [];
+  Object.keys(TROOPS).forEach(k => {
+    const qty = parseInt(document.getElementById(`${side}_qty_${k}`)?.value) || 0;
+    if (!qty) return;
+    const lvl = parseInt(document.getElementById(`${side}_lvl_${k}`)?.value) || 1;
+    const wpn = parseInt(document.getElementById(`${side}_wpn_${k}`)?.value) || 0;
+    const arm = parseInt(document.getElementById(`${side}_arm_${k}`)?.value) || 0;
+    comp.push({ key:k, data:TROOPS[k], qty, lvl, wpn, arm, isCreature:false });
+  });
+  Object.keys(CREATURES).forEach(k => {
+    const qty = parseInt(document.getElementById(`${side}_qty_${k}`)?.value) || 0;
+    if (!qty) return;
+    comp.push({ key:k, data:CREATURES[k], qty, lvl:1, wpn:0, arm:0, isCreature:true });
+  });
+  return comp;
+}
+
+function updateSummary(side) {
+  const comp = getComp(side);
+  const total = comp.reduce((s,c)=>s+c.qty, 0);
+  let power = 0;
+  comp.forEach(({data,qty,lvl,wpn,arm,isCreature}) => {
+    const hp  = isCreature ? data.hp  : data.hp  * (1+(lvl-1)*0.1);
+    const dmg = isCreature ? data.damage : data.damage + wpn;
+    const def = isCreature ? data.defense : data.defense + arm;
+    power += qty * (hp*0.5 + dmg*data.attacksPerTurn*3 + def*0.5);
+  });
+  let groups = 0;
+  comp.forEach(({qty})=>{ let r=qty,gs=10; while(r>0){groups++;r-=Math.min(r,gs);gs*=10;} });
+  document.getElementById(`${side}-total`).textContent  = total.toLocaleString();
+  document.getElementById(`${side}-power`).textContent  = Math.round(power).toLocaleString();
+  document.getElementById(`${side}-groups`).textContent = groups>0 ? `${groups} grp · ${comp.length} tipos` : '—';
+}
+
+// ============================================================
+// WALL
+// ============================================================
+function updateWallInfo() {
+  const lvl = parseInt(document.getElementById('wallLevel').value)||0;
+  document.getElementById('wallInfo').textContent = lvl===0 ? 'Sin muralla' : `Nivel ${lvl} → +${lvl*2} DEF al Defensor`;
+}
+updateWallInfo();
+
+// ============================================================
+// COMBAT ENGINE
+// ============================================================
+function divGroups(qty) {
+  const g=[]; let r=qty, gs=10;
+  while(r>0){ g.push(Math.min(r,gs)); r-=Math.min(r,gs); gs*=10; }
+  return g;
+}
+
+function buildGroups(side, wallBonus) {
+  const comp = getComp(side);
+  const isAtk = side==='atk';
+  const groups = [];
+  let gid = 1;
+  comp.forEach(({key,data,qty,lvl,wpn,arm,isCreature}) => {
+    const effHP  = isCreature ? data.hp      : data.hp * (1+(lvl-1)*0.1);
+    const effDmg = isCreature ? data.damage  : data.damage + wpn;
+    const effDef = isCreature ? data.defense : data.defense + arm;
+    const defBonus = isAtk ? 0 : wallBonus;
+    divGroups(qty).forEach(size => {
+      groups.push({
+        gid: gid++, side, key,
+        name: data.name, icon: data.icon,
+        stats: { attackChance:data.attackChance, attacksPerTurn:data.attacksPerTurn,
+                 dexterity:data.dexterity, hp:effHP, damage:effDmg, defense:effDef+defBonus },
+        count: size, startCount: size, totalHP: size*effHP,
+      });
+    });
+  });
+  return groups;
+}
+
+function pickTarget(army) {
+  const alive = army.filter(g=>g.count>0);
+  return alive.length ? alive[Math.floor(Math.random()*alive.length)] : null;
+}
+
+function armyAlive(army) { return army.some(g=>g.count>0); }
+
+// ============================================================
+// LOG
+// ============================================================
+const logEl = () => document.getElementById('battleLog');
+function addLog(msg, cls='') {
+  const d=document.createElement('div');
+  d.className=`le ${cls}`; d.textContent=msg;
+  logEl().appendChild(d);
+  logEl().scrollTop=logEl().scrollHeight;
+}
+function clearLog() {
+  logEl().innerHTML='<div class="empty-log">Log limpiado.</div>';
+  document.getElementById('logStats').textContent='';
+}
+
+// ============================================================
+// SIMULATION
+// ============================================================
+function runSimulation() {
+  logEl().innerHTML='';
+  const wallLvl  = parseInt(document.getElementById('wallLevel').value)||0;
+  const wallBonus = wallLvl*2;
+  const atk = buildGroups('atk', 0);
+  const def = buildGroups('def', wallBonus);
+
+  if (!atk.length){ addLog('⚠️ El Atacante no tiene tropas.','lm'); return; }
+  if (!def.length){ addLog('⚠️ El Defensor no tiene tropas.','lm'); return; }
+
+  // Header
+  const atkTot = atk.reduce((s,g)=>s+g.count,0);
+  const defTot = def.reduce((s,g)=>s+g.count,0);
+  addLog(`⚔️ ATACANTE: ${atkTot} unidades en ${atk.length} grupos`, 'li');
+  const atkComp={};  atk.forEach(g=>{ atkComp[g.name]=(atkComp[g.name]||0)+g.count; });
+  Object.entries(atkComp).forEach(([n,q])=>addLog(`   · ${q}× ${n}`,'li'));
+  addLog(`🛡️ DEFENSOR: ${defTot} unidades en ${def.length} grupos${wallLvl>0?' — Muralla '+wallLvl+' (+'+wallBonus+' DEF)':''}`, 'li');
+  const defComp={};  def.forEach(g=>{ defComp[g.name]=(defComp[g.name]||0)+g.count; });
+  Object.entries(defComp).forEach(([n,q])=>addLog(`   · ${q}× ${n}`,'li'));
+  addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━','ls');
+
+  // Snapshot for result card
+  const atkSnap = atk.map(g=>({name:g.name,icon:g.icon,count:g.count}));
+  const defSnap = def.map(g=>({name:g.name,icon:g.icon,count:g.count}));
+
+  let turn=1;
+  while(armyAlive(atk)&&armyAlive(def)) {
+    addLog(`🎯 TURNO ${turn}`, 'lt');
+    executeTurn(atk, def);
+    turn++;
+    if(turn>300){ addLog('⚠️ Batalla detenida — demasiados turnos.','lm'); break; }
+  }
+
+  addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━','ls');
+
+  const atkSurv = atk.reduce((s,g)=>s+g.count,0);
+  const defSurv = def.reduce((s,g)=>s+g.count,0);
+
+  if (atkSurv>0&&defSurv===0)
+    addLog(`🎉 VICTORIA DEL ATACANTE — ${atkSurv} supervivientes (${turn-1} turnos)`,'lv');
+  else if (defSurv>0&&atkSurv===0)
+    addLog(`🛡️ VICTORIA DEL DEFENSOR — ${defSurv} supervivientes (${turn-1} turnos)`,'lv');
+  else
+    addLog(`⚔️ EMPATE — Ambos ejércitos eliminados (${turn-1} turnos)`,'lv');
+
+  showResult(atk, def, atkSnap, defSnap);
+  document.getElementById('logStats').textContent=`${turn-1} turnos`;
+}
+
+function executeTurn(atk, def) {
+  const all = [
+    ...atk.filter(g=>g.count>0).map(g=>({...g,enemyArmy:def})),
+    ...def.filter(g=>g.count>0).map(g=>({...g,enemyArmy:atk})),
+  ];
+  all.sort((a,b)=>{
+    if(b.stats.dexterity!==a.stats.dexterity) return b.stats.dexterity-a.stats.dexterity;
+    if(a.count!==b.count) return a.count-b.count;
+    return Math.random()-.5;
+  });
+  all.forEach(group=>{
+    if(group.count<=0) return;
+    const isAtk = group.side==='atk';
+    const gIcon = isAtk ? '⚔️' : '🛡️';
+    for(let i=0;i<group.stats.attacksPerTurn;i++){
+      const target = pickTarget(group.enemyArmy);
+      if(!target) break;
+      const roll = group.stats.attackChance + Math.floor(Math.random()*20)+1;
+      const tIcon = target.side==='atk' ? '⚔️' : '🛡️';
+      if(roll>target.stats.defense){
+        const dmg = group.count*group.stats.damage;
+        target.totalHP -= dmg;
+        const newCount = Math.max(0,Math.floor(target.totalHP/target.stats.hp+0.0001));
+        const killed = target.count-newCount;
+        target.count = newCount;
+        addLog(`${gIcon}${group.icon}${group.count}×${group.name} → ${tIcon}${target.icon}${target.name}: tirada ${roll} vs DEF ${target.stats.defense} → ${dmg} dmg → ${killed} bajas`, isAtk?'la':'ld');
+        if(target.count<=0) addLog(`💀 ${tIcon}${target.icon}${target.name} (Grp ${target.gid}) eliminado`,'lx');
+      } else {
+        addLog(`${gIcon}${group.icon}${group.count}×${group.name} falla vs ${tIcon}${target.icon}${target.name}: ${roll} vs DEF ${target.stats.defense}`,'lm');
+      }
+    }
+  });
+}
+
+function showResult(atk, def, atkSnap, defSnap) {
+  const mergeSurv = (groups) => {
+    const m={};
+    groups.forEach(g=>{ if(!m[g.name]) m[g.name]={icon:g.icon,alive:0}; m[g.name].alive+=g.count; });
+    return m;
+  };
+  const mergeSnap = (snap) => {
+    const m={};
+    snap.forEach(g=>{ if(!m[g.name]) m[g.name]={icon:g.icon,count:0}; m[g.name].count+=g.count; });
+    return m;
+  };
+  const atkSurv=mergeSurv(atk), defSurv=mergeSurv(def);
+  const atkSt=mergeSnap(atkSnap), defSt=mergeSnap(defSnap);
+
+  const rows = (st,surv) => Object.keys(st).map(name=>{
+    const start=st[name].count, alive=(surv[name]?.alive||0), dead=start-alive;
+    return `<div class="res-row"><span>${st[name].icon} ${name}</span><span><span class="al">✔${alive}</span> <span class="dd">✖${dead}</span></span></div>`;
+  }).join('');
+
+  const card=document.createElement('div');
+  card.className='res-card';
+  card.innerHTML=`
+    <div class="res-side atk"><div class="res-title atk">⚔️ Atacante</div>${rows(atkSt,atkSurv)}</div>
+    <div class="res-side def"><div class="res-title def">🛡️ Defensor</div>${rows(defSt,defSurv)}</div>`;
+  logEl().appendChild(card);
+  logEl().scrollTop=logEl().scrollHeight;
+}
+</script>
+</body>
+</html>
