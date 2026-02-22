@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v0.87</title>
+  <title>Epic Warriors Online v0.99</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -938,6 +938,55 @@
     }
 
     /* MAP */
+    .map-page-layout {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .map-main-col {
+      flex: 1;
+      min-width: 0;
+    }
+    .map-mini-col {
+      flex-shrink: 0;
+    }
+    .minimap-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .minimap-title {
+      font-size: .6rem;
+      color: var(--dim);
+      letter-spacing: .08em;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    #minimapCanvas {
+      display: block;
+      border-radius: 3px;
+      image-rendering: pixelated;
+    }
+    .minimap-legend {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 8px;
+      font-size: .55rem;
+      color: var(--dim);
+    }
+    .minimap-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .minimap-legend-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
     .map-container {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -2481,7 +2530,7 @@
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
           <div class="nav-item" onclick="showPage('defense',this)"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
-          <div class="nav-item" onclick="window.open('battle-simulator-v0_21.html','_blank')"><span class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
+          <div class="nav-item" onclick="window.open('battle-simulator-v0_22.html','_blank')"><span class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Ciencia</div>
@@ -2615,7 +2664,9 @@
 
         <div class="page" id="page-map">
           <div class="page-title">MAPA MUNDIAL</div>
-          <div class="page-sub">Vista 21×21 centrada — usa ↑↓←→ o WASD para moverte. Mapa de 216×216</div>
+          <div class="page-sub">Vista 15×15 centrada — usa ↑↓←→ o WASD para moverte. Mapa de 380×380</div>
+          <div class="map-page-layout">
+          <div class="map-main-col">
           <div class="map-container">
             <div class="map-header">
               <div class="map-legend">
@@ -2661,6 +2712,20 @@
               <div class="map-actions" id="mapActions"></div>
             </div>
           </div>
+          </div><!-- /map-main-col -->
+          <div class="map-mini-col">
+            <div class="minimap-box">
+              <div class="minimap-title">🗺 RADAR — 30×30</div>
+              <canvas id="minimapCanvas" width="270" height="270" title="Radar — vista amplia no interactiva"></canvas>
+              <div class="minimap-legend">
+                <div class="minimap-legend-item"><div class="minimap-legend-dot" style="background:rgba(0,212,255,.8)"></div>Tu aldea</div>
+                <div class="minimap-legend-item"><div class="minimap-legend-dot" style="background:rgba(96,208,96,.8)"></div>Aliado</div>
+                <div class="minimap-legend-item"><div class="minimap-legend-dot" style="background:rgba(255,61,90,.8)"></div>Enemigo</div>
+                <div class="minimap-legend-item"><div class="minimap-legend-dot" style="background:rgba(255,230,0,.7)"></div>NPC</div>
+              </div>
+            </div>
+          </div><!-- /map-mini-col -->
+          </div><!-- /map-page-layout -->
         </div>
 
         <div class="page" id="page-fleet">
@@ -2918,7 +2983,7 @@
 
     const GAME_VERSION = '0.70';
     const MAP_SIZE = 380;
-    const MAP_VIEW = 10;
+    const MAP_VIEW = 7;  // 15×15 grid (2*7+1)
 
     // sessionStorage persiste entre F5 pero no entre pestañas
     // Edge y Firefox bloquean localStorage de CDNs externos, pero sessionStorage funciona
@@ -6655,6 +6720,93 @@
       if (moved) e.preventDefault();
     });
 
+    // ============================================================
+    // MINIMAPA — canvas 30×30, centrado en la cámara del mapa principal
+    // No es interactivo. Se actualiza cada vez que renderMap() lo llama.
+    // Colores: propio=cian, aliado=verde, enemigo=rojo, npc=dorado
+    // ============================================================
+    var MINI_COLS = 30;
+    var MINI_CELL = 9; // px por celda (9px * 30 = 270px)
+    var MINI_GAP  = 0;
+
+    function renderMinimap(cx, cy) {
+      var canvas = document.getElementById('minimapCanvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var W = canvas.width;
+      var H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // Fondo
+      ctx.fillStyle = 'rgba(10,10,16,0.95)';
+      ctx.fillRect(0, 0, W, H);
+
+      // Lookups
+      var lookup = {};
+      (allVillages || []).forEach(function(v) { lookup[v.x + ',' + v.y] = v; });
+      var npcLookup = {};
+      (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).forEach(function(n) { npcLookup[n.x + ',' + n.y] = n; });
+
+      var half = Math.floor(MINI_COLS / 2); // 15
+      var cellPx = MINI_CELL;
+
+      for (var row = 0; row < MINI_COLS; row++) {
+        for (var col = 0; col < MINI_COLS; col++) {
+          var wx = cx - half + col;
+          var wy = cy - half + row;
+          var key = wx + ',' + wy;
+          var px = col * cellPx;
+          var py = row * cellPx;
+
+          if (wx < 1 || wx > MAP_SIZE || wy < 1 || wy > MAP_SIZE) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(px, py, cellPx - 1, cellPx - 1);
+            continue;
+          }
+
+          var vill = lookup[key];
+          var npc  = npcLookup[key];
+
+          if (vill) {
+            var isOwn  = currentUser && (vill.owner_id === currentUser.id);
+            var isAlly = !isOwn && (_allyUserIds && _allyUserIds.has(vill.owner_id));
+            if (isOwn)       ctx.fillStyle = 'rgba(0,212,255,0.85)';
+            else if (isAlly) ctx.fillStyle = 'rgba(96,208,96,0.85)';
+            else             ctx.fillStyle = 'rgba(255,61,90,0.85)';
+            ctx.fillRect(px, py, cellPx - 1, cellPx - 1);
+          } else if (npc) {
+            ctx.fillStyle = 'rgba(255,230,0,0.7)';
+            ctx.fillRect(px, py, cellPx - 1, cellPx - 1);
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.025)';
+            ctx.fillRect(px, py, cellPx - 1, cellPx - 1);
+          }
+        }
+      }
+
+      // Dibujar encuadre de lo que muestra el mapa principal (15x15)
+      var mainR = MAP_VIEW; // 7 → 15×15
+      var mainSize = mainR * 2 + 1; // 15
+      var frameLeft = (half - mainR) * cellPx;
+      var frameTop  = (half - mainR) * cellPx;
+      var framePx   = mainSize * cellPx;
+      ctx.strokeStyle = 'rgba(240,192,64,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(frameLeft + 0.5, frameTop + 0.5, framePx - cellPx, framePx - cellPx);
+
+      // Punto central (aldea activa si está en el encuadre)
+      if (activeVillage) {
+        var avx = activeVillage.x, avy = activeVillage.y;
+        var dc = avx - (cx - half), dr = avy - (cy - half);
+        if (dc >= 0 && dc < MINI_COLS && dr >= 0 && dr < MINI_COLS) {
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.beginPath();
+          ctx.arc(dc * cellPx + cellPx/2, dr * cellPx + cellPx/2, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
     function renderMap() {
       if (!activeVillage) { return; }
       if (allVillages.length === 0) {
@@ -6694,6 +6846,9 @@
       document.getElementById('mapCoordsDisplay').textContent =
         'Cámara: [' + cx + ', ' + cy + ']' +
         (isOffCenter ? '  |  Tu aldea: [' + activeVillage.x + ', ' + activeVillage.y + ']  |  (⌂ para volver)' : '  |  Vista: [' + (cx - r) + ',' + (cy - r) + '] a [' + (cx + r) + ',' + (cy + r) + ']');
+
+      // Renderizar minimapa con la misma cámara
+      renderMinimap(cx, cy);
 
       for (var dy2 = -r; dy2 <= r; dy2++) {
         for (var dx2 = -r; dx2 <= r; dx2++) {
@@ -8491,29 +8646,42 @@
     }
 
     // Vista previa: ajusta maxes de los demás sin guardar
+    // Lee los valores ACTUALES del DOM (no del state) para calcular libres correctamente.
+    // Esto evita el bug donde mover la 3ª barra calcula mal los aldeanos disponibles
+    // porque el state aún tiene los valores anteriores sin guardar.
     function _previewWorker(changedKey, newVal) {
       if (!activeVillage) return;
       var vs = activeVillage.state;
-      var w = vs.aldeanos_assigned || defaultAssignments();
-      if (w.esencia === undefined) w.esencia = 0;
       var res = calcRes(vs);
-      var delta = newVal - (w[changedKey] || 0);
-      var freeNow = res.aldeanos - delta;
-      var totalW = newVal;
+      var totalAld = res.aldeanos_total || (vs.troops && vs.troops.aldeano) || 0;
       var KEYS = ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'];
-      KEYS.forEach(function (k) { if (k !== changedKey) totalW += (w[k] || 0); });
 
-      KEYS.forEach(function (key) {
+      // Leer valores actuales del DOM (pueden diferir del state si no se ha guardado)
+      var domVals = {};
+      KEYS.forEach(function(k) {
+        if (k === changedKey) {
+          domVals[k] = parseInt(newVal) || 0;
+        } else {
+          var el = document.getElementById('rw_s_' + k);
+          domVals[k] = el ? (parseInt(el.value) || 0) : ((vs.aldeanos_assigned || {})[k] || 0);
+        }
+      });
+
+      // Total asignado según DOM actual
+      var totalW = KEYS.reduce(function(sum, k) { return sum + domVals[k]; }, 0);
+      var freeNow = Math.max(0, totalAld - totalW);
+
+      // Actualizar maxes de los demás sliders
+      KEYS.forEach(function(key) {
         if (key === changedKey) return;
-        var cur = w[key] || 0;
-        var newMax = cur + Math.max(0, freeNow);
+        var cur = domVals[key];
+        var newMax = cur + freeNow;
         var sl = document.getElementById('rw_s_' + key); if (sl) sl.max = newMax;
         var ni = document.getElementById('rw_n_' + key); if (ni) ni.max = newMax;
         var info = document.getElementById('rw_i_' + key);
         if (info) info.textContent = cur + ' asignados / ' + newMax + ' disponibles';
       });
-      var barrCap = getBarracksCapacity(vs.buildings);
-      var elFree = document.getElementById('recAldLibres'); if (elFree) elFree.textContent = Math.max(0, barrCap - totalW);
+      var elFree = document.getElementById('recAldLibres'); if (elFree) elFree.textContent = freeNow;
       var elWork = document.getElementById('recAldWorking'); if (elWork) elWork.textContent = totalW;
     }
 
@@ -10026,6 +10194,15 @@
       document.getElementById('profNewName').value = '';
       document.getElementById('profMsg').textContent = '';
       document.getElementById('profMsg').className = 'profile-msg';
+      // Mostrar nombre de la aldea activa en el botón de borrar
+      var pvn = document.getElementById('profVillageName');
+      if (pvn && activeVillage) pvn.textContent = '("' + activeVillage.name + '")';      // Deshabilitar borrar aldea si solo tienen 1
+      var dvBtn = document.querySelector('button[onclick="doDeleteVillage()"]');
+      if (dvBtn) {
+        var canDel = myVillages && myVillages.length > 1;
+        dvBtn.disabled = !canDel;
+        dvBtn.title = canDel ? 'Borra la aldea activa permanentemente' : 'No puedes borrar tu única aldea';
+      }
       // Botón cambiar nombre: solo si no lo ha cambiado aún
       var changBtn = document.getElementById('profChangeNameBtn');
       if (changBtn) {
@@ -10066,6 +10243,45 @@
       msg.textContent = '✓ Nombre cambiado a ' + raw + '. No podrás volver a cambiarlo.';
       msg.className = 'profile-msg ok';
       showNotif('Nombre actualizado: ' + raw, 'ok');
+    }
+
+    async function doDeleteVillage() {
+      if (!activeVillage || !currentUser) return;
+      // Solo se puede borrar si tienes más de 1 aldea
+      if (myVillages.length <= 1) {
+        showNotif('No puedes borrar tu única aldea.', 'err');
+        return;
+      }
+      var vilName = activeVillage.name;
+      var input = (document.getElementById('profNewName').value || '').trim();
+      var msg = document.getElementById('profMsg');
+      // Pedir que escriban el nombre de la aldea exacto
+      if (input !== vilName) {
+        msg.textContent = 'Escribe exactamente el nombre de tu aldea activa ("' + vilName + '") para confirmar.';
+        msg.className = 'profile-msg err';
+        document.getElementById('profNewName').placeholder = 'Escribe: ' + vilName;
+        return;
+      }
+      if (!confirm('¿Borrar la aldea "' + vilName + '" y todo su contenido?\nTropas, edificios y recursos se perderán.\nEsta acción no se puede deshacer.')) return;
+
+      try {
+        // Borrar en Supabase
+        await sbClient.from('buildings').delete().eq('village_id', activeVillage.id);
+        await sbClient.from('troops').delete().eq('village_id', activeVillage.id);
+        await sbClient.from('creatures').delete().eq('village_id', activeVillage.id);
+        await sbClient.from('villages').delete().eq('id', activeVillage.id);
+
+        // Recargar localmente
+        myVillages = myVillages.filter(function(v) { return v.id !== activeVillage.id; });
+        activeVillage = myVillages[0];
+        activeVillageId = activeVillage.id;
+        populateVillageSel();
+        closeProfile();
+        showNotif('Aldea "' + vilName + '" eliminada.', 'ok');
+        switchVillage(activeVillage.id);
+      } catch(e) {
+        showNotif('Error al borrar la aldea: ' + (e.message || e), 'err');
+      }
     }
 
     async function doDeleteAccount() {
@@ -10218,10 +10434,10 @@ function validateTransportRes() {
         <button class="profile-btn save" id="profChangeNameBtn" onclick="doChangeUsername()">✓ Cambiar nombre</button>
       </div>
       <hr class="profile-sep">
-      <div class="profile-section" style="color:var(--danger);">⚠ Zona de peligro — Eliminar cuenta</div>
-      <div style="font-size:.62rem;color:var(--dim);margin-bottom:8px;">Escribe tu nombre de usuario en el campo de
-        arriba y pulsa el botón. Esta acción es irreversible.</div>
-      <div class="profile-actions">
+      <div class="profile-section" style="color:var(--danger);">⚠ Zona de peligro</div>
+      <div style="font-size:.62rem;color:var(--dim);margin-bottom:10px;">Escribe el nombre exacto de tu aldea activa o tu usuario según la acción que vayas a realizar. Estas acciones son irreversibles.</div>
+      <div class="profile-actions" style="flex-direction:column;gap:8px;">
+        <button class="profile-btn danger" onclick="doDeleteVillage()" style="font-size:.75rem;">🏚 Borrar aldea activa <span id="profVillageName" style="opacity:.7;font-size:.7rem;"></span></button>
         <button class="profile-btn danger" onclick="doDeleteAccount()">🗑 Eliminar mi cuenta</button>
         <button class="profile-btn cancel" onclick="closeProfile()">Cerrar</button>
       </div>
@@ -10283,7 +10499,7 @@ function validateTransportRes() {
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v0.87</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v0.99</div>
 </body>
 
 </html>
