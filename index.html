@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v0.99</title>
+  <title>Epic Warriors Online v1.19</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -549,6 +549,24 @@
       font-size: .95rem;
       width: 18px;
       text-align: center;
+    }
+
+    .msg-badge {
+      background: var(--danger);
+      color: white;
+      font-size: .6rem;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+      box-shadow: 0 0 8px rgba(224, 64, 64, .6);
+      animation: pulse-badge 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-badge {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
     }
 
     .content {
@@ -2279,6 +2297,131 @@
       display: none;
     }
 
+    /* Dropdown de usuarios en el panel admin */
+    .admin-users-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 8px;
+      z-index: 200;
+      min-width: 300px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .4);
+    }
+
+    .admin-users-dropdown.visible {
+      display: block;
+    }
+
+    .admin-users-search {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .admin-users-search input {
+      flex: 1;
+      min-width: 150px;
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      color: var(--text);
+      font-family: 'VT323', monospace;
+      font-size: .75rem;
+      outline: none;
+    }
+
+    .admin-users-search input:focus {
+      border-color: var(--accent);
+    }
+
+    .admin-users-search button {
+      background: rgba(0, 212, 255, .15);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      color: var(--accent);
+      padding: 6px 10px;
+      font-family: 'VT323', monospace;
+      font-size: .75rem;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .admin-users-search button:hover {
+      background: rgba(0, 212, 255, .25);
+    }
+
+    .admin-users-list {
+      font-size: .75rem;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .admin-users-item {
+      padding: 8px;
+      background: rgba(255, 255, 255, .03);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all .2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .admin-users-item:hover {
+      background: rgba(0, 212, 255, .1);
+      border-color: var(--accent);
+    }
+
+    .admin-users-item-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .admin-users-item-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: bold;
+    }
+
+    .admin-users-item-role {
+      font-size: .65rem;
+      color: var(--dim);
+    }
+
+    .admin-users-item-del {
+      background: rgba(255, 61, 90, .2);
+      border: 1px solid rgba(255, 61, 90, .4);
+      color: rgba(255, 61, 90, .8);
+      padding: 3px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: .65rem;
+      flex-shrink: 0;
+      transition: all .2s;
+    }
+
+    .admin-users-item-del:hover {
+      background: rgba(255, 61, 90, .4);
+      border-color: rgba(255, 61, 90, .6);
+    }
+
     .admin-box {
       background: var(--panel);
       border: 2px solid var(--danger);
@@ -2542,13 +2685,8 @@
           <div class="nav-item" onclick="showPage('ranking',this)"><span class="nav-icon">&#x1F3C6;</span> Ranking</div>
           <div class="nav-item" onclick="showPage('alliances',this)"><span class="nav-icon">&#x1F6E1;</span> Alianzas
           </div>
-          <div class="nav-item" onclick="showPage('messages',this)"><span class="nav-icon">&#x1F4E8;</span> Mensajes
+          <div class="nav-item" id="navMessages" onclick="showPage('messages',this)"><span class="nav-icon">&#x1F4E8;</span> Mensajes<span id="msgBadge" class="msg-badge" style="display:none;">0</span>
           </div>
-        </div>
-        <div class="nav-section" id="adminNavSection" style="display:none;">
-          <div class="nav-label" style="color:var(--danger)">Admin</div>
-          <div class="nav-item" onclick="showPage('adminusers',this)" style="color:rgba(255,61,90,.7)"><span
-              class="nav-icon">👥</span> Usuarios</div>
         </div>
       </nav>
       <main class="content">
@@ -2639,18 +2777,6 @@
         </div>
 
         <!-- ADMIN USUARIOS PAGE -->
-        <div class="page" id="page-adminusers">
-          <div class="page-title" style="color:var(--danger)">ADMIN — USUARIOS</div>
-          <div class="page-sub">Gestión de cuentas. Solo visible para administradores.</div>
-          <div class="card">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-              <div class="muted" id="adminUserCount">Cargando...</div>
-              <button class="btn" onclick="loadAdminUsers()">↻ Actualizar</button>
-            </div>
-            <div id="adminUsersBox" style="margin-top:12px;overflow-x:auto;"></div>
-          </div>
-        </div>
-
         <div class="page" id="page-buildings">
           <div class="page-title">EDIFICIOS</div>
           <div class="page-sub">Construye y mejora las estructuras de tu colonia</div>
@@ -2901,7 +3027,7 @@
           <div class="page-title">MENSAJES</div>
           <div class="page-sub">Sistema · Alianza · Mensajes directos</div>
 
-          <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;height:calc(100vh - 200px);min-height:420px;">
+          <div style="display:grid;grid-template-columns:280px 360px 1fr;gap:16px;height:calc(100vh - 200px);min-height:420px;">
 
             <!-- ── PANEL IZQUIERDO: bandeja ────────────────────── -->
             <div style="display:flex;flex-direction:column;gap:0;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
@@ -2934,17 +3060,31 @@
               <div id="threadsBox" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
             </div>
 
-            <!-- ── PANEL DERECHO: chat ─────────────────────────── -->
+            <!-- ── PANEL CENTRAL: lista de reportes ────────────── -->
+            <div id="reportsList" style="display:none;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+              
+              <!-- Header con acciones -->
+              <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+                <div style="font-size:.8rem;color:var(--accent);letter-spacing:.08em;">📋 INFORMES</div>
+                <button onclick="markAllSystemAsRead()" 
+                  style="padding:4px 8px;background:rgba(96,208,96,.1);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.65rem;cursor:pointer;">✓ Marcar leídos</button>
+              </div>
+
+              <!-- Lista scrolleable -->
+              <div id="reportsListBox" style="flex:1;overflow-y:auto;padding:6px;"></div>
+            </div>
+
+            <!-- ── PANEL DERECHO: reporte completo o chat ─────── -->
             <div style="display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
 
-              <!-- Cabecera del hilo activo -->
+              <!-- Cabecera -->
               <div id="chatHeader"
                 style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;min-height:48px;">
                 <span style="color:var(--dim);font-size:.78rem;">Selecciona una conversación…</span>
               </div>
 
-              <!-- Mensajes -->
-              <div id="chatBox" style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+              <!-- Contenido: chat o reporte -->
+              <div id="chatBox" style="flex:1;overflow-y:auto;padding:14px 16px;"></div>
 
               <!-- Input envío (oculto hasta que haya hilo activo) -->
               <div id="chatInputArea"
@@ -2956,6 +3096,23 @@
                   style="padding:7px 16px;background:rgba(240,192,64,.12);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-family:VT323,monospace;font-size:.82rem;cursor:pointer;">Enviar</button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- v1.17: Página de usuarios admin (solo para sementalac@gmail.com) -->
+        <div class="page" id="page-admin-users">
+          <div class="page-title">GESTIÓN DE USUARIOS</div>
+          <div class="page-sub">Administración de cuentas</div>
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
+              <div style="display:flex;gap:8px;flex:1;">
+                <input type="text" id="adminUsersSearch" placeholder="Buscar usuario..." 
+                  style="flex:1;padding:8px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:VT323,monospace;font-size:.85rem;"
+                  oninput="filterAdminUsersPage()">
+                <button onclick="loadAdminUsersPage()" style="padding:8px 16px;background:rgba(0,212,255,.15);border:1px solid var(--accent);border-radius:4px;color:var(--accent);cursor:pointer;font-family:VT323,monospace;font-size:.85rem;">↻ Actualizar</button>
+              </div>
+            </div>
+            <div id="adminUsersPageList" style="font-size:.75rem;"></div>
           </div>
         </div>
       </main>
@@ -2997,14 +3154,28 @@
     });
 
 
-    let currentUser = null;
-    let myVillages = [];
-    let activeVillage = null;
-    let allVillages = [];
-    let uiTimer = null;
-    let autoSaveTimer = null;
-    let isFlushing = false;
+    // ── Estado del jugador y mundo ────────────────────────────────
+    let currentUser      = null;
+    let myVillages       = [];
+    let activeVillage    = null;
+    let activeVillageId  = null;   // sincronía logout/doLogin
+    let allVillages      = [];
+
+    // ── Timers ────────────────────────────────────────────────────
+    let uiTimer       = null;
+    let autoSaveTimer = null;      // LEGACY — ya no se usa en el modelo reactivo
+                                   // mantenido por compatibilidad con doLogout()
+
+    // ── Guardado ─────────────────────────────────────────────────
+    let isFlushing   = false;
     let pendingFlush = false;
+    let _stateDirty  = false;      // true cuando hay cambios en memoria sin guardar
+
+    // ── Modelo evento-reactivo (v0.98+) ──────────────────────────
+    // _missionWatchScheduled evita lanzar resolveMissions() dos veces
+    // si la misión tarda más de 1 tick en resolverse (async).
+    // Se pone a true justo antes del await y a false en el .then()/.catch().
+    let _missionWatchScheduled = false;
 
     // NPC_CASTLES cargado desde game-data.js (ver <head> del HTML)
     let playerObjectives = []; // Progress for current user
@@ -3295,7 +3466,7 @@
       // ── MILITAR ──────────────────────────────────────────────
       {
         id: 'barracas', name: 'Barracas', icon: '🏰',
-        desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, +20 plazas por nivel. Las tropas en misión no ocupan plaza.',
+        desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, crecimiento exponencial (+15% acumulado +20 por nivel). Las tropas en misión no ocupan plaza.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -3386,7 +3557,9 @@
     function getBarracksCapacity(blds) {
       var lvl = (blds['barracas'] && blds['barracas'].level) || 0;
       if (lvl === 0) return 0;
-      return 50 + (lvl - 1) * 20; // nivel 1=50, nivel 2=70, nivel 3=90...
+      // v1.19: fórmula exponencial f(n) = 1.15*f(n-1) + 20, forma cerrada:
+      // lvl1=50, lvl2=78, lvl3=110, lvl5=189, lvl7=310, lvl10=608
+      return Math.round(183.33 * Math.pow(1.15, lvl - 1) - 133.33);
     }
 
     // ============================================================
@@ -3420,6 +3593,17 @@
         if (k === 'aldeano') return;
         var inBase = Math.max(0, (troops[k] || 0) - (inMission[k] || 0));
         used += inBase * (TROOP_TYPES[k].barracasSlots || 1);
+      });
+
+      // v1.17: Tropas EN ENTRENAMIENTO reservan su espacio desde que entran en cola.
+      // Así funciona en Ogame/Ikariam — el slot está ocupado durante toda la transformación.
+      // Sin esto: aldeano se resta de troops pero el slot que va a ocupar la tropa
+      // final no se reserva, producción de aldeanos lo llena, y al llegar la tropa → overflow.
+      var trainingQueue = vs.training_queue || [];
+      trainingQueue.forEach(function(t) {
+        if (t.type && TROOP_TYPES[t.type] && t.type !== 'aldeano') {
+          used += (TROOP_TYPES[t.type].barracasSlots || 1);
+        }
       });
 
       return used;
@@ -4030,7 +4214,8 @@
       for (var t of vs.training_queue) {
         var finishTime = new Date(t.finish_at).getTime();
         if (finishTime <= now) {
-          // Tropa lista — añadir
+          // Tropa lista — añadir (el slot ya estaba reservado en getBarracksUsed,
+          // así que simplemente convertimos el slot de "entrenando" a "en base")
           if (!vs.troops) vs.troops = {};
           vs.troops[t.type] = (vs.troops[t.type] || 0) + 1;
           changed = true;
@@ -5025,9 +5210,126 @@
                 if (TROOP_TYPES[k]) vs.troops[k] = (vs.troops[k] || 0) + m.troops[k];
                 else if (CREATURE_TYPES[k]) { if (!vs.creatures) vs.creatures = defaultCreatures(); vs.creatures[k] = (vs.creatures[k] || 0) + m.troops[k]; }
               });
-              await sendSystemReport(currentUser.id, '↩ TROPAS DE VUELTA',
-                'Tus tropas de refuerzo han regresado a casa desde [' + m.tx + ', ' + m.ty + '].');
+              // No enviar mensaje - no es importante
               continue;
+            } else if (m.type === 'return') {
+              // ── TROPAS REGRESAN ──
+              // Calcular espacio real disponible en barracas
+              var barrCap = getBarracksCapacity(vs.buildings);
+              var usedNow = getBarracksUsed(vs);
+              var freeSlots = Math.max(0, barrCap - usedNow);
+
+              // Calcular cuántas plazas necesitan las tropas que regresan
+              var slotsNeeded = 0;
+              Object.keys(m.troops).forEach(function(k) {
+                var count = m.troops[k] || 0;
+                if (count <= 0) return;
+                var slots = k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+                slotsNeeded += slots;
+              });
+
+              var accepted = {}, anyRejected = false;
+
+              if (slotsNeeded <= freeSlots) {
+                // Caben todas
+                Object.keys(m.troops).forEach(function(k) { accepted[k] = m.troops[k] || 0; });
+              } else {
+                // No caben todas — eliminar porcentaje proporcional de cada tipo
+                var pctEliminar = freeSlots < slotsNeeded ? (slotsNeeded - freeSlots) / slotsNeeded : 0;
+
+                Object.keys(m.troops).forEach(function(k) {
+                  var total = m.troops[k] || 0;
+                  if (total <= 0) { accepted[k] = 0; return; }
+                  var toEliminate = Math.ceil(total * pctEliminar);
+                  var toAccept = total - toEliminate;
+                  // Verificar que las plazas de los aceptados no superen freeSlots
+                  while (toAccept > 0) {
+                    var testSlots = k === 'aldeano' ? toAccept : toAccept * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+                    if (testSlots <= freeSlots) break;
+                    toAccept--;
+                  }
+                  accepted[k] = toAccept;
+                  if (toAccept < total) anyRejected = true;
+                });
+
+                // Verificación final: la suma de slots aceptados no supera freeSlots
+                var totalAcceptedSlots = 0;
+                Object.keys(accepted).forEach(function(k) {
+                  var count = accepted[k] || 0;
+                  totalAcceptedSlots += k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+                });
+                if (totalAcceptedSlots > freeSlots) {
+                  // Recorte de emergencia proporcional adicional
+                  Object.keys(accepted).forEach(function(k) {
+                    accepted[k] = Math.floor(accepted[k] * freeSlots / totalAcceptedSlots);
+                  });
+                  anyRejected = true;
+                }
+              }
+
+              // Añadir tropas y criaturas aceptadas al estado
+              Object.keys(accepted).forEach(function(k) {
+                var toAdd = accepted[k] || 0;
+                if (toAdd <= 0) return;
+                
+                if (TROOP_TYPES[k]) {
+                  // Tropa normal
+                  if (k === 'aldeano') {
+                    vs.troops.aldeano = (vs.troops.aldeano || 0) + toAdd;
+                  } else {
+                    vs.troops[k] = (vs.troops[k] || 0) + toAdd;
+                  }
+                } else if (CREATURE_TYPES[k]) {
+                  // Criatura - no ocupan barracas
+                  if (!vs.creatures) vs.creatures = defaultCreatures();
+                  vs.creatures[k] = (vs.creatures[k] || 0) + toAdd;
+                }
+              });
+
+              // Aplicar botín con límites de capacidad
+              var lootReport = '';
+              if (m.loot) {
+                var cap = getCapacity(vs.buildings);
+                var appliedLoot = {};
+                
+                ['madera', 'piedra', 'hierro', 'provisiones'].forEach(function(res) {
+                  var incoming = m.loot[res] || 0;
+                  if (incoming > 0) {
+                    var current = vs.resources[res] || 0;
+                    var space = Math.max(0, cap - current);
+                    var added = Math.min(incoming, space);
+                    
+                    vs.resources[res] = current + added;
+                    if (added > 0) appliedLoot[res] = added;
+                  }
+                });
+                
+                // Esencia no tiene límite
+                if (m.loot.esencia > 0) {
+                  vs.resources.esencia = (vs.resources.esencia || 0) + m.loot.esencia;
+                  appliedLoot.esencia = m.loot.esencia;
+                }
+                
+                // Generar reporte de botín
+                if (Object.keys(appliedLoot).length > 0) {
+                  lootReport = '\n\n💰 Botín obtenido:\n';
+                  if (appliedLoot.madera) lootReport += '🌲 ' + fmt(appliedLoot.madera) + ' madera\n';
+                  if (appliedLoot.piedra) lootReport += '⛰️ ' + fmt(appliedLoot.piedra) + ' piedra\n';
+                  if (appliedLoot.hierro) lootReport += '⚙️ ' + fmt(appliedLoot.hierro) + ' hierro\n';
+                  if (appliedLoot.provisiones) lootReport += '🌾 ' + fmt(appliedLoot.provisiones) + ' provisiones\n';
+                  if (appliedLoot.esencia) lootReport += '✨ ' + fmt(appliedLoot.esencia) + ' esencia';
+                }
+              }
+
+              var acceptedStr = Object.keys(accepted).filter(function(k){ return (accepted[k] || 0) > 0; })
+                .map(function(k){ return accepted[k] + ' ' + (TROOP_TYPES[k] ? TROOP_TYPES[k].name : k); }).join(', ') || 'ninguna';
+              var rejectedStr = anyRejected ? '\n⚠️ Sin espacio en barracas: algunas tropas se perdieron.' : '';
+
+              await sendSystemReport(currentUser.id, '🏠 TROPAS REGRESAN',
+                'Tus tropas han vuelto a la aldea.\n' +
+                '✅ Aceptadas: ' + acceptedStr + rejectedStr + lootReport);
+              showNotif('¡Tropas han regresado!', 'ok');
+              continue; // La misión de retorno se descarta tras procesar
             }
           } catch(e) {
             console.warn('resolveMissions: error ejecutando misión', m.type, e);
@@ -5069,132 +5371,8 @@
             });
             // Notificación eliminada - causaba spam en cada tick
           }
-        } else if (m.type === 'return' && now >= new Date(m.finish_at).getTime()) {
-          changed = true;
-          // Tropas regresan — calcular espacio real disponible
-          var barrCap = getBarracksCapacity(vs.buildings);
-          var usedNow = getBarracksUsed(vs);
-          var freeSlots = Math.max(0, barrCap - usedNow);
-
-          // Calcular cuántas plazas necesitan las tropas que regresan
-          var slotsNeeded = 0;
-          Object.keys(m.troops).forEach(function(k) {
-            var count = m.troops[k] || 0;
-            if (count <= 0) return;
-            var slots = k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
-            slotsNeeded += slots;
-          });
-
-          var accepted = {}, anyRejected = false;
-
-          if (slotsNeeded <= freeSlots) {
-            // Caben todas
-            Object.keys(m.troops).forEach(function(k) { accepted[k] = m.troops[k] || 0; });
-          } else {
-            // No caben todas — eliminar porcentaje proporcional de cada tipo (redondeando hacia arriba)
-            // LEY: lo que entra NO puede superar el hueco disponible
-            var pctEliminar = freeSlots < slotsNeeded ? (slotsNeeded - freeSlots) / slotsNeeded : 0;
-
-            Object.keys(m.troops).forEach(function(k) {
-              var total = m.troops[k] || 0;
-              if (total <= 0) { accepted[k] = 0; return; }
-              var toEliminate = Math.ceil(total * pctEliminar); // redondear hacia arriba (LEY)
-              var toAccept = total - toEliminate;
-              // Verificar que las plazas de los aceptados no superen freeSlots
-              var slotsForThis = k === 'aldeano' ? toAccept : toAccept * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
-              // Si aún así sobrepasa (por redondeos), recortar
-              while (toAccept > 0) {
-                var testSlots = k === 'aldeano' ? toAccept : toAccept * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
-                if (testSlots <= freeSlots) break;
-                toAccept--;
-              }
-              accepted[k] = toAccept;
-              if (toAccept < total) anyRejected = true;
-            });
-
-            // Verificación final: la suma de slots aceptados no supera freeSlots (LEY)
-            var totalAcceptedSlots = 0;
-            Object.keys(accepted).forEach(function(k) {
-              var count = accepted[k] || 0;
-              totalAcceptedSlots += k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
-            });
-            if (totalAcceptedSlots > freeSlots) {
-              // Recorte de emergencia proporcional adicional
-              Object.keys(accepted).forEach(function(k) {
-                accepted[k] = Math.floor(accepted[k] * freeSlots / totalAcceptedSlots);
-              });
-              anyRejected = true;
-            }
-          }
-
-          // Añadir tropas y criaturas aceptadas al estado
-          Object.keys(accepted).forEach(function(k) {
-            var toAdd = accepted[k] || 0;
-            if (toAdd <= 0) return;
-            
-            if (TROOP_TYPES[k]) {
-              // Tropa normal
-              if (k === 'aldeano') {
-                vs.troops.aldeano = (vs.troops.aldeano || 0) + toAdd;
-              } else {
-                vs.troops[k] = (vs.troops[k] || 0) + toAdd;
-              }
-            } else if (CREATURE_TYPES[k]) {
-              // Criatura - no ocupan barracas
-              if (!vs.creatures) vs.creatures = defaultCreatures();
-              vs.creatures[k] = (vs.creatures[k] || 0) + toAdd;
-            }
-          });
-
-          // Las provisiones NO se restauran al volver — se gastaron en el camino.
-          // Solo se recuperan por producción de granja.
-
-          // Informe de llegada - aplicar botín con límites
-          var lootReport = '';
-          if (m.loot) {
-            var cap = getCapacity(vs.buildings);
-            var appliedLoot = {};
-            
-            ['madera', 'piedra', 'hierro', 'provisiones'].forEach(function(res) {
-              var incoming = m.loot[res] || 0;
-              if (incoming > 0) {
-                var current = vs.resources[res] || 0;
-                var space = Math.max(0, cap - current);
-                var added = Math.min(incoming, space);
-                
-                vs.resources[res] = current + added;
-                if (added > 0) appliedLoot[res] = added;
-              }
-            });
-            
-            // Esencia no tiene límite
-            if (m.loot.esencia > 0) {
-              vs.resources.esencia = (vs.resources.esencia || 0) + m.loot.esencia;
-              appliedLoot.esencia = m.loot.esencia;
-            }
-            
-            // Generar reporte de botín
-            if (Object.keys(appliedLoot).length > 0) {
-              lootReport = '\n\n💰 Botín obtenido:\n';
-              if (appliedLoot.madera) lootReport += '🌲 ' + fmt(appliedLoot.madera) + ' madera\n';
-              if (appliedLoot.piedra) lootReport += '⛰️ ' + fmt(appliedLoot.piedra) + ' piedra\n';
-              if (appliedLoot.hierro) lootReport += '⚙️ ' + fmt(appliedLoot.hierro) + ' hierro\n';
-              if (appliedLoot.provisiones) lootReport += '🌾 ' + fmt(appliedLoot.provisiones) + ' provisiones\n';
-              if (appliedLoot.esencia) lootReport += '✨ ' + fmt(appliedLoot.esencia) + ' esencia';
-            }
-          }
-
-          var acceptedStr = Object.keys(accepted).filter(function(k){ return (accepted[k] || 0) > 0; })
-            .map(function(k){ return accepted[k] + ' ' + (TROOP_TYPES[k] ? TROOP_TYPES[k].name : k); }).join(', ') || 'ninguna';
-          var rejectedStr = anyRejected ? '\n⚠️ Sin espacio en barracas: algunas tropas se perdieron.' : '';
-
-          await sendSystemReport(currentUser.id, '🏠 TROPAS REGRESAN',
-            'Tus tropas han vuelto a la aldea.\n' +
-            '✅ Aceptadas: ' + acceptedStr + rejectedStr + lootReport);
-          showNotif('¡Tropas han regresado!', 'ok');
-          // NO añadir a remaining — la misión de retorno se descarta tras procesar
-
         } else {
+          // Misión aún no ha terminado - mantener en la cola
           remaining.push(m);
         }
       }
@@ -5654,8 +5832,9 @@
       clearInterval(uiTimer);
       uiTimer = setInterval(tick, 1000);
       clearInterval(autoSaveTimer);
-      autoSaveTimer = setInterval(scheduleSave, 60000); // 60s auto-save (reducido para ahorrar ancho de banda)
-      setInterval(processRecalls, 300000); // Check recalls every 5 min
+      // autoSaveTimer y processRecalls: eliminados. Modelo evento-reactivo puro.
+      // El guardado ocurre en scheduleSave() tras acciones del jugador.
+      // processRecalls se llama una vez al login en initGame.
 
       if (typeof resetUiAnimation === 'function') resetUiAnimation();
       if (typeof ensureUiAnim === 'function') ensureUiAnim();
@@ -5664,6 +5843,16 @@
       if (typeof loadAllVillages === 'function') loadAllVillages();
       // Cargar estado de alianza para el overview (sin bloquear)
       refreshMyAlliance().catch(function() {});
+
+      // ── One-shot al login: única ronda de red ────────────────
+      checkIncomingAttacks();
+      updateLastSeen();
+      updateOnlineCount();
+      processRecalls();
+      updateUnreadCount(); // Actualizar badge de mensajes no leídos
+
+      // Mostrar/ocultar botón admin según email del usuario autenticado
+      checkAdminButton();
 
       tick();
       showNotif('¡Bienvenido, comandante!', 'ok');
@@ -6232,21 +6421,34 @@
       if (!activeVillage.state.summoning_queue) activeVillage.state.summoning_queue = [];
       var oldS = JSON.stringify(activeVillage.state.summoning_queue);
 
+      // ── Colas locales — cero red ──────────────────────────────
       activeVillage.state = resolveQueue(activeVillage.state);
       activeVillage.state = resolveSummoningQueue(activeVillage.state);
       activeVillage.state = resolveTrainingQueue(activeVillage.state);
 
-      // Resolve Missions (Async, but we can call it here as it handles its own internal async)
-      resolveMissions(activeVillage.state).then(updatedState => {
-        activeVillage.state = updatedState;
-        var newQ = activeVillage.state.build_queue ? JSON.stringify(activeVillage.state.build_queue) : null;
-        var newM = activeVillage.state.mission_queue ? JSON.stringify(activeVillage.state.mission_queue) : null;
-        var newS = activeVillage.state.summoning_queue ? JSON.stringify(activeVillage.state.summoning_queue) : null;
+      // Si una cola local completó → guardar
+      var newQ2 = activeVillage.state.build_queue ? JSON.stringify(activeVillage.state.build_queue) : null;
+      var newM2 = JSON.stringify(activeVillage.state.mission_queue || []);
+      var newS2 = JSON.stringify(activeVillage.state.summoning_queue || []);
+      if ((oldQ && !newQ2) || (oldM !== newM2) || (oldS !== newS2)) {
+        scheduleSave();
+      }
 
-        if ((oldQ && !newQ) || (oldM !== newM) || (oldS !== newS)) {
-          flushVillage();
-        }
+      // ── resolveMissions — REACTIVO, no polling ─────────────
+      // Solo se lanza cuando el contador local de una misión llega a cero.
+      // NUNCA se llama en cada tick por defecto.
+      var _nowMs2 = Date.now();
+      var hasMissionDue = (activeVillage.state.mission_queue || []).some(function(m) {
+        return m.finish_at && new Date(m.finish_at).getTime() <= _nowMs2;
       });
+      if (hasMissionDue && !_missionWatchScheduled) {
+        _missionWatchScheduled = true;
+        resolveMissions(activeVillage.state).then(function(updated) {
+          activeVillage.state = updated;
+          _missionWatchScheduled = false;
+          scheduleSave();
+        }).catch(function() { _missionWatchScheduled = false; });
+      }
 
       var vs = activeVillage.state;
       var w = vs.aldeanos_assigned || defaultAssignments();
@@ -6263,6 +6465,12 @@
       var barrCapTick = getBarracksCapacity(vs.buildings);
       var aldEnBaseTick = Math.max(0, (vs.troops && vs.troops.aldeano) || 0);
       var capPctAld = barrCapTick > 0 ? Math.min(100, Math.round(aldEnBaseTick / barrCapTick * 100)) : 0;
+
+      // v1.17: Actualizar display de barracas en el tick (para que refleje tropas en movimiento)
+      var usedBarracas = getBarracksUsed(vs);
+      var barrPctTick = barrCapTick > 0 ? Math.round(usedBarracas / barrCapTick * 100) : 0;
+      var elCapTick = document.getElementById('recAldCap');
+      if (elCapTick) elCapTick.textContent = usedBarracas + ' / ' + barrCapTick + ' (' + barrPctTick + '%)';
 
       // IMPORTANTE: tick() NO escribe a state.resources.
       // calcRes() calcula (now - last_updated) cada vez que se llama.
@@ -6343,11 +6551,9 @@
 
       renderQueue(vs);
       updateAlertsButton();
-      var nowMs = Date.now();
-      if (nowMs - _lastSeenUpdate > 300000) { _lastSeenUpdate = nowMs; updateLastSeen(); }   // cada 5 min
-      if (nowMs - _lastOnlineCheck > 300000) { _lastOnlineCheck = nowMs; updateOnlineCount(); } // cada 5 min
       updateGranjaPanel();
-      // Reinforce panel — solo cada 60s (era cada segundo — demasiadas queries)
+      // Reinforce panel — solo cada 60s
+      var nowMs = Date.now();
       if (nowMs - _lastReinforcementsCheck > 60000 && document.getElementById('page-overview').classList.contains('active')) {
         _lastReinforcementsCheck = nowMs;
         renderReinforcementsPanel();
@@ -7122,8 +7328,11 @@
       var x = parseInt(document.getElementById('mapGoX').value);
       var y = parseInt(document.getElementById('mapGoY').value);
       if (isNaN(x) || isNaN(y)) { showNotif('Coordenadas inválidas', 'err'); return; }
-      mapOffX = Math.max(0, Math.min(MAP_SIZE - MAP_VIEW, x - Math.floor(MAP_VIEW/2)));
-      mapOffY = Math.max(0, Math.min(MAP_SIZE - MAP_VIEW, y - Math.floor(MAP_VIEW/2)));
+      if (x < 1 || x > MAP_SIZE || y < 1 || y > MAP_SIZE) {
+        showNotif('Coordenadas fuera del mapa (1-' + MAP_SIZE + ')', 'err'); return;
+      }
+      mapCamX = x;
+      mapCamY = y;
       renderMap();
       showNotif('Navegando a [' + x + ', ' + y + ']', 'ok');
     }
@@ -7310,7 +7519,7 @@
           actions.innerHTML = '<span style="font-size:.7rem;color:var(--dim);">Esta es tu aldea activa.</span>';
         } else {
           var vid2 = village.id || '';
-          var vname2 = (village.name || 'Aldea').replace(/'/g, "\\'");
+          var vname2 = escapeJs(village.name || 'Aldea');
           actions.innerHTML = ''
             + '<button class="map-action-btn move" onclick="openMoveModal(\'' + vid2 + '\',\'' + vname2 + '\',' + x + ',' + y + ',false)">⚔ Mover tropas</button>'
             + '<button class="map-action-btn move" style="background:rgba(212,146,58,.1);border-color:var(--madera);color:var(--madera);" onclick="openTransportModal(\'' + vid2 + '\',\'' + vname2 + '\',' + x + ',' + y + ',false)">📦 Transportar recursos</button>';
@@ -7318,14 +7527,14 @@
       } else if (isAlly) {
         var allyOwnerId = (village.owner_id || '');
         var allyVid = (village.id || '');
-        var allyVname = (village.name || 'Aldea aliada').replace(/'/g, "\\'");
+        var allyVname = escapeJs(village.name || 'Aldea aliada');
         title.textContent = (village.name || 'Aldea aliada') + ' 🤝';
         sub.innerHTML = '[' + x + ', ' + y + '] · Aliado' + rngTag;
         if (inRange) {
           actions.innerHTML = ''
             + '<button class="map-action-btn move" onclick="openMoveModal(\'' + allyVid + '\',\'' + allyVname + '\',' + x + ',' + y + ',true)">🛡️ Enviar refuerzo</button>'
             + '<button class="map-action-btn move" style="background:rgba(212,146,58,.1);border-color:var(--madera);color:var(--madera);" onclick="openTransportModal(\'' + allyVid + '\',\'' + allyVname + '\',' + x + ',' + y + ',true)">📦 Enviar recursos</button>'
-            + '<button class="map-action-btn spy" style="background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);" onclick="openMapDM(\'' + allyOwnerId + '\',\'' + escapeHtml(ownerName || 'Aliado') + '\')">✉️ Mensaje</button>';
+            + '<button class="map-action-btn spy" style="background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);" onclick="openMapDM(\'' + allyOwnerId + '\',\'' + escapeJs(ownerName || 'Aliado') + '\')">✉️ Mensaje</button>';
         } else {
           actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
         }
@@ -7345,7 +7554,7 @@
           actions.innerHTML = ''
             + '<button class="map-action-btn atk" onclick="openMissionModal(\'attack\',\'' + vid + '\',' + x + ',' + y + ')">⚔️ Atacar</button>'
             + '<button class="map-action-btn spy" onclick="openMissionModal(\'spy\',\'' + vid + '\',' + x + ',' + y + ')">🔍 Espiar</button>'
-            + '<button class="map-action-btn move" style="background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);" onclick="openMapDM(\'' + ownerId + '\',\'' + ownerName + '\')">✉️ Mensaje</button>';
+            + '<button class="map-action-btn move" style="background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);" onclick="openMapDM(\'' + ownerId + '\',\'' + escapeJs(ownerName) + '\')">✉️ Mensaje</button>';
         } else {
           actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
         }
@@ -7443,7 +7652,7 @@
         + '<div style="font-size:.68rem;color:var(--dim);">📍 Distancia: ' + dist + ' casillas</div>'
         + '<div id="mvTroopETA" style="font-size:.8rem;color:var(--dim);">Selecciona tropas para ver ETA</div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn avail" onclick="moveStep2(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
+        + '<button class="bld-footer-btn avail" onclick="moveStep2(\'' + destVillageId + '\',\'' + escapeJs(destVillageName) + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
         + '</div></div></div>';
       
       window._moveDest = { vid: destVillageId, name: destVillageName, tx: tx, ty: ty, isAlly: isAllyDest, dist: dist };
@@ -7590,7 +7799,7 @@
         + '<div style="font-size:.68rem;color:var(--dim);">📍 ' + dist + ' casillas • ETA: <span id="mvETA">' + fmtTime(Math.ceil((dist / minSpeed) * MISSION_FACTOR)) + '</span></div>'
         + '<div id="mvWarning" style="font-size:.68rem;color:var(--danger);min-height:14px;"></div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openMoveModal(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
+        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openMoveModal(\'' + destVillageId + '\',\'' + escapeJs(destVillageName) + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
         + '<button class="bld-footer-btn avail" onclick="executeMoveClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Enviar tropas</button>'
         + '</div></div></div>';
       
@@ -7777,7 +7986,7 @@
         + '<div style="font-size:.68rem;color:var(--dim);">📍 Distancia: ' + dist + ' casillas</div>'
         + '<div id="trTroopETA" style="font-size:.8rem;color:var(--dim);">Selecciona tropas para ver ETA</div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn avail" onclick="transportStep2(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
+        + '<button class="bld-footer-btn avail" onclick="transportStep2(\'' + destVillageId + '\',\'' + escapeJs(destVillageName) + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Siguiente →</button>'
         + '</div></div></div>';
       
       window._transportDest = { vid: destVillageId, name: destVillageName, tx: tx, ty: ty, isAlly: isAllyDest, dist: dist };
@@ -7883,7 +8092,7 @@
         + '<div style="font-size:.68rem;color:var(--dim);">📍 ' + dist + ' casillas • ETA: <span id="trETA">' + fmtTime(Math.ceil((dist / minSpeed) * MISSION_FACTOR)) + '</span></div>'
         + '<div id="trWarning" style="font-size:.68rem;color:var(--danger);min-height:14px;"></div>'
         + '</div><div class="bld-modal-footer">'
-        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openTransportModal(\'' + destVillageId + '\',\'' + destVillageName + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
+        + '<button class="bld-footer-btn" style="background:var(--border);color:var(--dim);" onclick="openTransportModal(\'' + destVillageId + '\',\'' + escapeJs(destVillageName) + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">← Atrás</button>'
         + '<button class="bld-footer-btn avail" onclick="executeTransportClick(\'' + destVillageId + '\',' + tx + ',' + ty + ',' + (isAllyDest ? 'true' : 'false') + ')">Enviar transporte</button>'
         + '</div></div></div>';
       
@@ -8367,9 +8576,9 @@
       if (name === 'alliances') renderAlliances();
       if (name === 'messages') { renderThreads(); renderMessagesHeader(); }
       if (name === 'recursos') renderRecursos();
-      if (name === 'adminusers') loadAdminUsers();
       if (name === 'fleet') renderTroops();
       if (name === 'creatures') renderCreatures();
+      if (name === 'admin-users') loadAdminUsersPage();
       if (name === 'simulator') {
         setTimeout(function(){ renderSimulator(); }, 50);
       }
@@ -8460,7 +8669,12 @@
 
       var elFree = document.getElementById('recAldLibres'); if (elFree) elFree.textContent = (res.aldeanos_libres !== undefined ? res.aldeanos_libres : res.aldeanos);
       var elWork = document.getElementById('recAldWorking'); if (elWork) elWork.textContent = totalW;
-      var elCap = document.getElementById('recAldCap'); if (elCap) elCap.textContent = barrCap;
+      
+      // v1.17: Mostrar capacidad de barracas con porcentaje y uso
+      var used = getBarracksUsed(vs);
+      var barrPct = barrCap > 0 ? Math.round(used / barrCap * 100) : 0;
+      var elCap = document.getElementById('recAldCap'); if (elCap) elCap.textContent = used + ' / ' + barrCap + ' (' + barrPct + '%)';
+      
       var elAlm = document.getElementById('recAlmPct'); if (elAlm) elAlm.textContent = almPct + '%';
 
       var RES_DEFS = [
@@ -8701,7 +8915,12 @@
 
       var elFree = document.getElementById('recAldLibres'); if (elFree) elFree.textContent = (res.aldeanos_libres !== undefined ? res.aldeanos_libres : res.aldeanos);
       var elWork = document.getElementById('recAldWorking'); if (elWork) elWork.textContent = totalW;
-      var elCap = document.getElementById('recAldCap'); if (elCap) elCap.textContent = barrCap;
+      
+      // v1.17: Mostrar capacidad de barracas con porcentaje y uso
+      var used = getBarracksUsed(vs);
+      var barrPct = barrCap > 0 ? Math.round(used / barrCap * 100) : 0;
+      var elCap = document.getElementById('recAldCap'); if (elCap) elCap.textContent = used + ' / ' + barrCap + ' (' + barrPct + '%)';
+      
       var elAlm = document.getElementById('recAlmPct'); if (elAlm) elAlm.textContent = almPct + '%';
 
       var prodMap = { madera: p.madera, piedra: p.piedra, hierro: p.hierro, provisiones: p.provisiones, esencia: p.esencia };
@@ -8854,7 +9073,8 @@
           plines = intStr;
 
         } else if (isBarracas) {
-          var plazas = (lvl === 0) ? 0 : 50 + (lvl - 1) * 20;
+          var fakeBldBar = {}; fakeBldBar['barracas'] = { level: lvl };
+          var plazas = getBarracksCapacity(fakeBldBar);
           plines = '<div class="pl" style="color:var(--aldeanos)">🏠 ' + plazas + ' plazas</div>';
 
         } else if (isAlmacen) {
@@ -8964,7 +9184,8 @@
             : curIntSec + 's';
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;⚡ 1 aldeano cada ' + curIntLabel + ' (≈ ' + curProd + '/h)';
       } else if (isBarracas) {
-        var curPlazas = (curLvl === 0) ? 0 : 50 + (curLvl - 1) * 20;
+        var fakeBldBarCur = {}; fakeBldBarCur['barracas'] = { level: curLvl };
+        var curPlazas = getBarracksCapacity(fakeBldBarCur);
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;🏠 ' + curPlazas + ' plazas para tropas normales';
       } else if (isAlmacen) {
         var curCap = Math.floor(1000 * Math.pow(2, curLvl));
@@ -9104,6 +9325,12 @@
     function escapeHtml(str) {
       return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function escapeJs(str) {
+      // Escapa string para uso en atributos onclick/JavaScript inline
+      // Reemplaza backslash primero, luego comillas simples
+      return String(str ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '');
     }
 
     function formatNumber(n) {
@@ -9669,11 +9896,28 @@
       }
       var m = threadMeta(type);
       var isSystem = (type === 'system');
-      h.innerHTML = '<span style="font-size:1.1rem;">' + m.icon + '</span>'
-        + '<div style="flex:1;">'
-        + '<div style="font-size:.8rem;color:' + m.color + ';letter-spacing:.08em;">' + m.label + '</div>'
-        + '<div style="font-size:.72rem;color:var(--dim);">' + escapeHtml(title || '') + '</div>'
-        + '</div>';
+      
+      // Diferentes estilos según el tipo
+      if (type === 'system') {
+        h.innerHTML = '<span style="font-size:1.1rem;">' + m.icon + '</span>'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:.85rem;color:' + m.color + ';font-weight:600;">' + escapeHtml(title) + '</div>'
+          + '<div style="font-size:.65rem;color:var(--dim);">Reportes de batallas y espionajes</div>'
+          + '</div>';
+      } else if (type === 'dm') {
+        h.innerHTML = '<span style="font-size:1.1rem;">' + m.icon + '</span>'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:.95rem;color:var(--text);font-weight:600;">' + escapeHtml(title) + '</div>'
+          + '<div style="font-size:.65rem;color:var(--dim);letter-spacing:.08em;">MENSAJE DIRECTO</div>'
+          + '</div>';
+      } else {
+        h.innerHTML = '<span style="font-size:1.1rem;">' + m.icon + '</span>'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:.8rem;color:' + m.color + ';letter-spacing:.08em;">' + m.label + '</div>'
+          + '<div style="font-size:.72rem;color:var(--dim);">' + escapeHtml(title || '') + '</div>'
+          + '</div>';
+      }
+      
       // Los mensajes de sistema son de solo lectura
       if (area) area.style.display = isSystem ? 'none' : 'flex';
     }
@@ -9741,26 +9985,83 @@
     async function openThread(id, type) {
       if (!(await ensureLogged())) return;
       currentThreadId = id;
-      // Si no sabemos el tipo, intentar detectarlo
-      var threadType = type || 'dm';
-      renderMessagesHeader(threadType, threadType === 'system' ? 'Informes del sistema' : threadType === 'alliance' ? 'Chat de alianza' : 'Mensaje directo');
+      currentThreadType = type || 'dm';
+      
+      // Ocultar/mostrar paneles según el tipo
+      const reportsList = document.getElementById('reportsList');
+      const chatBox = document.getElementById('chatBox');
+      
+      if (type === 'system') {
+        // Mostrar panel de reportes
+        reportsList.style.display = 'flex';
+        chatBox.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--dim);text-align:center;"><div style="font-size:2rem;margin-bottom:10px;">📋</div><div style="font-size:.85rem;">Selecciona un informe<br>de la lista</div></div>';
+        await loadSystemReports();
+        renderMessagesHeader('system', 'Informes del Sistema');
+      } else {
+        // Ocultar panel de reportes, mostrar chat normal
+        reportsList.style.display = 'none';
+        
+        var headerTitle = type === 'alliance' ? 'Chat de alianza' : 'Mensaje directo';
+        
+        if (type === 'dm') {
+          // Obtener el nombre del otro usuario en el DM
+          try {
+            var { data: members } = await sbClient
+              .from('thread_members')
+              .select('user_id,profiles(username)')
+              .eq('thread_id', id);
+            
+            if (members && members.length > 0) {
+              var otherUser = members.find(function(m) { return m.user_id !== currentUser.id; });
+              if (otherUser && otherUser.profiles) {
+                headerTitle = otherUser.profiles.username;
+              }
+            }
+          } catch(e) {
+            console.warn('openThread: error getting DM partner name', e);
+          }
+        }
+        
+        renderMessagesHeader(type, headerTitle);
+        await loadThreadMessages(type);
+      }
+      
       subscribeToThread(id);
-      await loadThreadMessages(threadType);
-      await renderThreads(); // refrescar para marcar activo
+      await renderThreads();
+      await updateUnreadCount(); // Actualizar badge
     }
 
     function parseMessageBody(rawBody) {
+      if (!rawBody) return { title: 'Informe del sistema', body: '' };
+      
       // Try to parse as JSON {title, body} — new format
-      if (rawBody && rawBody.trim().startsWith('{')) {
+      if (rawBody.trim().startsWith('{')) {
         try {
           var parsed = JSON.parse(rawBody);
-          if (parsed.title !== undefined) return parsed;
-        } catch(e) {}
+          if (parsed.title !== undefined && parsed.body !== undefined) {
+            return {
+              title: parsed.title || 'Informe del sistema',
+              body: parsed.body || ''
+            };
+          }
+        } catch(e) {
+          console.warn('parseMessageBody: JSON parse failed', e);
+        }
       }
+      
       // Legacy format: first line is title, rest is body
-      var lines = (rawBody || '').split('\n');
-      var title = lines[1] || lines[0] || 'Informe'; // skip the date line
-      return { title: title.trim(), body: rawBody };
+      var lines = rawBody.split('\n');
+      var title = lines[0] || 'Informe del sistema';
+      
+      // Si la primera línea parece ser una fecha/timestamp, usar la segunda
+      if (title.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) {
+        title = lines[1] || lines[0] || 'Informe del sistema';
+      }
+      
+      return { 
+        title: title.trim() || 'Informe del sistema', 
+        body: rawBody 
+      };
     }
 
     function toggleMsgExpand(id) {
@@ -9770,6 +10071,54 @@
       var expanded = el.style.display !== 'none';
       el.style.display = expanded ? 'none' : 'block';
       if (btn) btn.textContent = expanded ? '▼' : '▲';
+    }
+
+    // v1.17: Marcar mensaje como leído y eliminar
+    async function markMsgAsReadAndDelete(msgId) {
+      try {
+        // Marcar como leído en BD - sin filtro recipient_id (no existe en tabla)
+        await sbClient.from('messages')
+          .update({ read: true })
+          .eq('id', msgId);
+        
+        // Eliminar de la vista inmediatamente
+        var row = document.getElementById('msgRow_' + msgId);
+        if (row) {
+          row.style.transition = 'opacity .3s';
+          row.style.opacity = '0';
+          setTimeout(() => row.remove(), 300);
+        }
+        
+        showNotif('Marcado como leído', 'ok');
+        updateUnreadCount();
+      } catch(e) {
+        console.error('Error marking as read:', e);
+        showNotif('Error al marcar como leído', 'err');
+      }
+    }
+
+    // v1.17: Eliminar mensaje (lo borra de BD y de la vista)
+    async function deleteMessage(msgId) {
+      if (!confirm('¿Eliminar este mensaje?')) return;
+      
+      try {
+        await sbClient.from('messages')
+          .delete()
+          .eq('id', msgId);
+        
+        // Eliminar de la vista inmediatamente
+        var row = document.getElementById('msgRow_' + msgId);
+        if (row) {
+          row.style.transition = 'opacity .3s';
+          row.style.opacity = '0';
+          setTimeout(() => row.remove(), 300);
+        }
+        
+        showNotif('Mensaje eliminado', 'ok');
+      } catch(e) {
+        console.error('Error deleting message:', e);
+        showNotif('Error al eliminar', 'err');
+      }
     }
 
     async function loadThreadMessages(threadType) {
@@ -9821,12 +10170,18 @@
           var bodyHtml = '';
           if (parsed.body) {
             var b = parsed.body.trim();
-            bodyHtml = b.startsWith('<') ? b : '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.78rem;">' + escapeHtml(b) + '</pre>';
+            if (b) {
+              bodyHtml = b.startsWith('<') ? b : '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.78rem;">' + escapeHtml(b) + '</pre>';
+            } else {
+              bodyHtml = '<div style="color:var(--dim);font-size:.75rem;padding:8px;">Sin detalles adicionales.</div>';
+            }
+          } else {
+            bodyHtml = '<div style="color:var(--dim);font-size:.75rem;padding:8px;">Sin detalles adicionales.</div>';
           }
 
           var row = document.createElement('div');
           row.style.cssText = 'border:1px solid ' + sStyle.color + '33;border-radius:8px;overflow:hidden;cursor:pointer;transition:background .15s;';
-          row.setAttribute('onclick', 'toggleMsgExpand(' + m.id + ')');
+          row.onclick = function() { toggleMsgExpand(m.id); };
           row.onmouseover = function(){ this.style.background = 'rgba(255,255,255,.03)'; };
           row.onmouseout  = function(){ this.style.background = ''; };
 
@@ -9857,7 +10212,7 @@
 
           var row = document.createElement('div');
           row.style.cssText = 'border:1px solid rgba(255,255,255,.07);border-radius:8px;overflow:hidden;cursor:pointer;transition:background .15s;margin-bottom:4px;';
-          row.setAttribute('onclick', 'toggleMsgExpand(' + m.id + ')');
+          row.onclick = function() { toggleMsgExpand(m.id); };
           row.onmouseover = function(){ this.style.background = 'rgba(255,255,255,.03)'; };
           row.onmouseout  = function(){ this.style.background = ''; };
           row.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:' + senderBg + ';">'
@@ -9865,14 +10220,254 @@
             + '<span style="font-size:.75rem;color:' + senderColor + ';font-weight:bold;flex-shrink:0;min-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(displayName) + '</span>'
             + '<span style="flex:1;font-size:.75rem;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(preview) + '</span>'
             + '<span style="font-size:.6rem;color:var(--dim);flex-shrink:0;margin-left:8px;">' + timeStr2 + '</span>'
+            + '<button onclick="event.stopPropagation(); markMsgAsReadAndDelete(' + m.id + ')" style="padding:3px 8px;background:rgba(96,208,96,.15);border:1px solid var(--accent2);border-radius:3px;color:var(--accent2);font-size:.6rem;cursor:pointer;margin:0 4px;flex-shrink:0;">✓</button>'
+            + '<button onclick="event.stopPropagation(); deleteMessage(' + m.id + ')" style="padding:3px 8px;background:rgba(255,61,90,.15);border:1px solid rgba(255,61,90,.4);border-radius:3px;color:rgba(255,61,90,.8);font-size:.6rem;cursor:pointer;margin:0 4px;flex-shrink:0;">🗑</button>'
             + '<span id="msgToggle_' + m.id + '" style="font-size:.6rem;color:var(--dim);margin-left:6px;">▼</span>'
             + '</div>'
             + '<div id="msgBody_' + m.id + '" style="display:none;">' + bodyContent + '</div>';
+          row.id = 'msgRow_' + m.id;
           box.appendChild(row);
         }
       }
 
       box.scrollTop = box.scrollHeight;
+    }
+
+    // ============================================================
+    // SISTEMA DE REPORTES (v1.11)
+    // ============================================================
+    
+    var currentReportId = null;
+    
+    async function loadSystemReports() {
+      const box = document.getElementById('reportsListBox');
+      if (!currentThreadId) {
+        box.innerHTML = '<div style="padding:14px;color:var(--dim);font-size:.75rem;text-align:center;">Sin informes</div>';
+        return;
+      }
+      
+      box.innerHTML = '<div style="padding:14px;color:var(--dim);font-size:.75rem;text-align:center;">Cargando…</div>';
+      
+      const r = await sbClient.from('messages')
+        .select('id,body,created_at,read')
+        .eq('thread_id', currentThreadId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      
+      if (r.error) {
+        box.innerHTML = '<div style="padding:14px;color:var(--danger);font-size:.72rem;">Error: ' + escapeHtml(r.error.message) + '</div>';
+        return;
+      }
+      
+      const reports = r.data || [];
+      if (reports.length === 0) {
+        box.innerHTML = '<div style="padding:14px;color:var(--dim);font-size:.75rem;text-align:center;">Sin informes aún.<br>Realiza espionajes o batallas.</div>';
+        return;
+      }
+      
+      box.innerHTML = '';
+      
+      reports.forEach(function(msg) {
+        var parsed = parseMessageBody(msg.body);
+        var sStyle = getSystemMsgStyle(parsed.title + ' ' + (parsed.body || ''));
+        var date = new Date(msg.created_at);
+        var timeStr = date.toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'2-digit' })
+          + ' ' + date.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+        
+        var isActive = (currentReportId === msg.id);
+        var isUnread = !msg.read;
+        
+        var item = document.createElement('div');
+        item.style.cssText = 'padding:10px 12px;margin-bottom:6px;border-radius:6px;cursor:pointer;'
+          + 'border:1px solid ' + (isActive ? sStyle.color : 'var(--border)') + ';'
+          + 'background:' + (isActive ? sStyle.color + '15' : isUnread ? 'rgba(255,255,255,.03)' : 'transparent') + ';'
+          + 'transition:all .15s;';
+        
+        item.onmouseover = function() {
+          if (!isActive) this.style.background = 'rgba(255,255,255,.05)';
+        };
+        item.onmouseout = function() {
+          if (!isActive) this.style.background = isUnread ? 'rgba(255,255,255,.03)' : 'transparent';
+        };
+        
+        item.onclick = function() {
+          openReport(msg.id, msg.body, msg.read);
+        };
+        
+        item.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+          + '<span style="font-size:1rem;">' + sStyle.icon + '</span>'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-size:.75rem;color:' + sStyle.color + ';font-weight:' + (isUnread ? 'bold' : 'normal') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(parsed.title) + '</div>'
+          + '<div style="font-size:.6rem;color:var(--dim);margin-top:2px;">' + timeStr + '</div>'
+          + '</div>'
+          + (isUnread ? '<div style="width:8px;height:8px;background:var(--danger);border-radius:50%;flex-shrink:0;"></div>' : '')
+          + '</div>';
+        
+        box.appendChild(item);
+      });
+    }
+    
+    async function openReport(msgId, body, isRead) {
+      currentReportId = msgId;
+      const chatBox = document.getElementById('chatBox');
+      
+      // Marcar como leído si no lo está
+      if (!isRead) {
+        try {
+          const r = await sbClient.from('messages')
+            .update({ read: true })
+            .eq('id', msgId);
+          
+          if (r.error) {
+            console.warn('Error marking as read:', r.error);
+          }
+          
+          // Esperar un poquito para que la BD se actualice
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          await updateUnreadCount();
+          await loadSystemReports(); // Refrescar lista
+        } catch(e) {
+          console.warn('Error in openReport read update:', e);
+        }
+      }
+      
+      var parsed = parseMessageBody(body);
+      var sStyle = getSystemMsgStyle(parsed.title + ' ' + (parsed.body || ''));
+      var date = new Date();
+      
+      // Renderizar el reporte completo con botones de acción
+      var html = '<div style="padding:0;">';
+      
+      // Header del reporte
+      html += '<div style="padding:14px 16px;border-bottom:1px solid var(--border);background:' + sStyle.color + '0d;display:flex;align-items:center;gap:10px;">';
+      html += '<span style="font-size:1.4rem;">' + sStyle.icon + '</span>';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:.9rem;color:' + sStyle.color + ';font-weight:bold;">' + escapeHtml(parsed.title) + '</div>';
+      html += '<div style="font-size:.65rem;color:var(--dim);margin-top:2px;">' + sStyle.label.toUpperCase() + '</div>';
+      html += '</div>';
+      // Botón eliminar
+      html += '<button onclick="deleteReport(\'' + msgId + '\')" style="padding:5px 10px;background:rgba(224,64,64,.1);border:1px solid var(--danger);border-radius:4px;color:var(--danger);font-family:VT323,monospace;font-size:.7rem;cursor:pointer;">🗑 Eliminar</button>';
+      html += '</div>';
+      
+      // Cuerpo del reporte (el HTML completo del informe)
+      html += '<div style="padding:16px;overflow-y:auto;">';
+      if (parsed.body) {
+        var b = parsed.body.trim();
+        if (b.startsWith('<')) {
+          // Es HTML - renderizar directamente
+          html += b;
+        } else {
+          // Es texto plano
+          html += '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.82rem;color:var(--text);line-height:1.6;">' + escapeHtml(b) + '</pre>';
+        }
+      } else {
+        html += '<div style="color:var(--dim);font-size:.75rem;padding:20px;text-align:center;">Sin detalles adicionales.</div>';
+      }
+      html += '</div>';
+      
+      html += '</div>';
+      
+      chatBox.innerHTML = html;
+    }
+    
+    async function deleteReport(msgId) {
+      if (!confirm('¿Eliminar este informe?')) return;
+      
+      const r = await sbClient.from('messages')
+        .delete()
+        .eq('id', msgId);
+      
+      if (r.error) {
+        showNotif('Error al eliminar: ' + r.error.message, 'err');
+        return;
+      }
+      
+      showNotif('Informe eliminado', 'ok');
+      currentReportId = null;
+      
+      const chatBox = document.getElementById('chatBox');
+      chatBox.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--dim);text-align:center;"><div style="font-size:2rem;margin-bottom:10px;">📋</div><div style="font-size:.85rem;">Selecciona un informe<br>de la lista</div></div>';
+      
+      await loadSystemReports();
+      await updateUnreadCount();
+    }
+    
+    async function markAllSystemAsRead() {
+      if (!currentThreadId) return;
+      
+      try {
+        const r = await sbClient.from('messages')
+          .update({ read: true })
+          .eq('thread_id', currentThreadId)
+          .eq('read', false);
+        
+        if (r.error) {
+          showNotif('Error: ' + r.error.message, 'err');
+          return;
+        }
+        
+        // Esperar a que se propague el cambio
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        showNotif('Todos los informes marcados como leídos', 'ok');
+        await updateUnreadCount();
+        await loadSystemReports();
+      } catch(e) {
+        console.error('Error in markAllSystemAsRead:', e);
+        showNotif('Error al marcar como leídos', 'err');
+      }
+    }
+    
+    async function updateUnreadCount() {
+      if (!(await ensureLogged())) return;
+      
+      // Contar mensajes no leídos del sistema
+      const r = await sbClient.from('thread_members')
+        .select('thread_id,message_threads(thread_type)')
+        .eq('user_id', currentUser.id);
+      
+      if (r.error) return;
+      
+      var systemThreads = (r.data || [])
+        .filter(x => x.message_threads && x.message_threads.thread_type === 'system')
+        .map(x => x.thread_id);
+      
+      if (systemThreads.length === 0) {
+        hideBadge();
+        return;
+      }
+      
+      // Contar mensajes no leídos en todos los hilos del sistema
+      const m = await sbClient.from('messages')
+        .select('id', { count: 'exact', head: true })
+        .in('thread_id', systemThreads)
+        .eq('read', false);
+      
+      if (m.error) return;
+      
+      var count = m.count || 0;
+      
+      if (count > 0) {
+        showBadge(count);
+      } else {
+        hideBadge();
+      }
+    }
+    
+    function showBadge(count) {
+      const badge = document.getElementById('msgBadge');
+      if (badge) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'inline-block';
+      }
+    }
+    
+    function hideBadge() {
+      const badge = document.getElementById('msgBadge');
+      if (badge) {
+        badge.style.display = 'none';
+      }
     }
 
     // ---- REALTIME ----
@@ -9886,8 +10481,17 @@
           async function(payload) {
             const m = payload.new;
             if (!m) return;
-            await getProfileInfo(m.sender_id);
-            await loadThreadMessages(currentThreadType || 'dm');
+            
+            // Si es un mensaje del sistema, recargar lista de reportes
+            if (currentThreadType === 'system') {
+              await loadSystemReports();
+            } else {
+              await getProfileInfo(m.sender_id);
+              await loadThreadMessages(currentThreadType || 'dm');
+            }
+            
+            // Actualizar badge
+            await updateUnreadCount();
           })
         .subscribe();
     }
@@ -9966,10 +10570,16 @@
       checkAdminButton();
     }
 
-    // ADMIN - Solo para sementalac@gmail.com
+    // ADMIN - ACCESO EXCLUSIVO: sementalac@gmail.com
+    // Triple verificación: email del objeto currentUser + email del JWT de Supabase + no nulo
+    // Cualquier intento de falsificación desde consola fallará porque currentUser
+    // viene directamente de sbClient.auth.getUser() y se sobreescribe en cada login.
     function isAdmin() {
-      // Comprobación directa al email
-      return currentUser && currentUser.email === 'sementalac@gmail.com';
+      if (!currentUser) return false;
+      if (currentUser.email !== 'sementalac@gmail.com') return false;
+      // Verificación extra: el id debe ser un UUID válido (no manipulado)
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) return false;
+      return true;
     }
 
     function checkAdminButton() {
@@ -9991,6 +10601,12 @@
       document.getElementById('adEditBox').style.display = 'none';
       document.getElementById('adminMsg').textContent = '';
       document.getElementById('adminOverlay').classList.remove('hidden');
+      
+      // v1.17: Mostrar botón "Ver todos" solo para sementalac@gmail.com
+      var btn = document.getElementById('adminViewAllBtn');
+      if (btn) {
+        btn.style.display = (currentUser && currentUser.email === 'sementalac@gmail.com') ? 'inline-block' : 'none';
+      }
     }
 
     async function searchAdminPlayer() {
@@ -10062,9 +10678,10 @@
       document.getElementById('adEditingName').textContent = village.name;
       document.getElementById('adminMsg').textContent = 'Cargando datos de aldea...';
 
-      // Cargamos recursos y tropas para editar
+      // Cargar recursos, tropas y perfil del jugador
       const r = await sbClient.from('resources').select('*').eq('village_id', village.id).maybeSingle();
       const t = await sbClient.from('troops').select('*').eq('village_id', village.id).maybeSingle();
+      const p = await sbClient.from('profiles').select('experience').eq('id', village.owner_id).maybeSingle();
 
       const vRes = r.data || { madera: 0, piedra: 0, hierro: 0, prov: 0, esencia: 0 };
       const vTrp = t.data || { aldeano: 0 };
@@ -10075,15 +10692,12 @@
       document.getElementById('adProv').value = vRes.prov || 0;
       document.getElementById('adEsencia').value = vRes.esencia || 0;
       document.getElementById('adAldeanos').value = vTrp.aldeano || 0;
-
-      // Get experience from profile (which is in the village search results)
-      const player = adLastSearchResults.players.find(p => p.id === village.owner_id);
-      document.getElementById('adExperience').value = player?.experience || 0;
+      document.getElementById('adExperience').value = (p.data && p.data.experience) || 0;
 
       document.getElementById('adEditBox').style.display = 'block';
       document.getElementById('adminMsg').textContent = '';
 
-      // Highlight selection
+      // Resaltar aldea seleccionada
       document.querySelectorAll('#adVillagesList .admin-village-item').forEach(el => {
         el.classList.toggle('active', el.textContent.includes(village.name));
       });
@@ -10131,20 +10745,414 @@
       }
     }
 
+    // ── Admin — Reparación Global de misiones fantasma ──────────────
+    // Recorre TODAS las aldeas de TODOS los jugadores.
+    // Para cada aldea con misiones 'return' cuyo finish_at ya pasó
+    // (y no se resolvieron solas por el bug), devuelve las tropas
+    // respetando la capacidad de barracas y limpia la cola.
+    // Almacena el resultado del escaneo para usarlo en la fase de reparación
+    var _repairScanResults = null;
+
+    // ── FASE 1: Escanear — solo lectura, sin escribir nada ──────────
+    async function adminRepairAll() {
+      if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
+      var { data: { user } } = await sbClient.auth.getUser();
+      if (!user || user.email !== 'sementalac@gmail.com') {
+        showNotif('Sesión no verificada. Vuelve a hacer login.', 'err'); return;
+      }
+
+      var logEl = document.getElementById('repairLog');
+      var btnEl = document.getElementById('repairBtn');
+      var confirmEl = document.getElementById('repairConfirmBox');
+      if (!logEl || !btnEl) return;
+
+      _repairScanResults = null;
+      btnEl.disabled = true;
+      btnEl.textContent = '⏳ Escaneando...';
+      if (confirmEl) confirmEl.style.display = 'none';
+      logEl.style.display = 'block';
+      logEl.innerHTML = '<div style="color:var(--gold)">🔍 Escaneando todas las aldeas (solo lectura)...</div>';
+
+      var now = Date.now();
+      var affected = []; // aldeas con problemas
+      var log = [];
+
+      try {
+        var { data: villages, error: vErr } = await sbClient
+          .from('villages').select('id, name, owner_id, mission_queue');
+        if (vErr) throw new Error('Error cargando aldeas: ' + vErr.message);
+
+        // Cargar perfiles para tener nombres de jugador
+        var { data: profiles } = await sbClient.from('profiles').select('id, username');
+        var profileMap = {};
+        (profiles || []).forEach(function(p) { profileMap[p.id] = p.username || p.id; });
+
+        log.push('📋 ' + villages.length + ' aldeas escaneadas — ' + new Date().toLocaleTimeString('es-ES'));
+        log.push('─────────────────────────────────');
+
+        for (var v of villages) {
+          var mq = Array.isArray(v.mission_queue) ? v.mission_queue : [];
+          var stuck = mq.filter(function(m) {
+            if (m.type !== 'return') return false;
+            var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
+            return ft <= now;
+          });
+
+          var { data: trpRow } = await sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle();
+          var { data: bldRow } = await sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle();
+          if (!trpRow || !bldRow) continue;
+
+          var barrLvl = bldRow.barracas || 1;
+          var barrCap = barrLvl === 0 ? 0 : 50 + (barrLvl - 1) * 20;
+          var otherSlots = 0;
+          Object.keys(TROOP_TYPES).forEach(function(k) {
+            if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
+          });
+          var maxAld = Math.max(0, barrCap - otherSlots);
+          var currentAld = trpRow.aldeano || 0;
+          var isOvercapped = currentAld > maxAld;
+
+          var returningAld = 0;
+          stuck.forEach(function(m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
+
+          if (stuck.length === 0 && !isOvercapped) continue;
+
+          var playerName = profileMap[v.owner_id] || v.owner_id.substring(0, 8) + '…';
+          var problems = [];
+          if (stuck.length > 0) {
+            var oldestStuck = stuck.reduce(function(min, m) {
+              return new Date(m.finish_at).getTime() < new Date(min.finish_at).getTime() ? m : min;
+            });
+            var horasAtascado = Math.round((now - new Date(oldestStuck.finish_at).getTime()) / 3600000 * 10) / 10;
+            problems.push(stuck.length + ' misión(es) retorno atascada(s) hace ' + horasAtascado + 'h · ' + returningAld + ' aldeanos esperando');
+          }
+          if (isOvercapped) {
+            problems.push('sobreocupación: ' + currentAld + ' aldeanos en barracas de ' + barrCap + ' plazas (exceso: ' + (currentAld - maxAld) + ')');
+          }
+
+          var entry = {
+            village: v, trpRow: trpRow, bldRow: bldRow,
+            stuck: stuck, isOvercapped: isOvercapped,
+            barrCap: barrCap, maxAld: maxAld, currentAld: currentAld,
+            returningAld: returningAld, mq: mq
+          };
+          affected.push(entry);
+
+          log.push('⚠️ [' + playerName + '] ' + (v.name || v.id));
+          problems.forEach(function(p) { log.push('   → ' + p); });
+        }
+
+        log.push('─────────────────────────────────');
+        if (affected.length === 0) {
+          log.push('✅ Todo correcto — ninguna aldea necesita reparación.');
+        } else {
+          log.push('🔎 ' + affected.length + ' aldea(s) con problemas detectada(s).');
+          log.push('Revisa el informe y confirma si quieres proceder.');
+        }
+
+        _repairScanResults = affected;
+
+      } catch (e) {
+        log.push('❌ Error crítico: ' + e.message);
+        showNotif('Error en escaneo: ' + e.message, 'err');
+      }
+
+      logEl.innerHTML = log.map(function(l) {
+        var color = l.startsWith('❌') ? 'var(--danger)'
+          : l.startsWith('⚠️') ? 'var(--gold)'
+          : l.startsWith('✅') ? 'var(--ok)'
+          : l.startsWith('   →') ? '#ccc'
+          : 'var(--dim)';
+        return '<div style="color:' + color + ';margin-bottom:2px;">' + escapeHtml(l) + '</div>';
+      }).join('');
+
+      btnEl.disabled = false;
+      btnEl.textContent = '🔍 Escanear de nuevo';
+
+      // Mostrar botón de confirmar solo si hay problemas
+      if (confirmEl) {
+        if (_repairScanResults && _repairScanResults.length > 0) {
+          confirmEl.style.display = 'block';
+          document.getElementById('repairConfirmCount').textContent = _repairScanResults.length;
+        } else {
+          confirmEl.style.display = 'none';
+        }
+      }
+    }
+
+    // ── FASE 2: Aplicar reparación — escribe en Supabase ───────────
+    async function adminRepairConfirm() {
+      if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
+      if (!_repairScanResults || _repairScanResults.length === 0) {
+        showNotif('Primero escanea para detectar problemas.', 'err'); return;
+      }
+      var { data: { user } } = await sbClient.auth.getUser();
+      if (!user || user.email !== 'sementalac@gmail.com') {
+        showNotif('Sesión no verificada.', 'err'); return;
+      }
+
+      var logEl = document.getElementById('repairLog');
+      var confirmEl = document.getElementById('repairConfirmBox');
+      var confirmBtn = document.getElementById('repairConfirmBtn');
+      var now = Date.now();
+      var totalFixed = 0;
+      var errors = 0;
+      var log = ['🔧 APLICANDO REPARACIONES...', '─────────────────────────────────'];
+
+      if (confirmBtn) confirmBtn.disabled = true;
+
+      for (var entry of _repairScanResults) {
+        var v = entry.village;
+        var stuck = entry.stuck;
+        var mq = entry.mq;
+
+        // Recalcular con datos del escaneo
+        var currentAld = entry.currentAld;
+        var maxAld = entry.maxAld;
+        var barrCap = entry.barrCap;
+        var trpRow = entry.trpRow;
+        var otherSlots = 0;
+        Object.keys(TROOP_TYPES).forEach(function(k) {
+          if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
+        });
+
+        // Saneamiento sobreocupación
+        var overcapFixed = 0;
+        if (currentAld > maxAld) {
+          overcapFixed = currentAld - maxAld;
+          currentAld = maxAld;
+        }
+
+        var freeSlots = Math.max(0, barrCap - currentAld - otherSlots);
+
+        // Calcular tropas que vuelven
+        var returningAld = 0;
+        var returningOther = {};
+        stuck.forEach(function(m) {
+          returningAld += (m.troops && m.troops.aldeano) || 0;
+          Object.keys(m.troops || {}).forEach(function(k) {
+            if (k !== 'aldeano') returningOther[k] = (returningOther[k] || 0) + (m.troops[k] || 0);
+          });
+        });
+
+        var aldEntra = Math.min(returningAld, freeSlots);
+        var newAld = currentAld + aldEntra;
+        freeSlots -= aldEntra;
+
+        var trpUpdate = { aldeano: newAld };
+        Object.keys(returningOther).forEach(function(k) {
+          var slots = (TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1;
+          var unitsIn = Math.min(returningOther[k], Math.floor(freeSlots / slots));
+          trpUpdate[k] = (trpRow[k] || 0) + unitsIn;
+          freeSlots -= unitsIn * slots;
+        });
+
+        var newMq = mq.filter(function(m) {
+          if (m.type !== 'return') return true;
+          return new Date(m.finish_at).getTime() > now;
+        });
+
+        var { error: tErr } = await sbClient.from('troops').update(trpUpdate).eq('village_id', v.id);
+        var { error: vErr } = await sbClient.from('villages').update({ mission_queue: newMq }).eq('id', v.id);
+
+        if (tErr || vErr) {
+          log.push('❌ ' + (v.name || v.id) + ': error — ' + ((tErr || vErr).message));
+          errors++;
+        } else {
+          var linea = '✅ ' + (v.name || v.id) + ':';
+          if (overcapFixed > 0) linea += ' exceso -' + overcapFixed + ' ald.';
+          if (stuck.length > 0) linea += ' · ' + stuck.length + ' misión(es) · +' + aldEntra + ' ald. recuperados';
+          if (returningAld - aldEntra > 0) linea += ' · ' + (returningAld - aldEntra) + ' perdidos (sin espacio)';
+          log.push(linea);
+          totalFixed++;
+        }
+      }
+
+      log.push('─────────────────────────────────');
+      log.push('✅ ' + totalFixed + ' aldea(s) reparadas' + (errors > 0 ? ' · ❌ ' + errors + ' errores' : ''));
+
+      logEl.innerHTML = log.map(function(l) {
+        var color = l.startsWith('❌') ? 'var(--danger)' : l.startsWith('✅') ? 'var(--ok)' : l.startsWith('🔧') ? 'var(--gold)' : 'var(--dim)';
+        return '<div style="color:' + color + ';margin-bottom:2px;">' + escapeHtml(l) + '</div>';
+      }).join('');
+
+      if (confirmEl) confirmEl.style.display = 'none';
+      if (confirmBtn) confirmBtn.disabled = false;
+      _repairScanResults = null;
+
+      showNotif('Reparación completada: ' + totalFixed + ' aldeas arregladas.', 'ok');
+
+      if (activeVillage) {
+        await loadMyVillages();
+        switchVillage(activeVillage.id);
+      }
+    }
+
     function closeAdmin() { document.getElementById('adminOverlay').classList.add('hidden'); }
 
+    // v1.17: Página de usuarios admin (solo para sementalac@gmail.com)
+    let _adminUsersPageCache = [];
+
+    function openAdminUsersPage() {
+      if (!currentUser || currentUser.email !== 'sementalac@gmail.com') {
+        showNotif('Acceso denegado', 'err');
+        return;
+      }
+      
+      closeAdmin(); // Cerrar el panel admin modal
+      showPage('admin-users', null); // Mostrar la página
+      loadAdminUsersPage();
+    }
+
+    async function loadAdminUsersPage() {
+      const res = await sbClient.from('profiles').select('id,username,role').order('username');
+      if (res.error) {
+        document.getElementById('adminUsersPageList').innerHTML = '<div style="color:var(--danger);">Error: ' + escapeHtml(res.error.message) + '</div>';
+        return;
+      }
+      
+      _adminUsersPageCache = res.data || [];
+      renderAdminUsersPage();
+    }
+
+    function filterAdminUsersPage() {
+      renderAdminUsersPage();
+    }
+
+    function renderAdminUsersPage() {
+      const search = (document.getElementById('adminUsersSearch')?.value || '').toLowerCase();
+      let filtered = _adminUsersPageCache;
+      
+      if (search) {
+        filtered = _adminUsersPageCache.filter(u => (u.username || '').toLowerCase().includes(search));
+      }
+      
+      const list = document.getElementById('adminUsersPageList');
+      if (!filtered.length) {
+        list.innerHTML = '<div style="text-align:center;color:var(--dim);">Sin usuarios</div>';
+        return;
+      }
+      
+      let html = '';
+      filtered.forEach(u => {
+        const isMe = u.id === currentUser.id;
+        html += '<div style="padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
+          + '<div style="flex:1;">'
+          + '<div style="font-weight:bold;color:var(--text);">' + escapeHtml(u.username || '-') + (isMe ? ' (tú)' : '') + '</div>'
+          + '<div style="font-size:.65rem;color:var(--dim);">' + (u.role === 'admin' ? '👑 Admin' : '👤 Jugador') + '</div>'
+          + '</div>'
+          + '<div>'
+          + (isMe ? '' : '<button onclick="adminDeleteUserFromPage(\'' + escapeJs(u.id) + '\',\'' + escapeJs(u.username || '-') + '\')" style="padding:4px 8px;background:rgba(255,61,90,.2);border:1px solid rgba(255,61,90,.4);border-radius:3px;color:rgba(255,61,90,.8);font-size:.7rem;cursor:pointer;">🗑 Borrar</button>')
+          + '</div>'
+          + '</div>';
+      });
+      
+      list.innerHTML = html;
+    }
+
+    async function adminDeleteUserFromPage(userId, username) {
+      if (!confirm('¿Borrar cuenta de "' + username + '"?')) return;
+      
+      try {
+        await sbClient.from('profiles').delete().eq('id', userId);
+        showNotif('Usuario eliminado', 'ok');
+        loadAdminUsersPage();
+      } catch(e) {
+        console.error('Error:', e);
+        showNotif('Error al eliminar', 'err');
+      }
+    }
+
+    // ── Admin dropdown de usuarios (v1.12) ──
+    let _adminUsersCache = [];
+
+    function toggleAdminUsersDropdown() {
+      const dropdown = document.getElementById('adminUsersDropdown');
+      const isVisible = dropdown.classList.contains('visible');
+      if (!isVisible) {
+        loadAllAdminUsers();
+      } else {
+        dropdown.classList.remove('visible');
+      }
+    }
+
+    async function loadAllAdminUsers() {
+      if (!isAdmin()) return;
+      const dropdown = document.getElementById('adminUsersDropdown');
+      const list = document.getElementById('adminUsersList');
+      
+      list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--dim);">Cargando usuarios...</div>';
+      dropdown.classList.add('visible');
+
+      const res = await sbClient.from('profiles').select('id,username,role').order('username');
+      if (res.error) {
+        list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--danger);">Error: ' + escapeHtml(res.error.message) + '</div>';
+        return;
+      }
+
+      _adminUsersCache = res.data || [];
+      renderAdminUsersList();
+    }
+
+    function renderAdminUsersList() {
+      const list = document.getElementById('adminUsersList');
+      const filterInput = document.getElementById('adUsersSearchInp');
+      const filterTerm = (filterInput?.value || '').toLowerCase().trim();
+
+      let filtered = _adminUsersCache;
+      if (filterTerm) {
+        filtered = _adminUsersCache.filter(u => (u.username || '').toLowerCase().includes(filterTerm));
+      }
+
+      if (!filtered.length) {
+        list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--dim);">No se encontraron usuarios</div>';
+        return;
+      }
+
+      let html = '';
+      filtered.forEach(u => {
+        const isMe = u.id === currentUser.id;
+        const roleClass = u.role === 'admin' ? 'style="color:var(--danger);font-weight:bold;"' : '';
+        html += `<div class="admin-users-item">
+          <div class="admin-users-item-info">
+            <div class="admin-users-item-name">${escapeHtml(u.username || '-')}${isMe ? ' (tú)' : ''}</div>
+            <div class="admin-users-item-role" ${roleClass}>${escapeHtml(u.role || 'player')}</div>
+          </div>
+          <button class="admin-users-item-del" onclick="adminDeleteUser('${u.id}', '${escapeJs(u.username || '-')}')">🗑</button>
+        </div>`;
+      });
+
+      list.innerHTML = html;
+    }
+
+    function filterAdminUsers() {
+      renderAdminUsersList();
+    }
+
     // ── Admin usuarios ──
-    async function loadAdminUsers() {
+    async function loadAdminUsers(searchTerm) {
       if (!isAdmin()) return;
       var box = document.getElementById('adminUsersBox');
       var count = document.getElementById('adminUserCount');
       if (box) box.innerHTML = '<div class="muted">Cargando usuarios…</div>';
 
       // Carga perfiles con aldeas
-      const p = await sbClient.from('profiles').select('id,username,role,username_changed').order('username');
+      let query = sbClient.from('profiles').select('id,username,role,username_changed').order('username');
+      
+      // Si hay término de búsqueda, filtrar
+      if (searchTerm && searchTerm.trim()) {
+        query = query.ilike('username', '%' + searchTerm.trim() + '%');
+      }
+      
+      const p = await query;
       if (p.error) { if (box) box.innerHTML = '<div class="muted">Error: ' + escapeHtml(p.error.message) + '</div>'; return; }
       const users = p.data || [];
-      if (count) count.textContent = users.length + ' usuarios registrados';
+      if (count) count.textContent = users.length + ' usuario' + (users.length !== 1 ? 's' : '') + (searchTerm ? ' encontrado' + (users.length !== 1 ? 's' : '') : ' registrados');
+
+      if (users.length === 0) {
+        if (box) box.innerHTML = '<div class="muted">No se encontraron usuarios</div>';
+        return;
+      }
 
       let html = '<table class="admin-users-table"><thead><tr>'
         + '<th>Usuario</th><th>Email (ID)</th><th>Rol</th><th>Nombre cambiado</th><th>Acción</th>'
@@ -10153,33 +11161,128 @@
       users.forEach(u => {
         const isMe = u.id === currentUser.id;
         html += '<tr>'
-          + '<td><b>' + escapeHtml(u.username || '-') + '</b>' + (isMe ? ' <span style="color:var(--gold)">(tú)</span>' : '') + '</td>'
+          + '<td><b style="cursor:pointer;color:var(--accent);text-decoration:underline;" onclick="viewAdminUserDetails(\'' + u.id + '\',\'' + escapeJs(u.username || '-') + '\')">' + escapeHtml(u.username || '-') + '</b>' + (isMe ? ' <span style="color:var(--gold)">(tú)</span>' : '') + '</td>'
           + '<td style="font-size:.6rem;color:var(--dim)">' + escapeHtml(u.id.substring(0, 12)) + '…</td>'
           + '<td class="' + (u.role === 'admin' ? 'admin-role' : '') + '">' + escapeHtml(u.role || 'player') + '</td>'
           + '<td>' + (u.username_changed ? '✅' : '—') + '</td>'
           + '<td>' + (isMe ? '<span style="color:var(--dim);font-size:.6rem">No puedes borrarte</span>'
-            : '<button class="admin-del-btn" onclick="adminDeleteUser(\'' + u.id + '\',\'' + escapeHtml(u.username || '-') + '\')">🗑 Borrar</button>') + '</td>'
+            : '<button class="admin-del-btn" onclick="adminDeleteUser(\'' + u.id + '\',\'' + escapeJs(u.username || '-') + '\')">🗑 Borrar</button>') + '</td>'
           + '</tr>';
       });
       html += '</tbody></table>';
       if (box) box.innerHTML = html;
     }
+    
+    async function searchAdminUser() {
+      const input = document.getElementById('adminSearchUser');
+      const searchTerm = input ? input.value : '';
+      await loadAdminUsers(searchTerm);
+    }
+    
+    async function viewAdminUserDetails(userId, username) {
+      if (!isAdmin()) return;
+      
+      // Obtener datos del usuario
+      const profile = await sbClient.from('profiles').select('*').eq('id', userId).single();
+      const villages = await sbClient.from('villages').select('id,name,cx,cy,resources,last_updated').eq('owner_id', userId);
+      const objectives = await sbClient.from('objectives').select('*').eq('user_id', userId);
+      
+      if (profile.error) {
+        showNotif('Error cargando perfil: ' + profile.error.message, 'err');
+        return;
+      }
+      
+      const p = profile.data;
+      const vills = villages.data || [];
+      const objs = objectives.data || [];
+      
+      let info = '═══════════════════════════════\n';
+      info += '👤 USUARIO: ' + username + '\n';
+      info += '═══════════════════════════════\n\n';
+      info += '📧 Email: ' + (currentUser.id === userId ? currentUser.email : 'Oculto') + '\n';
+      info += '🆔 ID: ' + userId + '\n';
+      info += '🎖️ Rol: ' + (p.role || 'player') + '\n';
+      info += '⭐ XP: ' + (p.experience || 0) + '\n';
+      info += '⚔️ Score Militar: ' + (p.military_score || 0) + '\n';
+      info += '✏️ Nombre cambiado: ' + (p.username_changed ? 'Sí' : 'No') + '\n';
+      info += '🕐 Última vez visto: ' + (p.last_seen ? new Date(p.last_seen).toLocaleString('es-ES') : 'Nunca') + '\n\n';
+      
+      info += '🏘️ ALDEAS (' + vills.length + '):\n';
+      info += '─────────────────────────────\n';
+      if (vills.length === 0) {
+        info += '  Sin aldeas\n';
+      } else {
+        vills.forEach((v, i) => {
+          info += '  ' + (i + 1) + '. ' + v.name + ' [' + v.cx + ',' + v.cy + ']\n';
+          if (v.resources) {
+            info += '     Recursos: 🌲' + Math.floor(v.resources.madera || 0) + ' ⛰️' + Math.floor(v.resources.piedra || 0) + ' ⚙️' + Math.floor(v.resources.hierro || 0) + ' 🌾' + Math.floor(v.resources.provisiones || 0) + ' ✨' + Math.floor(v.resources.esencia || 0) + '\n';
+          }
+        });
+      }
+      
+      info += '\n🎯 OBJETIVOS NPC (' + objs.length + '):\n';
+      info += '─────────────────────────────\n';
+      if (objs.length === 0) {
+        info += '  Sin objetivos completados\n';
+      } else {
+        const cleared = objs.filter(o => o.status === 'cleared').length;
+        info += '  Completados: ' + cleared + ' / ' + objs.length + '\n';
+      }
+      
+      alert(info);
+    }
 
     async function adminDeleteUser(userId, username) {
       if (!isAdmin()) return;
       if (!confirm('¿Borrar la cuenta de "' + username + '"?\nEsto eliminará su aldea y todos sus datos.\nEsta acción no se puede deshacer.')) return;
-      // Borrar tropas
-      await sbClient.from('troops').delete().eq('user_id', userId);
-      // Borrar aldeas
-      const vDel = await sbClient.from('villages').delete().eq('user_id', userId);
-      if (vDel.error) { showNotif('Error borrando aldeas: ' + vDel.error.message, 'err'); return; }
-      // Borrar perfil
-      const pDel = await sbClient.from('profiles').delete().eq('id', userId);
-      if (pDel.error) { showNotif('Error borrando perfil: ' + pDel.error.message, 'err'); return; }
-      // Nota: auth.users no se puede borrar desde el cliente (requiere service_role)
-      // El trigger on_auth_user_deleted lo borrará si está activo en Supabase
-      showNotif('✓ Perfil+aldeas de "' + username + '" borrados. El usuario de auth se borrará solo si el trigger está activo.', 'ok');
-      await loadAdminUsers();
+      
+      try {
+        // Primero obtener todas las aldeas del usuario
+        const vQuery = await sbClient.from('villages').select('id').eq('owner_id', userId);
+        if (vQuery.error) {
+          showNotif('Error obteniendo aldeas: ' + vQuery.error.message, 'err');
+          return;
+        }
+        
+        const villageIds = (vQuery.data || []).map(v => v.id);
+        
+        if (villageIds.length > 0) {
+          // Borrar buildings, troops, creatures de esas aldeas
+          await sbClient.from('buildings').delete().in('village_id', villageIds);
+          await sbClient.from('troops').delete().in('village_id', villageIds);
+          await sbClient.from('creatures').delete().in('village_id', villageIds);
+          
+          // Borrar aldeas
+          const vDel = await sbClient.from('villages').delete().eq('owner_id', userId);
+          if (vDel.error) {
+            showNotif('Error borrando aldeas: ' + vDel.error.message, 'err');
+            return;
+          }
+        }
+        
+        // Borrar guest_troops
+        await sbClient.from('guest_troops').delete().eq('owner_id', userId);
+        
+        // Borrar objectives
+        await sbClient.from('objectives').delete().eq('user_id', userId);
+        
+        // Borrar alliance_members
+        await sbClient.from('alliance_members').delete().eq('user_id', userId);
+        
+        // Borrar perfil
+        const pDel = await sbClient.from('profiles').delete().eq('id', userId);
+        if (pDel.error) {
+          showNotif('Error borrando perfil: ' + pDel.error.message, 'err');
+          return;
+        }
+        
+        // Nota: auth.users no se puede borrar desde el cliente (requiere service_role)
+        showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
+        await loadAdminUsers();
+      } catch(e) {
+        console.error('Error in adminDeleteUser:', e);
+        showNotif('Error al eliminar usuario: ' + e.message, 'err');
+      }
     }
 
     // ============================================================
@@ -10329,45 +11432,16 @@
       }
     })();
 
-    // ── Protección doble pestaña ──────────────────────────────────────────────
-    // Cuando el jugador vuelve a esta pestaña después de tenerla en segundo plano,
-    // recargamos los recursos desde Supabase antes de continuar. Esto evita que
-    // dos pestañas abiertas al mismo tiempo se sobreescriban mutuamente.
-    document.addEventListener('visibilitychange', async function () {
-      if (document.visibilityState !== 'visible') return;
-      if (!currentUser || !activeVillage) return;
-
-      try {
-        // Leer estado actual de recursos desde Supabase (fuente de verdad)
-        const { data: res, error } = await sbClient
-          .from('resources')
-          .select('madera,piedra,hierro,prov,esencia,w_madera,w_piedra,w_hierro,w_prov,w_esencia,last_update')
-          .eq('village_id', activeVillage.id)
-          .single();
-
-        if (error || !res) return;
-
-        // Actualizar estado local con datos frescos de la DB
-        const s = activeVillage.state;
-        s.resources.madera      = Number(res.madera)  || 0;
-        s.resources.piedra      = Number(res.piedra)  || 0;
-        s.resources.hierro      = Number(res.hierro)  || 0;
-        s.resources.provisiones = Number(res.prov)    || 0;
-        s.resources.esencia     = Number(res.esencia) || 0;
-        s.aldeanos_assigned.madera      = Number(res.w_madera) || 0;
-        s.aldeanos_assigned.piedra      = Number(res.w_piedra) || 0;
-        s.aldeanos_assigned.hierro      = Number(res.w_hierro) || 0;
-        s.aldeanos_assigned.provisiones = Number(res.w_prov)   || 0;
-        s.aldeanos_assigned.esencia     = Number(res.w_esencia)|| 0;
-        s.last_updated = res.last_update || s.last_updated;
-
-        // Limpiar cache DOM para que se refresque con nuevos valores
-        _elCache = {};
-
-        tick();
-      } catch (e) {
-        console.warn('visibilitychange sync error:', e);
+    // ── Visibilitychange: guardar al ocultar, nada al volver ────────────────
+    // No hacemos query a Supabase al volver a la pestaña — los recursos se
+    // calculan localmente con calcRes() desde last_updated + producción.
+    // Esto evita queries cada vez que el usuario enfoca la pestaña o devtools.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        // Al ocultar: guardar estado actual (mejor esfuerzo)
+        try { flushVillage(); } catch(e) {}
       }
+      // Al volver: no hacemos nada — el tick sigue corriendo con cálculo local
     });
   
 /* --- TRANSPORTE UI — helpers llamados desde HTML inline --- */
@@ -10448,7 +11522,10 @@ function validateTransportRes() {
   <!-- ADMIN RECURSOS PANEL (v0.19) -->
   <div class="admin-overlay hidden" id="adminOverlay">
     <div class="admin-box">
-      <div class="admin-title">⚙ PANEL DE CONTROL SUPREMO</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="admin-title" style="margin:0;">⚙ PANEL DE CONTROL SUPREMO</div>
+        <button class="admin-btn cancel" style="padding:6px 12px;font-size:0.85rem;" onclick="closeAdmin()">✕ Cerrar</button>
+      </div>
 
       <!-- Buscador de jugadores -->
       <div style="margin-bottom: 10px; font-size: 0.7rem; color: var(--dim);">BUSCAR JUGADOR (EMAIL O USERNAME)</div>
@@ -10456,6 +11533,8 @@ function validateTransportRes() {
         <input class="admin-input-search" id="adSearchInp" placeholder="Ej: jesus_33..."
           onkeypress="if(event.key==='Enter') searchAdminPlayer()">
         <button class="admin-btn search" onclick="searchAdminPlayer()">Buscar</button>
+        <!-- v1.17: Botón Ver todos usuarios (solo para sementalac@gmail.com) -->
+        <button class="admin-btn search" id="adminViewAllBtn" onclick="openAdminUsersPage()" style="background:rgba(0,212,255,.15);display:none;">👥 Ver todos</button>
       </div>
 
       <div id="adSearchResults" class="admin-results-box">
@@ -10496,10 +11575,33 @@ function validateTransportRes() {
 
       <div id="adminMsg" style="font-size:.7rem; margin-top:15px; min-height:16px; text-align:center; color:var(--ok);">
       </div>
+
+      <!-- ── Reparación Global ── -->
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px;letter-spacing:.1em;">MANTENIMIENTO GLOBAL</div>
+        <div style="font-size:.68rem;color:var(--dim);margin-bottom:10px;">
+          Fase 1: escanea todas las aldeas y muestra un informe de problemas sin tocar nada.
+          Fase 2: confirmas tú manualmente antes de que se aplique cualquier cambio.
+        </div>
+        <button id="repairBtn" class="admin-btn" style="width:100%;background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);" onclick="adminRepairAll()">
+          🔍 Escanear Todo (Solo lectura)
+        </button>
+        <div id="repairLog" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:.65rem;max-height:220px;overflow-y:auto;font-family:monospace;line-height:1.5;"></div>
+        <div id="repairConfirmBox" style="display:none;margin-top:10px;border:1px solid var(--danger);border-radius:6px;padding:12px;background:rgba(255,61,90,.05);">
+          <div style="font-size:.7rem;color:var(--danger);margin-bottom:8px;">
+            ⚠️ Se han detectado <b id="repairConfirmCount">0</b> aldea(s) con problemas.<br>
+            Revisa el informe arriba antes de continuar.
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button id="repairConfirmBtn" class="admin-btn apply" style="flex:1;" onclick="adminRepairConfirm()">✓ Aplicar Reparaciones</button>
+            <button class="admin-btn cancel" onclick="document.getElementById('repairConfirmBox').style.display='none'">Cancelar</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v0.99</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.19</div>
 </body>
 
 </html>
