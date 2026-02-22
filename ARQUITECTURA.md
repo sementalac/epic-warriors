@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.0 — Última actualización: v0.98
+> Versión del documento: 1.3 — Última actualización: v1.08
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -143,7 +143,172 @@ La muralla es un **escudo con HP propio**, no un bonus a las tropas.
 
 ---
 
+## VARIABLES GLOBALES — BLOQUE CANÓNICO
+
+Todas las variables de estado del juego **deben declararse explícitamente** en el bloque canónico de globales, ubicado justo después de la inicialización de Supabase (~línea 3000 del HTML). Este bloque es la única fuente de verdad para las variables globales.
+
+**Variables actuales del bloque canónico (v1.00):**
+
+```javascript
+let currentUser      = null;     // usuario autenticado de Supabase
+let myVillages       = [];       // aldeas del jugador (cargadas al login)
+let activeVillage    = null;     // objeto completo de la aldea activa
+let activeVillageId  = null;     // id sincronía logout/doLogin
+let allVillages      = [];       // todas las aldeas del mapa (carga diferida)
+
+let uiTimer       = null;        // setInterval del tick visual (1s)
+let autoSaveTimer = null;        // LEGACY — declarado para compatibilidad con doLogout()
+
+let isFlushing   = false;        // guard: flushVillage en vuelo
+let pendingFlush = false;        // guard: flush pendiente tras el actual
+let _stateDirty  = false;        // hay cambios en memoria sin guardar
+
+let _missionWatchScheduled = false; // resolveMissions ya en vuelo — no relanzar
+```
+
+**Regla:** Cualquier variable usada en `tick()` o en funciones llamadas desde `tick()` **debe estar declarada en este bloque** antes del primer `setInterval(tick, 1000)`. Una variable no declarada aquí produce `ReferenceError` en el primer frame, bloqueando el login.
+
+---
+
 ## CHANGELOG
+
+### v1.08 — Corrección de renderizado de mensajes del sistema y mejora de UX en DM
+
+**Bug 1 cerrado:** Los mensajes del sistema (reportes de batalla, espionaje) aparecían completamente vacíos en la interfaz. Al hacer clic se expandían pero no mostraban ningún contenido.
+
+**Causa raíz:**
+1. `parseMessageBody()` no manejaba correctamente casos edge:
+   - Si `rawBody` era `null` o `undefined`, el código fallaba
+   - Si el JSON parseado tenía `title` o `body` vacíos/undefined, los devolvía tal cual
+   - No había fallback para casos donde el parseo JSON fallaba silenciosamente
+   
+2. El renderizado del body no tenía fallback cuando `parsed.body` estaba vacío
+3. La detección de formato legacy (primera línea como título) era frágil
+
+**Fix aplicado:**
+1. **Mejorado `parseMessageBody()`**:
+   - Validación inicial: si `rawBody` es falsy, retornar objeto con valores por defecto
+   - Parseo JSON: verificar que AMBOS `title` y `body` existan antes de aceptar
+   - Fallback explícito: si cualquier valor está vacío, usar "Informe del sistema" como título
+   - Detección de timestamp: si la primera línea es una fecha (formato DD/MM/YYYY), usar la segunda línea como título
+   - Logging de errores de parseo para debug
+   
+2. **Mejorado renderizado del body**:
+   - Si `parsed.body` está vacío o es falsy, mostrar "Sin detalles adicionales" en lugar de contenido vacío
+   - Verificación doble: primero if(parsed.body), luego if(b) después del trim
+   
+**Resultado:** Los reportes de batalla y espionaje ahora se muestran correctamente con su título y contenido completo.
+
+**Bug 2 cerrado (UX):** En mensajes directos (DM), el header solo mostraba "Mensaje directo" genérico en lugar del nombre del usuario con quien hablas.
+
+**Causa raíz:** La función `openThread()` pasaba un título hardcodeado sin consultar quién era el otro usuario en el thread.
+
+**Fix aplicado:**
+1. **Mejorado `openThread()`** para obtener el nombre del otro usuario:
+   - Query a `thread_members` con join a `profiles` para obtener usernames
+   - Filtrar para encontrar el miembro que NO es el usuario actual
+   - Mostrar "DM con [username]" en el header
+   - Fallback a "Mensaje directo" si falla la query
+   
+2. **Guardado de `currentThreadType`** para uso posterior en `loadThreadMessages()`
+
+**Resultado:** Los DM ahora muestran claramente con quién estás hablando en el header del chat.
+
+**Partes modificadas:**
+- `parseMessageBody()` — robustez mejorada con validaciones y fallbacks
+- Renderizado de mensajes del sistema — fallback para body vacío
+- `openThread()` — obtención del nombre del otro usuario en DM
+
+**Partes NO modificadas:** `resolveMissions()`, `tick()`, `scheduleSave()`, `flushVillage()`, `saveVillage()`, `simulateBattle()`, esquema Supabase, `game-data.js`, bloque canónico de globales, `escapeJs()`.
+
+---
+
+### v1.07 — Corrección crítica: misiones de retorno bloqueadas + errores de sintaxis en mensajes
+
+**Bug 1 cerrado:** Las misiones de tipo `'return'` (tropas volviendo de batalla/espionaje) no se estaban resolviendo al llegar a su `finish_at`, causando que las tropas quedaran atascadas indefinidamente en tránsito.
+
+**Causa raíz:** En `resolveMissions()`, el procesamiento de misiones de tipo `'return'` estaba ubicado **fuera del bloque try-catch principal** de ejecución de misiones. Cuando una misión de retorno llegaba a su `finish_at`:
+
+1. Entraba en el bloque `if (now >= finish)` (línea 5014)
+2. Pasaba por todos los `else if` de tipos específicos (spy, attack, found, etc.) sin coincidir
+3. Llegaba al código de líneas 5051-5085 que **creaba una nueva misión de retorno** en lugar de procesarla
+4. La misión original nunca se eliminaba de la cola
+
+El código duplicado en líneas 5086-5209 (`else if (m.type === 'return' && now >= finish)`) **nunca se ejecutaba** porque estaba en un `else if` inalcanzable — ya dentro del bloque que comprobaba `now >= finish`.
+
+**Fix aplicado para Bug 1:**
+1. **Movido el procesamiento completo de `type === 'return'`** (líneas 5086-5209) **dentro del bloque try-catch** de ejecución de misiones, como un nuevo `else if` después de `return_reinforce`
+2. **Eliminado el código duplicado** que estaba en el lugar incorrecto
+3. **Añadido `continue`** al final del bloque de retorno para descartar la misión tras procesarla
+4. **Simplificado el `else` final** para solo añadir misiones pendientes a `remaining`
+
+**Resultado:** Ahora las tropas que regresan se procesan correctamente, devolviendo las tropas (respetando capacidad de barracas), aplicando botín, enviando informe al jugador, y eliminando la misión de la cola.
+
+**Bug 2 cerrado (UX):** El panel de control supremo (admin) no tenía botón de cerrar accesible.
+
+**Fix:** Añadido botón `✕ Cerrar` en la esquina superior derecha del panel, junto al título, siempre visible independientemente del estado de edición.
+
+**Bug 3 cerrado (crítico):** `Uncaught SyntaxError: Invalid or unexpected token` en la sección de mensajes. El juego no cargaba la interfaz de mensajes y mostraba errores de sintaxis en consola.
+
+**Causa raíz:** 
+1. Uso de `setAttribute('onclick', 'toggleMsgExpand(' + m.id + ')')` en lugar de asignación directa de eventos → generaba HTML con sintaxis incorrecta
+2. Nombres de usuarios y aldeas con comillas simples (ej: "O'Brien", "L'aldea") insertados directamente en atributos `onclick` sin escapar → rompían la sintaxis JavaScript inline
+3. `escapeHtml()` no es adecuada para strings en atributos onclick — convierte `'` a `&#39;` que funciona en HTML pero no en JavaScript
+
+**Fix aplicado para Bug 3:**
+1. **Nueva función `escapeJs(str)`** para escapar correctamente strings que van dentro de JavaScript inline (atributos onclick):
+   - Escapa backslashes: `\` → `\\`
+   - Escapa comillas simples: `'` → `\'`
+   - Escapa comillas dobles: `"` → `\"`
+   - Escapa saltos de línea: `\n` → `\\n`
+   
+2. **Eliminado `setAttribute('onclick')`** en `loadThreadMessages()`:
+   - Línea 9861: ahora usa `row.onclick = function() { toggleMsgExpand(m.id); };`
+   - Línea 9892: mismo cambio para mensajes DM/alianza
+   
+3. **Todos los nombres en onclick ahora usan `escapeJs()`**:
+   - `openMapDM()` — líneas 7360, 7380: `escapeJs(ownerName)`
+   - `openMoveModal()` — líneas 7347, 7358, 7625: `escapeJs(vname2)`, `escapeJs(allyVname)`, `escapeJs(destVillageName)`
+   - `openTransportModal()` — líneas 7348, 7359, 7918: `escapeJs(vname2)`, `escapeJs(allyVname)`, `escapeJs(destVillageName)`
+   - `moveStep2()` — línea 7478: `escapeJs(destVillageName)`
+   - `transportStep2()` — línea 7812: `escapeJs(destVillageName)`
+
+**Resultado:** Los mensajes ahora cargan correctamente sin errores de sintaxis, incluso cuando los nombres de usuarios/aldeas contienen caracteres especiales.
+
+**Partes modificadas:**
+- `resolveMissions()` — reestructurada lógica de tipos de misión
+- `loadThreadMessages()` — reemplazado setAttribute por asignación directa de eventos
+- HTML del panel de control supremo — añadido botón de cierre
+- Nueva función `escapeJs()` — añadida después de `escapeHtml()`
+- Todos los onclick con nombres de usuarios/aldeas — ahora usan `escapeJs()`
+
+**Partes NO modificadas:** `tick()`, `scheduleSave()`, `flushVillage()`, `saveVillage()`, `simulateBattle()`, esquema Supabase, `game-data.js`, bloque canónico de globales.
+
+**Reglas del sistema preservadas:**
+- **Modelo evento-reactivo:** `resolveMissions` sigue siendo reactivo, solo se llama cuando un `finish_at` llega a cero en el tick local
+- **Guardado por eventos:** El procesamiento de retornos dispara `scheduleSave()` al modificar el estado
+- **Capacidad de barracas:** Se respeta estrictamente al devolver tropas, aplicando las leyes de v0.95-v1.00
+- **Recursos:** Botín se aplica respetando límites de almacén, esencia sin límite
+- **Escapado de HTML vs JS:** `escapeHtml()` para contenido mostrado, `escapeJs()` para atributos onclick/JavaScript inline
+
+---
+
+### v1.00 — Corrección ReferenceError al login
+
+**Bug cerrado:** `initGame error: ReferenceError: _missionWatchScheduled is not defined at tick`
+
+**Causa raíz:** En v0.98 se diseñaron `_missionWatchScheduled`, `_stateDirty` y se documentaron en ARQUITECTURA.md, pero nunca se añadieron al bloque canónico de globales del HTML. `activeVillageId` tenía el mismo problema. `tick()` se lanza desde `switchVillage()` dentro de `initGame()` — el primer frame del juego — y ya referenciaba estas variables sin declararlas.
+
+**Fix:**
+- Añadidas `let activeVillageId`, `let _stateDirty`, `let _missionWatchScheduled` al bloque canónico
+- Bloque de globales reescrito con comentarios de sección para guiar adiciones futuras
+- Versión actualizada en `<title>` y `#versionFooter` → `v1.00`
+
+**Decisión técnica:** `autoSaveTimer` se mantiene declarado aunque el modelo reactivo ya no usa autoSave en bucle. `doLogout()` llama `clearInterval(autoSaveTimer)` — eliminarlo rompería el logout sin necesidad.
+
+**Partes no modificadas:** `tick()`, `resolveMissions()`, `scheduleSave()`, `flushVillage()`, `saveVillage()`, `simulateBattle()`, esquema Supabase, `game-data.js`.
+
+---
 
 ### v0.98 — Modelo evento-reactivo (actual)
 - **Eliminados todos los `setInterval` de red** (autoSave cada 60s, checkIncomingAttacks cada 30s, processRecalls cada 5min, updateLastSeen cada 5min)
@@ -184,12 +349,12 @@ Cada vez que se genera una nueva versión del juego, **deben actualizarse los tr
 
 | Qué | Dónde | Ejemplo |
 |---|---|---|
-| **Nombre del archivo** | El propio `.html` | `epic-warriors-v0_98.html` |
-| **Pestaña del navegador** | `<title>` en la línea ~7 del HTML | `<title>Epic Warriors Online v0.98</title>` |
-| **Pie de página del juego** | `<div id="versionFooter">` en la línea ~10286 | `EPIC WARRIORS v0.98` |
+| **Nombre del archivo** | El propio `.html` | `epic-warriors-v1_08.html` |
+| **Pestaña del navegador** | `<title>` en la línea ~7 del HTML | `<title>Epic Warriors Online v1.08</title>` |
+| **Pie de página del juego** | `<div id="versionFooter">` en la línea ~10834 | `EPIC WARRIORS v1.08` |
 
-**Formato de versión:** `v0.XX` con dos dígitos (v0.98, v0.99, v1.00...).
-El nombre de archivo usa guión bajo: `v0_98`. El título y el footer usan punto: `v0.98`.
+**Formato de versión:** `v1.XX` con dos dígitos (v1.00, v1.01, v1.07, v1.08...).
+El nombre de archivo usa guión bajo: `v1_08`. El título y el footer usan punto: `v1.08`.
 
 ---
 
@@ -203,6 +368,8 @@ El nombre de archivo usa guión bajo: `v0_98`. El título y el footer usan punto
 6. **`game-data.js` debe estar en el mismo directorio que el HTML** para que GitHub Pages lo sirva correctamente.
 7. **Supabase es la única fuente de verdad persistente.** Nunca usar `localStorage` para estado de juego.
 8. **GitHub Pages es el único hosting.** No introducir dependencias de servidor.
+9. **Toda variable usada en `tick()` debe declararse en el bloque canónico de globales.** Una variable no declarada produce `ReferenceError` en el primer frame del juego, bloqueando el login. Ver sección *VARIABLES GLOBALES — BLOQUE CANÓNICO*.
+10. **Escapado de strings:** Usar `escapeHtml()` para contenido HTML renderizado, **usar `escapeJs()` para strings dentro de atributos onclick o JavaScript inline**. No usar `escapeHtml()` en onclick — causa errores de sintaxis cuando el string contiene comillas simples.
 
 ---
 
@@ -216,3 +383,4 @@ El nombre de archivo usa guión bajo: `v0_98`. El título y el footer usan punto
 | `resolveQueue` / `resolveMissions` | Lógica de colas con timestamps — errores corrompen estado |
 | Esquema de tablas Supabase | Cambios de columnas requieren migración SQL coordinada |
 | `TROOP_TYPES` / `CREATURE_TYPES` | Son fuente de verdad para combate, coste y producción |
+| Bloque canónico de globales | Añadir variables aquí sin declararlas rompe `tick()` en el primer frame |
