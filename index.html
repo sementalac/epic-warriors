@@ -3,8 +3,9 @@
 
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.19</title>
+  <title>Epic Warriors Online v1.23</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2972,6 +2973,10 @@
 
           <!-- MIEMBRO ACTIVO (no l&#xED;der) -->
           <div id="alMemberPanel" style="display:none;">
+            <div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent);">
+              <div class="h2" style="margin-bottom:6px;">📢 Tablón de anuncios</div>
+              <div id="alAnnouncementDisplay" class="muted" style="font-size:.8rem;line-height:1.5;white-space:pre-wrap;min-height:32px;">Sin anuncios.</div>
+            </div>
             <div class="grid2">
               <div class="card">
                 <div class="h2">Miembros</div>
@@ -3005,6 +3010,13 @@
               </div>
               <div id="alInviteMsg" class="muted" style="margin-top:8px;min-height:16px;"></div>
             </div>
+            <div class="card" style="margin-top:14px;border-left:3px solid var(--accent);">
+              <div class="h2" style="margin-bottom:6px;">📢 Tablón de anuncios</div>
+              <div class="muted" style="font-size:.72rem;margin-bottom:8px;">Visible para todos los miembros al entrar en Alianzas.</div>
+              <textarea id="alAnnouncementInput" class="input" rows="3" placeholder="Escribe un anuncio para tu alianza…" style="width:100%;resize:vertical;font-family:VT323,monospace;font-size:.85rem;line-height:1.4;"></textarea>
+              <button class="btn" style="margin-top:8px;" onclick="saveAllianceAnnouncement()">💾 Guardar anuncio</button>
+              <div id="alAnnouncementMsg" class="muted" style="margin-top:6px;min-height:14px;font-size:.72rem;"></div>
+            </div>
             <div class="card" style="margin-top:14px;">
               <div class="h2">Acciones de l&#xED;der</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -3020,6 +3032,11 @@
               <div id="alPendingStatusBox" class="muted">Cargando&#x2026;</div>
               <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;" id="alPendingActions"></div>
             </div>
+          </div>
+          <!-- v1.22: Ranking colectivo de alianzas -->
+          <div class="card" style="margin-top:14px;">
+            <div class="h2">🏆 Ranking de alianzas</div>
+            <div id="allianceRankingBox" class="muted" style="margin-top:8px;">Cargando&#x2026;</div>
           </div>
         </div>
 
@@ -3187,7 +3204,7 @@
     // Rango de visión/ataque (distancia Chebyshev en casillas del mapa)
     function getTorreRange(blds) {
       var lvl = (blds && blds.torre && blds.torre.level) || 0;
-      return lvl * 5;
+      return lvl * 10; // v1.21: nivel 1=10, +10 por nivel
     }
 
     // TROOP_TYPES — stats alineados con battle-simulator-v0_1
@@ -3524,7 +3541,7 @@
 
       {
         id: 'torre', name: 'Torre de Vigía', icon: '🗼',
-        desc: 'Controla el alcance de tu aldea. Nivel 1 = 5 casillas de alcance, +5 por nivel. Sin Torre no puedes atacar, espiar ni fundar nuevas aldeas.',
+        desc: 'Controla el alcance de tu aldea. Nivel 1 = 10 casillas de alcance, +10 por nivel. El alcance es circular (radio real). Sin Torre no puedes atacar, espiar ni fundar nuevas aldeas.',
         prod: function () { return {}; },
         cost: function (l) {
           return l === 0
@@ -4675,7 +4692,7 @@
         var range = getTorreRange(v.state.buildings);
         if (range === 0) continue;
         var mx = v.x || 0, my = v.y || 0;
-        if (Math.max(Math.abs(tx - mx), Math.abs(ty - my)) <= range) return true;
+        if (Math.sqrt(Math.pow(tx - mx, 2) + Math.pow(ty - my, 2)) <= range) return true; // v1.21: distancia euclídea (círculo real)
       }
       return false;
     }
@@ -5856,6 +5873,7 @@
 
       tick();
       showNotif('¡Bienvenido, comandante!', 'ok');
+      checkAndShowMOTD();
 
       if (isAdmin()) {
         showNotif('🔒 Modo Admin Detectado', 'accent');
@@ -7139,6 +7157,14 @@
     }
 
     function openMissionModal(type, targetId, x, y) {
+      // v1.22: Bloquear ataques/espionaje a aliados por código
+      if (type === 'attack' || type === 'spy') {
+        var targetVill = allVillages.find(function(v) { return v.id === targetId; });
+        if (targetVill && _allyUserIds && _allyUserIds.has(targetVill.owner_id)) {
+          showNotif('⚠️ No puedes ' + (type === 'attack' ? 'atacar' : 'espiar') + ' a un aliado.', 'err');
+          return;
+        }
+      }
       if (!activeVillage) return;
       var vs = activeVillage.state;
       var res = calcRes(vs);
@@ -9117,7 +9143,7 @@
             plines = '<div class="pl" style="color:var(--esencia)">✨ ' + fmt(bProd.esencia) + '/h base'
               + (wk ? ' <span style="color:var(--aldeanos)">+' + fmt(bBonus.esencia) + '/ald × ' + wk + ' = <b>' + fmt(totE) + '/h total</b></span>' : '') + '</div>';
           } else if (id === 'torre') {
-            var range = lvl * 5;
+            var range = lvl * 10;
             plines = lvl === 0
               ? '<div class="pl" style="color:var(--danger)">Sin alcance</div>'
               : '<div class="pl" style="color:var(--accent)">👁️ ' + range + ' casillas de alcance</div>';
@@ -9209,10 +9235,10 @@
         var total = curBaseProd.esencia + wk * curBonusProd.esencia;
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;✨ Base ' + fmt(curBaseProd.esencia) + '/h' + (wk ? ' + ' + wk + ' ald. → ' + fmt(total) + '/h total' : '');
       } else if (id === 'torre') {
-        var rng = curLvl * 5;
+        var rng = curLvl * 10;
         modalSub = curLvl === 0
           ? 'Sin nivel — sin alcance. Necesitas la Torre para atacar y espiar.'
-          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;👁️ Alcance actual: <b>' + rng + ' casillas</b>';
+          : 'Nivel ' + curLvl + '&nbsp;·&nbsp;👁️ Alcance actual: <b>' + rng + ' casillas (radio circular)</b>';
       } else if (id === 'torreinvocacion') {
         var red = curLvl * 5;
         modalSub = curLvl === 0
@@ -9573,6 +9599,7 @@
         var mp = document.getElementById('alMemberPanel');
         if (mp) mp.style.display = '';
         _loadMembersList(row.alliance_id, false);
+        _loadAllianceAnnouncement(row.alliance_id);
       }
     }
 
@@ -9650,12 +9677,96 @@
     async function _loadLeaderData(allianceId) {
       await Promise.all([
         _loadMembersList(allianceId, true),
-        _loadPendingRequests(allianceId)
+        _loadPendingRequests(allianceId),
+        _loadAllianceAnnouncement(allianceId)
       ]);
+    }
+
+
+    // v1.22: Ranking colectivo de alianzas
+    async function renderAllianceRanking() {
+      var box = document.getElementById('allianceRankingBox');
+      if (!box) return;
+      box.innerHTML = '<span class="muted">Cargando…</span>';
+
+      // Reutilizar caché del ranking individual si existe
+      var rows = rankingCache ? rankingCache.data : null;
+      if (!rows) {
+        var v = await sbClient.from('ranking')
+          .select('username, military_score, alliance_tag')
+          .order('military_score', { ascending: false })
+          .limit(500);
+        rows = (!v.error && v.data && v.data.length > 0) ? v.data : [];
+      }
+
+      // Agrupar por alliance_tag
+      var alMap = {};
+      rows.forEach(function(r) {
+        if (!r.alliance_tag) return;
+        if (!alMap[r.alliance_tag]) alMap[r.alliance_tag] = { tag: r.alliance_tag, score: 0, members: 0 };
+        alMap[r.alliance_tag].score += (r.military_score || 0);
+        alMap[r.alliance_tag].members++;
+      });
+
+      var sorted = Object.values(alMap).sort(function(a,b) { return b.score - a.score; });
+
+      if (sorted.length === 0) {
+        box.innerHTML = '<span class="muted">Sin alianzas con puntuación aún.</span>';
+        return;
+      }
+
+      var html = '<div class="table"><div class="trow thead"><div>#</div><div>TAG</div><div>Miembros</div><div>Puntuación total</div></div>';
+      sorted.forEach(function(al, i) {
+        var isMyAl = window._playerAllianceTag && window._playerAllianceTag === al.tag;
+        html += '<div class="trow" style="' + (isMyAl ? 'background:rgba(0,212,255,.06);' : '') + '">'
+          + '<div style="color:var(--dim);">' + (i+1) + '</div>'
+          + '<div><b style="color:' + (isMyAl ? 'var(--accent)' : 'var(--text)') + ';">[' + escapeHtml(al.tag) + ']</b></div>'
+          + '<div style="color:var(--dim);">' + al.members + '</div>'
+          + '<div style="color:var(--ok);font-weight:bold;">' + fmt(al.score) + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+      box.innerHTML = html;
     }
 
     async function renderAlliances() {
       await refreshMyAlliance();
+      renderAllianceRanking();
+    }
+
+
+    // v1.22: Tablón de anuncios de alianza
+    async function saveAllianceAnnouncement() {
+      if (_myAllianceRole !== 'leader') { showNotif('Solo el líder puede editar el anuncio.', 'err'); return; }
+      var msg = document.getElementById('alAnnouncementMsg');
+      var text = (document.getElementById('alAnnouncementInput').value || '').trim().slice(0, 500);
+      msg.textContent = '';
+      var r = await sbClient.from('alliances').update({ announcement: text }).eq('id', _myAllianceId);
+      if (r.error) {
+        // Si la columna no existe, avisar con instrucción SQL
+        if (r.error.message && r.error.message.includes('announcement')) {
+          msg.style.color = 'var(--danger)';
+          msg.textContent = 'Ejecuta en Supabase SQL: ALTER TABLE alliances ADD COLUMN announcement text DEFAULT \'\';';
+        } else {
+          msg.style.color = 'var(--danger)';
+          msg.textContent = 'Error: ' + r.error.message;
+        }
+        return;
+      }
+      msg.style.color = 'var(--ok)';
+      msg.textContent = '✅ Anuncio guardado';
+      // Actualizar el display del miembro también
+      var display = document.getElementById('alAnnouncementDisplay');
+      if (display) display.textContent = text || 'Sin anuncios.';
+    }
+
+    async function _loadAllianceAnnouncement(allianceId) {
+      var r = await sbClient.from('alliances').select('announcement').eq('id', allianceId).maybeSingle();
+      var text = (r.data && r.data.announcement) ? r.data.announcement : '';
+      var display = document.getElementById('alAnnouncementDisplay');
+      var input = document.getElementById('alAnnouncementInput');
+      if (display) display.textContent = text || 'Sin anuncios.';
+      if (input) input.value = text;
     }
 
     async function createAlliance() {
@@ -10290,12 +10401,15 @@
           if (!isActive) this.style.background = isUnread ? 'rgba(255,255,255,.03)' : 'transparent';
         };
         
-        item.onclick = function() {
+        item.id = 'reportItem_' + msg.id;
+        item.onclick = function(e) {
+          if (e.target.type === 'checkbox') return;
           openReport(msg.id, msg.body, msg.read);
         };
         
-        item.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
-          + '<span style="font-size:1rem;">' + sStyle.icon + '</span>'
+        item.innerHTML = '<div style="display:flex;align-items:center;gap:6px;">'
+          + '<input type="checkbox" id="chk_' + msg.id + '" onclick="event.stopPropagation();toggleReportSelect(\'' + msg.id + '\')" style="width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:var(--danger);">'
+          + '<span style="font-size:1rem;flex-shrink:0;">' + sStyle.icon + '</span>'
           + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:.75rem;color:' + sStyle.color + ';font-weight:' + (isUnread ? 'bold' : 'normal') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(parsed.title) + '</div>'
           + '<div style="font-size:.6rem;color:var(--dim);margin-top:2px;">' + timeStr + '</div>'
@@ -10371,6 +10485,54 @@
       chatBox.innerHTML = html;
     }
     
+    // v1.22: Multi-select helpers para informes de sistema
+    function toggleReportSelect(msgId) {
+      var chk = document.getElementById('chk_' + msgId);
+      if (!chk) return;
+      if (chk.checked) {
+        _selectedReportIds.add(msgId);
+      } else {
+        _selectedReportIds.delete(msgId);
+      }
+      _updateReportsToolbar();
+    }
+
+    function selectAllReports(selectAll) {
+      var allChks = document.querySelectorAll('#reportsListBox input[type=checkbox]');
+      allChks.forEach(function(chk) {
+        chk.checked = selectAll;
+        var id = chk.id.replace('chk_', '');
+        if (selectAll) _selectedReportIds.add(id);
+        else _selectedReportIds.delete(id);
+      });
+      _updateReportsToolbar();
+    }
+
+    function _updateReportsToolbar() {
+      var count = _selectedReportIds.size;
+      var countEl = document.getElementById('reportsSelCount');
+      var btnEl = document.getElementById('reportsDeleteSelBtn');
+      if (countEl) countEl.textContent = count + ' seleccionado' + (count !== 1 ? 's' : '');
+      if (btnEl) btnEl.style.display = count > 0 ? 'block' : 'none';
+    }
+
+    async function deleteSelectedReports() {
+      var ids = Array.from(_selectedReportIds);
+      if (ids.length === 0) return;
+      if (!confirm('¿Eliminar ' + ids.length + ' informe(s) seleccionado(s)?')) return;
+
+      var r = await sbClient.from('messages').delete().in('id', ids);
+      if (r.error) { showNotif('Error al eliminar: ' + r.error.message, 'err'); return; }
+
+      showNotif(ids.length + ' informe(s) eliminado(s)', 'ok');
+      _selectedReportIds = new Set();
+      currentReportId = null;
+      var chatBox = document.getElementById('chatBox');
+      if (chatBox) chatBox.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--dim);text-align:center;"><div style="font-size:2rem;margin-bottom:10px;">📋</div><div style="font-size:.85rem;">Selecciona un informe<br>de la lista</div></div>';
+      await loadSystemReports();
+      await updateUnreadCount();
+    }
+
     async function deleteReport(msgId) {
       if (!confirm('¿Eliminar este informe?')) return;
       
@@ -10574,6 +10736,67 @@
     // Triple verificación: email del objeto currentUser + email del JWT de Supabase + no nulo
     // Cualquier intento de falsificación desde consola fallará porque currentUser
     // viene directamente de sbClient.auth.getUser() y se sobreescribe en cada login.
+
+    // ============================================================
+    // v1.23: MOTD — Mensaje del día del administrador
+    // Guardado en tabla 'config' (clave 'motd') en Supabase
+    // ============================================================
+    async function saveMOTD() {
+      if (!isAdmin()) return;
+      var text = (document.getElementById('motdInput').value || '').trim().slice(0, 1000);
+      var msg = document.getElementById('motdSaveMsg');
+      msg.textContent = '';
+      var r = await sbClient.from('config').upsert({ key: 'motd', value: text }, { onConflict: 'key' });
+      if (r.error) {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Error: ' + r.error.message;
+        return;
+      }
+      msg.style.color = 'var(--ok)';
+      msg.textContent = '✅ Guardado';
+      setTimeout(function(){ msg.textContent = ''; }, 3000);
+    }
+
+    async function clearMOTD() {
+      if (!isAdmin()) return;
+      if (!confirm('¿Borrar el mensaje del día?')) return;
+      await sbClient.from('config').upsert({ key: 'motd', value: '' }, { onConflict: 'key' });
+      document.getElementById('motdInput').value = '';
+      var msg = document.getElementById('motdSaveMsg');
+      msg.style.color = 'var(--ok)';
+      msg.textContent = '✅ Borrado';
+      setTimeout(function(){ msg.textContent = ''; }, 2000);
+    }
+
+    async function _loadMOTDForAdmin() {
+      if (!isAdmin()) return;
+      var r = await sbClient.from('config').select('value').eq('key', 'motd').maybeSingle();
+      if (r.data && r.data.value) {
+        var el = document.getElementById('motdInput');
+        if (el) el.value = r.data.value;
+      }
+    }
+
+    async function checkAndShowMOTD() {
+      try {
+        var r = await sbClient.from('config').select('value').eq('key', 'motd').maybeSingle();
+        if (!r.data || !r.data.value || !r.data.value.trim()) return;
+        var text = r.data.value.trim();
+        // Solo mostrar si no lo vio ya en esta sesión
+        var seen = sessionStorage.getItem('EW_motd_seen');
+        if (seen === text) return;
+        sessionStorage.setItem('EW_motd_seen', text);
+        document.getElementById('motdModalText').textContent = text;
+        document.getElementById('motdModal').style.display = 'flex';
+      } catch(e) {
+        console.warn('MOTD check error:', e);
+      }
+    }
+
+    function closeMOTD() {
+      document.getElementById('motdModal').style.display = 'none';
+    }
+
     function isAdmin() {
       if (!currentUser) return false;
       if (currentUser.email !== 'sementalac@gmail.com') return false;
@@ -10596,6 +10819,7 @@
     function openAdmin() {
       if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
       document.getElementById('adSearchInp').value = '';
+      _loadMOTDForAdmin();
       document.getElementById('adSearchResults').style.display = 'none';
       document.getElementById('adVillagesBox').style.display = 'none';
       document.getElementById('adEditBox').style.display = 'none';
@@ -10803,7 +11027,9 @@
           if (!trpRow || !bldRow) continue;
 
           var barrLvl = bldRow.barracas || 1;
-          var barrCap = barrLvl === 0 ? 0 : 50 + (barrLvl - 1) * 20;
+          // v1.20: usar getBarracksCapacity para consistencia con la fórmula exponencial
+          var _fakeBldScan = { barracas: { level: barrLvl } };
+          var barrCap = getBarracksCapacity(_fakeBldScan);
           var otherSlots = 0;
           Object.keys(TROOP_TYPES).forEach(function(k) {
             if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
@@ -11598,10 +11824,34 @@ function validateTransportRes() {
           </div>
         </div>
       </div>
+
+      <!-- v1.23: Mensaje del día (MOTD) -->
+      <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+        <div style="font-size:.7rem;color:var(--dim);letter-spacing:.08em;margin-bottom:8px;">📢 MENSAJE DEL DÍA (visible para todos al entrar)</div>
+        <textarea id="motdInput" rows="3" placeholder="Escribe un mensaje para todos los jugadores…"
+          style="width:100%;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:VT323,monospace;font-size:.85rem;padding:8px;resize:vertical;box-sizing:border-box;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button class="admin-btn search" onclick="saveMOTD()" style="background:rgba(0,212,255,.15);">💾 Guardar mensaje</button>
+          <button class="admin-btn cancel" onclick="clearMOTD()" style="font-size:.7rem;">🗑 Borrar mensaje</button>
+          <span id="motdSaveMsg" style="font-size:.7rem;color:var(--ok);"></span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.19</div>
+  <!-- v1.23: Modal MOTD para jugadores -->
+  <div id="motdModal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;">
+    <div style="background:var(--panel);border:1px solid var(--accent);border-radius:10px;padding:24px;max-width:480px;width:90%;font-family:VT323,monospace;box-shadow:0 0 40px rgba(0,212,255,.2);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <span style="font-size:1.6rem;">📢</span>
+        <div style="font-size:1.1rem;color:var(--accent);letter-spacing:.06em;">MENSAJE DEL ADMINISTRADOR</div>
+      </div>
+      <div id="motdModalText" style="font-size:.9rem;color:var(--text);line-height:1.6;white-space:pre-wrap;padding:12px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:6px;margin-bottom:16px;"></div>
+      <button onclick="closeMOTD()" style="width:100%;padding:10px;background:rgba(0,212,255,.15);border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-family:VT323,monospace;font-size:1rem;cursor:pointer;letter-spacing:.06em;">✓ ENTENDIDO</button>
+    </div>
+  </div>
+
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.23</div>
 </body>
 
 </html>
