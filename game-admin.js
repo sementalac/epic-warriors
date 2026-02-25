@@ -468,6 +468,7 @@ function openAdminUsersPage() {
 // owner_id = '00000000-0000-0000-0000-000000000000' (UUID centinela ghost)
 // ============================================================
 const GHOST_OWNER_ID = '00000000-0000-0000-0000-000000000000';
+let _ghostCreating = false;
 
 function ghostToggleForm() {
   var f = document.getElementById('ghostForm');
@@ -499,14 +500,15 @@ function ghostToggleForm() {
 }
 
 async function ghostCreate() {
-  if (!isAdmin()) return;
+  if (!isAdmin() || _ghostCreating) return;
+  _ghostCreating = true;
   var name = (document.getElementById('ghostName').value || '').trim() || 'Aldea Fantasma';
   var cx   = parseInt(document.getElementById('ghostX').value) || 100;
   var cy   = parseInt(document.getElementById('ghostY').value) || 100;
   var wall = parseInt(document.getElementById('ghostWall').value) || 0;
 
   if (cx < 1 || cx > MAP_SIZE || cy < 1 || cy > MAP_SIZE) {
-    showNotif('Coordenadas fuera del mapa (1-' + MAP_SIZE + ')', 'err'); return;
+    _ghostCreating = false; showNotif('Coordenadas fuera del mapa (1-' + MAP_SIZE + ')', 'err'); return;
   }
 
   var troops = {}, creatures = {};
@@ -520,7 +522,7 @@ async function ghostCreate() {
   });
 
   if (!Object.values(troops).concat(Object.values(creatures)).some(function (n) { return n > 0; })) {
-    showNotif('Pon al menos 1 tropa', 'err'); return;
+    _ghostCreating = false; showNotif('Pon al menos 1 tropa', 'err'); return;
   }
 
   var ir = await sbClient.rpc('admin_ghost_create', {
@@ -533,9 +535,11 @@ async function ghostCreate() {
   });
 
   if (ir.error) {
+    _ghostCreating = false;
     showNotif('Error: ' + (ir.error.message || ir.error.code), 'err');
     return;
   }
+  _ghostCreating = false;
   showNotif('🏚️ Aldea fantasma "' + name + '" creada en [' + cx + ',' + cy + ']', 'ok');
   document.getElementById('ghostName').value = '';
   Object.keys(TROOP_TYPES).concat(Object.keys(CREATURE_TYPES)).forEach(function (k) {
