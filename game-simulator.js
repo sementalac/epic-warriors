@@ -345,36 +345,36 @@ function contingentCardHTML(c) {
   // Filas de tropas
   const troopRows = Object.keys(TROOPS).map(k => {
 const t = TROOPS[k];
-return `<tr>
-  <td class="t-icon">${t.icon}</td>
-  <td class="t-name">${t.name}</td>
-  <td><input class="t-input qty" type="number" id="${c.id}_qty_${k}" value="0" min="0" oninput="updateContingentSummary('${c.id}')"></td>
-  <td><input class="t-input lvl" type="number" id="${c.id}_lvl_${k}" value="1" min="1" max="100" oninput="updateContingentSummary('${c.id}')"></td>
-  <td><input class="t-input wpn" type="number" id="${c.id}_wpn_${k}" value="0" min="0" max="99" oninput="updateContingentSummary('${c.id}')"></td>
-  <td><input class="t-input arm" type="number" id="${c.id}_arm_${k}" value="0" min="0" max="99" oninput="updateContingentSummary('${c.id}')"></td>
-</tr>`;
+return \`<tr>
+  <td class="t-icon">\${t.icon}</td>
+  <td class="t-name">\${t.name}</td>
+  <td><input class="t-input qty" type="number" id="\${c.id}_qty_\${k}" value="0" min="0" oninput="updateContingentSummary('\${c.id}')"></td>
+  <td><input class="t-input lvl" type="number" id="\${c.id}_lvl_\${k}" value="1" min="1" max="100" oninput="updateContingentSummary('\${c.id}')"></td>
+  <td><input class="t-input wpn" type="number" id="\${c.id}_wpn_\${k}" value="0" min="0" max="99" oninput="updateContingentSummary('\${c.id}')"></td>
+  <td><input class="t-input arm" type="number" id="\${c.id}_arm_\${k}" value="0" min="0" max="99" oninput="updateContingentSummary('\${c.id}')"></td>
+</tr>\`;
   }).join('');
 
   // Filas de criaturas
   const creatureRows = Object.keys(CREATURES).map(k => {
 const t = CREATURES[k];
-return `<tr>
-  <td class="t-icon">${t.icon}</td>
-  <td class="t-name t-creature">${t.name}</td>
-  <td><input class="t-input c-only" type="number" id="${c.id}_qty_${k}" value="0" min="0" oninput="updateContingentSummary('${c.id}')"></td>
+return \`<tr>
+  <td class="t-icon">\${t.icon}</td>
+  <td class="t-name t-creature">\${t.name}</td>
+  <td><input class="t-input c-only" type="number" id="\${c.id}_qty_\${k}" value="0" min="0" oninput="updateContingentSummary('\${c.id}')"></td>
   <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;color:var(--dim);"></td>
   <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;color:var(--dim);"></td>
   <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;color:var(--dim);"></td>
-</tr>`;
+</tr>\`;
   }).join('');
 
-  return `<div class="contingent-band ${c.side}" id="band_${c.id}">
+  return \`<div class="contingent-band \${c.side}" id="band_\${c.id}">
 <div class="contingent-head">
-  <span class="c-badge ${c.side}">${sideLabel}</span>
-  <input class="c-name" id="name_${c.id}" value="${escAttr(c.name)}" placeholder="Nombre del contingente"
-         oninput="contingents.find(x=>x.id==='${c.id}').name=this.value">
-  <span class="c-summary" id="sum_${c.id}">0 uds</span>
-  <button class="btn-remove" onclick="removeContingent('${c.id}')">✗ Eliminar</button>
+  <span class="c-badge \${c.side}">\${sideLabel}</span>
+  <input class="c-name" id="name_\${c.id}" value="\${escAttr(c.name)}" placeholder="Nombre del contingente"
+         oninput="contingents.find(x=>x.id==='\${c.id}').name=this.value">
+  <span class="c-summary" id="sum_\${c.id}">0 uds</span>
+  <button class="btn-remove" onclick="removeContingent('\${c.id}')">✗ Eliminar</button>
 </div>
 <table class="troop-table">
   <thead><tr>
@@ -384,7 +384,7 @@ return `<tr>
     <th class="col-h-wpn">Arma</th>
     <th class="col-h-arm">Arm.</th>
   </tr></thead>
-  <tbody>${troopRows}</tbody>
+  <tbody>\${troopRows}</tbody>
 </table>
 <div class="sec-label" style="margin-top:10px;">CRIATURAS — stats fijos</div>
 <table class="troop-table">
@@ -393,13 +393,13 @@ return `<tr>
     <th class="col-h-qty">Cant.</th>
     <th></th><th></th><th></th>
   </tr></thead>
-  <tbody>${creatureRows}</tbody>
+  <tbody>\${creatureRows}</tbody>
 </table>
-<div class="c-totals" id="ctot_${c.id}">
+<div class="c-totals" id="ctot_\${c.id}">
   <span>Total: <span>0</span> unidades</span>
   <span>Poder: <span>0</span></span>
 </div>
-  </div>`;
+  </div>\`;
 }
 
 function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -408,15 +408,15 @@ function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39
 function getContingentComp(cid) {
   const comp = [];
   Object.keys(TROOPS).forEach(k => {
-const qty = parseInt(document.getElementById(`${cid}_qty_${k}`)?.value) || 0;
+const qty = parseInt(document.getElementById(\`\${cid}_qty_\${k}\`)?.value) || 0;
 if (!qty) return;
-const lvl = parseInt(document.getElementById(`${cid}_lvl_${k}`)?.value) || 1;
-const wpn = parseInt(document.getElementById(`${cid}_wpn_${k}`)?.value) || 0;
-const arm = parseInt(document.getElementById(`${cid}_arm_${k}`)?.value) || 0;
+const lvl = parseInt(document.getElementById(\`\${cid}_lvl_\${k}\`)?.value) || 1;
+const wpn = parseInt(document.getElementById(\`\${cid}_wpn_\${k}\`)?.value) || 0;
+const arm = parseInt(document.getElementById(\`\${cid}_arm_\${k}\`)?.value) || 0;
 comp.push({ key:k, data:TROOPS[k], qty, lvl, wpn, arm, isCreature:false });
   });
   Object.keys(CREATURES).forEach(k => {
-const qty = parseInt(document.getElementById(`${cid}_qty_${k}`)?.value) || 0;
+const qty = parseInt(document.getElementById(\`\${cid}_qty_\${k}\`)?.value) || 0;
 if (!qty) return;
 comp.push({ key:k, data:CREATURES[k], qty, lvl:1, wpn:0, arm:0, isCreature:true });
   });
@@ -433,10 +433,10 @@ const dmg = isCreature ? data.damage : data.damage + wpn;
 const def = isCreature ? data.defense : data.defense + arm;
 power += qty * (hp * 0.5 + dmg * data.attacksPerTurn * 3 + def * 0.5);
   });
-  const sumEl = document.getElementById(`sum_${cid}`);
-  if (sumEl) sumEl.textContent = `${total.toLocaleString()} uds · ${Math.round(power).toLocaleString()} pwr`;
-  const totEl = document.getElementById(`ctot_${cid}`);
-  if (totEl) totEl.innerHTML = `<span>Total: <span>${total.toLocaleString()}</span> unidades</span><span>Poder: <span>${Math.round(power).toLocaleString()}</span></span>`;
+  const sumEl = document.getElementById(\`sum_\${cid}\`);
+  if (sumEl) sumEl.textContent = \`\${total.toLocaleString()} uds · \${Math.round(power).toLocaleString()} pwr\`;
+  const totEl = document.getElementById(\`ctot_\${cid}\`);
+  if (totEl) totEl.innerHTML = \`<span>Total: <span>\${total.toLocaleString()}</span> unidades</span><span>Poder: <span>\${Math.round(power).toLocaleString()}</span></span>\`;
 }
 
 // ============================================================
@@ -445,7 +445,7 @@ power += qty * (hp * 0.5 + dmg * data.attacksPerTurn * 3 + def * 0.5);
 function updateWallInfo() {
   const lvl = parseInt(document.getElementById('wallLevel').value) || 0;
   document.getElementById('wallInfo').textContent =
-lvl === 0 ? 'Sin muralla' : `Nivel ${lvl} → +${lvl*2} DEF al Defensor · ${lvl*500} HP de escudo`;
+lvl === 0 ? 'Sin muralla' : \`Nivel \${lvl} → +\${lvl*2} DEF al Defensor · \${lvl*500} HP de escudo\`;
 }
 
 // ============================================================
@@ -493,7 +493,7 @@ function armyAlive(army) { return army.some(g => g.count > 0); }
 const logEl = () => document.getElementById('battleLog');
 function addLog(msg, cls = '') {
   const d = document.createElement('div');
-  d.className = `le ${cls}`; d.textContent = msg;
+  d.className = \`le \${cls}\`; d.textContent = msg;
   logEl().appendChild(d);
   logEl().scrollTop = logEl().scrollHeight;
 }
@@ -546,24 +546,24 @@ def = def.concat(buildGroups(comp, 'def', wallBonus, c.id));
 
   // ── Cabecera del log ──
   if (wallLvl > 0) {
-addLog(`🏰 MURALLA NIVEL ${wallLvl}: ${wallHP} HP de escudo — Los atacantes deben destruirla primero`, 'li');
+addLog(\`🏰 MURALLA NIVEL \${wallLvl}: \${wallHP} HP de escudo — Los atacantes deben destruirla primero\`, 'li');
 addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'ls');
   }
   atkConts.forEach(c => {
 const comp = getContingentComp(c.id);
 const total = comp.reduce((s,x)=>s+x.qty,0);
 if (!total) return;
-addLog(`⚔️ ${c.name}: ${total} unidades`, 'li');
+addLog(\`⚔️ \${c.name}: \${total} unidades\`, 'li');
 const byName = {}; comp.forEach(x => { byName[x.data.name] = (byName[x.data.name]||0) + x.qty; });
-Object.entries(byName).forEach(([n,q]) => addLog(`   · ${q}× ${n}`, 'li'));
+Object.entries(byName).forEach(([n,q]) => addLog(\`   · \${q}× \${n}\`, 'li'));
   });
   defConts.forEach(c => {
 const comp = getContingentComp(c.id);
 const total = comp.reduce((s,x)=>s+x.qty,0);
 if (!total) return;
-addLog(`🛡️ ${c.name}: ${total} unidades${wallLvl>0?' (+ muralla)':''}`, 'li');
+addLog(\`🛡️ \${c.name}: \${total} unidades\${wallLvl>0?' (+ muralla)':''}\`, 'li');
 const byName = {}; comp.forEach(x => { byName[x.data.name] = (byName[x.data.name]||0) + x.qty; });
-Object.entries(byName).forEach(([n,q]) => addLog(`   · ${q}× ${n}`, 'li'));
+Object.entries(byName).forEach(([n,q]) => addLog(\`   · \${q}× \${n}\`, 'li'));
   });
   addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'ls');
 
@@ -572,13 +572,13 @@ Object.entries(byName).forEach(([n,q]) => addLog(`   · ${q}× ${n}`, 'li'));
   let wallResisted = false;
 
   while ((armyAlive(atk) || wallHP > 0) && armyAlive(def)) {
-addLog(`🎯 TURNO ${turn}`, 'lt');
+addLog(\`🎯 TURNO \${turn}\`, 'lt');
 
 if (wallHP > 0) {
   // Atacantes golpean la muralla — defensores esperan protegidos
   const totalDmg = atk.filter(g => g.count > 0).reduce((s,g) => s + g.count * g.stats.damage * g.stats.attacksPerTurn, 0);
   wallHP = Math.max(0, wallHP - totalDmg);
-  addLog(`🏰 Atacantes golpean muralla: ${totalDmg} daño → ${wallHP} HP restantes`, 'lm');
+  addLog(\`🏰 Atacantes golpean muralla: \${totalDmg} daño → \${wallHP} HP restantes\`, 'lm');
   if (wallHP <= 0) addLog('💥 ¡MURALLA DESTRUIDA! Comienza el combate cuerpo a cuerpo.', 'lv');
 } else {
   executeTurn(atk, def);
@@ -599,20 +599,20 @@ if (turn > 300) { addLog('⚠️ Batalla detenida — límite de turnos alcanzad
   let winSide;
   if (wallResisted) {
 winSide = 'def';
-addLog(`🛡️ VICTORIA DEL DEFENSOR — La muralla resistió. ${defSurv} tropas intactas. (${turn-1} turnos)`, 'lv');
+addLog(\`🛡️ VICTORIA DEL DEFENSOR — La muralla resistió. \${defSurv} tropas intactas. (\${turn-1} turnos)\`, 'lv');
   } else if (atkSurv > 0 && defSurv === 0) {
 winSide = 'atk';
-addLog(`🎉 VICTORIA DEL ATACANTE — ${atkSurv} supervivientes. (${turn-1} turnos)`, 'lv');
+addLog(\`🎉 VICTORIA DEL ATACANTE — \${atkSurv} supervivientes. (\${turn-1} turnos)\`, 'lv');
   } else if (defSurv > 0 && atkSurv === 0) {
 winSide = 'def';
-addLog(`🛡️ VICTORIA DEL DEFENSOR — ${defSurv} supervivientes. (${turn-1} turnos)`, 'lv');
+addLog(\`🛡️ VICTORIA DEL DEFENSOR — \${defSurv} supervivientes. (\${turn-1} turnos)\`, 'lv');
   } else {
 winSide = 'draw';
-addLog(`⚔️ EMPATE — Ambos ejércitos eliminados. (${turn-1} turnos)`, 'lv');
+addLog(\`⚔️ EMPATE — Ambos ejércitos eliminados. (\${turn-1} turnos)\`, 'lv');
   }
 
   showResult(atk, def, atkSnap, defSnap, winSide, wallLvl, wallResisted, atkConts, defConts);
-  document.getElementById('logStats').textContent = `${turn-1} turnos`;
+  document.getElementById('logStats').textContent = \`\${turn-1} turnos\`;
 }
 
 function executeTurn(atk, def) {
@@ -643,13 +643,13 @@ for (let i = 0; i < group.stats.attacksPerTurn; i++) {
     const killed = target.count - newCount;
     target.count = newCount;
     addLog(
-      `${gIcon}${group.icon}${group.count}×${group.name} → ${tIcon}${target.icon}${target.name}: tirada ${roll} vs DEF ${target.stats.defense} → ${dmg} dmg → ${killed} bajas`,
+      \`\${gIcon}\${group.icon}\${group.count}×\${group.name} → \${tIcon}\${target.icon}\${target.name}: tirada \${roll} vs DEF \${target.stats.defense} → \${dmg} dmg → \${killed} bajas\`,
       isAtk ? 'la' : 'ld'
     );
-    if (target.count <= 0) addLog(`💀 ${tIcon}${target.icon}${target.name} (Grp ${target.gid}) eliminado`, 'lx');
+    if (target.count <= 0) addLog(\`💀 \${tIcon}\${target.icon}\${target.name} (Grp \${target.gid}) eliminado\`, 'lx');
   } else {
     addLog(
-      `${gIcon}${group.icon}${group.count}×${group.name} falla vs ${tIcon}${target.icon}${target.name}: ${roll} vs DEF ${target.stats.defense}`,
+      \`\${gIcon}\${group.icon}\${group.count}×\${group.name} falla vs \${tIcon}\${target.icon}\${target.name}: \${roll} vs DEF \${target.stats.defense}\`,
       'lm'
     );
   }
@@ -700,13 +700,13 @@ return names.map(name => {
   const dead = ini - fin;
   const rec  = Math.floor(dead * recRate);
   const tot  = fin + rec;
-  return `<tr>
-    <td>${st[cid][name].icon} ${name}</td>
-    <td class="rc-ini">${ini.toLocaleString()}</td>
-    <td class="rc-fin">${fin.toLocaleString()}</td>
-    <td class="rc-rec">+${rec.toLocaleString()}</td>
-    <td class="rc-tot">${tot.toLocaleString()}</td>
-  </tr>`;
+  return \`<tr>
+    <td>\${st[cid][name].icon} \${name}</td>
+    <td class="rc-ini">\${ini.toLocaleString()}</td>
+    <td class="rc-fin">\${fin.toLocaleString()}</td>
+    <td class="rc-rec">+\${rec.toLocaleString()}</td>
+    <td class="rc-tot">\${tot.toLocaleString()}</td>
+  </tr>\`;
 }).join('');
   };
 
@@ -722,13 +722,13 @@ Object.keys(st[cid] || {}).forEach(n => {
 return { ini, fin, rec, total: fin + rec };
   };
 
-  const thead = `<thead><tr>
+  const thead = \`<thead><tr>
 <th>Tropa</th>
 <th class="rc-ini">Inicio</th>
 <th class="rc-fin">Final</th>
 <th class="rc-rec">Recup.</th>
 <th class="rc-tot">Total</th>
-  </tr></thead>`;
+  </tr></thead>\`;
 
   // Banner
   const bannerCls = winSide === 'draw' ? 'draw' : winSide;
@@ -742,41 +742,41 @@ const comp = getContingentComp(c.id);
 if (!comp.length) return '';
 const t = calcTotals(c.id, atkSt, atkSurv, wallResisted, 'atk');
 const recRate = wallResisted ? 0 : recRates[c.id];
-return `<div class="res-contingent">
-  <div class="res-title atk">⚔️ ${c.name} <span style="font-size:.65rem;color:var(--dim);">recupera ${Math.round(recRate*100)}%</span></div>
-  <table class="res-troop-table">${thead}<tbody>${buildRows(c.id, atkSt, atkSurv, wallResisted, 'atk')}</tbody></table>
-  <div class="res-totals">ini <span>${t.ini.toLocaleString()}</span> · fin <span>${t.fin.toLocaleString()}</span> · rec <span>+${t.rec.toLocaleString()}</span> · total <span>${t.total.toLocaleString()}</span></div>
-</div>`;
+return \`<div class="res-contingent">
+  <div class="res-title atk">⚔️ \${c.name} <span style="font-size:.65rem;color:var(--dim);">recupera \${Math.round(recRate*100)}%</span></div>
+  <table class="res-troop-table">\${thead}<tbody>\${buildRows(c.id, atkSt, atkSurv, wallResisted, 'atk')}</tbody></table>
+  <div class="res-totals">ini <span>\${t.ini.toLocaleString()}</span> · fin <span>\${t.fin.toLocaleString()}</span> · rec <span>+\${t.rec.toLocaleString()}</span> · total <span>\${t.total.toLocaleString()}</span></div>
+</div>\`;
   }).join('');
 
   const defCards = defConts.map(c => {
 const comp = getContingentComp(c.id);
 if (!comp.length) return '';
 const t = calcTotals(c.id, defSt, defSurv, false, 'def');
-return `<div class="res-contingent">
-  <div class="res-title def">🛡️ ${c.name} <span style="font-size:.65rem;color:var(--dim);">recupera ${Math.round(recRates[c.id]*100)}%</span></div>
-  <table class="res-troop-table">${thead}<tbody>${buildRows(c.id, defSt, defSurv, false, 'def')}</tbody></table>
-  <div class="res-totals">ini <span>${t.ini.toLocaleString()}</span> · fin <span>${t.fin.toLocaleString()}</span> · rec <span>+${t.rec.toLocaleString()}</span> · total <span>${t.total.toLocaleString()}</span></div>
-</div>`;
+return \`<div class="res-contingent">
+  <div class="res-title def">🛡️ \${c.name} <span style="font-size:.65rem;color:var(--dim);">recupera \${Math.round(recRates[c.id]*100)}%</span></div>
+  <table class="res-troop-table">\${thead}<tbody>\${buildRows(c.id, defSt, defSurv, false, 'def')}</tbody></table>
+  <div class="res-totals">ini <span>\${t.ini.toLocaleString()}</span> · fin <span>\${t.fin.toLocaleString()}</span> · rec <span>+\${t.rec.toLocaleString()}</span> · total <span>\${t.total.toLocaleString()}</span></div>
+</div>\`;
   }).join('');
 
   // Wall tag
   const wallTag = wallLvl > 0
-? `<span class="wall-tag ${wallResisted ? 'resisted' : ''}">🏰 Muralla nv.${wallLvl} — ${wallResisted ? 'resistió' : 'destruida'}</span>`
+? \`<span class="wall-tag \${wallResisted ? 'resisted' : ''}">🏰 Muralla nv.\${wallLvl} — \${wallResisted ? 'resistió' : 'destruida'}</span>\`
 : '';
 
   const card = document.createElement('div');
   card.className = 'res-card';
-  card.innerHTML = `
-<div class="res-winner-banner ${bannerCls}">${bannerTxt} ${wallTag}</div>
+  card.innerHTML = \`
+<div class="res-winner-banner \${bannerCls}">\${bannerTxt} \${wallTag}</div>
 <div style="padding:8px 13px;font-size:.62rem;color:var(--dim);border-bottom:1px solid var(--border);letter-spacing:.08em;">
   ⚔ ATACANTES
 </div>
-<div class="res-contingents">${atkCards || '<div style="padding:12px;color:var(--dim);">—</div>'}</div>
+<div class="res-contingents">\${atkCards || '<div style="padding:12px;color:var(--dim);">—</div>'}</div>
 <div style="padding:8px 13px;font-size:.62rem;color:var(--dim);border-top:1px solid var(--border);border-bottom:1px solid var(--border);letter-spacing:.08em;">
   🛡 DEFENSORES
 </div>
-<div class="res-contingents">${defCards || '<div style="padding:12px;color:var(--dim);">—</div>'}</div>`;
+<div class="res-contingents">\${defCards || '<div style="padding:12px;color:var(--dim);">—</div>'}</div>\`;
   logEl().appendChild(card);
   logEl().scrollTop = logEl().scrollHeight;
 }
