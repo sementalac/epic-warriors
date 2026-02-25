@@ -3357,7 +3357,35 @@
           _returnTroopsHome(m); return;
         }
         var targetVillage = r.data;
-        var ts = typeof targetVillage.state === 'string' ? JSON.parse(targetVillage.state) : targetVillage.state;
+        var ts = typeof targetVillage.state === 'string' ? JSON.parse(targetVillage.state) : (targetVillage.state || null);
+
+        // Si ts es null (aldea fantasma o sin state blob), cargar desde tablas separadas
+        if (!ts) {
+          ts = { buildings: {}, troops: {}, creatures: {}, resources: {} };
+          var bldR = await sbClient.from('buildings').select('*').eq('village_id', m.targetId).maybeSingle();
+          if (bldR.data) {
+            Object.keys(bldR.data).forEach(function(k) {
+              if (k !== 'village_id') ts.buildings[k] = { level: bldR.data[k] || 0 };
+            });
+          }
+          var trpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
+          if (trpR.data) {
+            Object.keys(trpR.data).forEach(function(k) {
+              if (k !== 'village_id') ts.troops[k] = trpR.data[k] || 0;
+            });
+          }
+          var crtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
+          if (crtR.data) {
+            Object.keys(crtR.data).forEach(function(k) {
+              if (k !== 'village_id' && k !== 'created_at' && k !== 'updated_at') ts.creatures[k] = crtR.data[k] || 0;
+            });
+          }
+          var resR = await sbClient.from('resources').select('*').eq('village_id', m.targetId).maybeSingle();
+          if (resR.data) {
+            ts.resources = { madera: resR.data.madera || 0, piedra: resR.data.piedra || 0, hierro: resR.data.hierro || 0, oro: 0, esencia: resR.data.esencia || 0 };
+          }
+        }
+
         var wallLvl = (ts.buildings && ts.buildings.muralla && ts.buildings.muralla.level) || 0;
 
         // 2. Construir contingentes ATACANTES
@@ -3453,7 +3481,21 @@
           if (hasSurv) await sbClient.from('guest_troops').update({ troops: JSON.stringify(dRes.survivors) }).eq('id', gtId);
           else          await sbClient.from('guest_troops').delete().eq('id', gtId);
         }
-        await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', m.targetId);
+        // Guardar estado defensor: si es aldea fantasma, actualizar tablas separadas
+        if (targetVillage.owner_id === GHOST_OWNER_ID) {
+          var trpUpdate = {};
+          Object.keys(TROOP_TYPES).forEach(function(k) { trpUpdate[k] = ts.troops[k] || 0; });
+          await sbClient.from('troops').update(trpUpdate).eq('village_id', m.targetId);
+          var crtUpdate = {};
+          Object.keys(CREATURE_TYPES).forEach(function(k) { crtUpdate[k] = ts.creatures[k] || 0; });
+          await sbClient.from('creatures').update(crtUpdate).eq('village_id', m.targetId);
+          if (Object.keys(loot).length > 0) {
+            var resUpdate = { madera: ts.resources.madera || 0, piedra: ts.resources.piedra || 0, hierro: ts.resources.hierro || 0, esencia: ts.resources.esencia || 0 };
+            await sbClient.from('resources').update(resUpdate).eq('village_id', m.targetId);
+          }
+        } else {
+          await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', m.targetId);
+        }
 
         // 7. Retorno propias tropas
         var ownRes = bResult.attackerResults[0];
