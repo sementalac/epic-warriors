@@ -6,2613 +6,16 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.27</title>
+  <title>Epic Warriors Online v1.32</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Datos estáticos del juego (NPC_CASTLES) — debe cargarse antes del script principal -->
   <script src="game-data.js"></script>
-  <style>
-    :root {
-      --madera: #d4923a;
-      --piedra: #a0a8b0;
-      --hierro: #c0c8d8;
-      --prov: #6fcf7a;
-      --esencia: #c060ff;
-      --metal: var(--hierro);
-      --crystal: var(--esencia);
-      --deut: var(--prov);
-      --energy: var(--accent2);
-      --aldeanos: #ffdd60;
-      --bg: #0a0805;
-      --panel: #1a1208;
-      --panel2: #221a0e;
-      --border: #4a3520;
-      --accent: #f0c040;
-      --accent2: #60d060;
-      --text: #e8d5a0;
-      --dim: #7a6040;
-      --danger: #e04040;
-      --ok: #60d060;
-      --gold: #f0c040;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    .stars {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    .star {
-      position: absolute;
-      background: white;
-      border-radius: 50%;
-      animation: twinkle linear infinite;
-    }
-
-    @keyframes twinkle {
-
-      0%,
-      100% {
-        opacity: .2
-      }
-
-      50% {
-        opacity: 1
-      }
-    }
-
-    /* AUTH */
-    .auth-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 200;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(5, 10, 20, .97);
-    }
-
-    .auth-box {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 40px;
-      width: 380px;
-      z-index: 1;
-      box-shadow: 0 0 60px rgba(0, 212, 255, .08);
-    }
-
-    .auth-logo {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1.3rem;
-      font-weight: 900;
-      color: var(--accent);
-      text-shadow: 0 0 20px rgba(0, 212, 255, .5);
-      text-align: center;
-      margin-bottom: 6px;
-      letter-spacing: .2em;
-    }
-
-    .auth-tagline {
-      text-align: center;
-      font-size: .7rem;
-      color: var(--dim);
-      margin-bottom: 28px;
-      letter-spacing: .1em;
-    }
-
-    .auth-tabs {
-      display: flex;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      overflow: hidden;
-      margin-bottom: 20px;
-    }
-
-    .auth-tab {
-      flex: 1;
-      padding: 10px;
-      text-align: center;
-      cursor: pointer;
-      font-size: .78rem;
-      color: var(--dim);
-      transition: all .2s;
-      background: transparent;
-      border: none;
-      font-family: 'VT323', monospace;
-    }
-
-    .auth-tab.active {
-      background: rgba(0, 212, 255, .1);
-      color: var(--accent);
-    }
-
-    .auth-field {
-      margin-bottom: 14px;
-    }
-
-    .auth-label {
-      font-size: .65rem;
-      color: var(--dim);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-      display: block;
-    }
-
-    .auth-input {
-      width: 100%;
-      background: rgba(255, 255, 255, .03);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 10px 14px;
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      font-size: .85rem;
-      outline: none;
-      transition: border-color .2s;
-    }
-
-    .auth-input:focus {
-      border-color: var(--accent);
-    }
-
-    .auth-btn {
-      width: 100%;
-      padding: 12px;
-      background: rgba(0, 212, 255, .1);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      color: var(--accent);
-      font-family: 'VT323', monospace;
-      font-size: .85rem;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all .2s;
-      margin-top: 6px;
-    }
-
-    .auth-btn:hover {
-      background: rgba(0, 212, 255, .2);
-    }
-
-    .auth-btn:disabled {
-      opacity: .4;
-      cursor: not-allowed;
-    }
-
-    .auth-msg {
-      font-size: .72rem;
-      margin-top: 10px;
-      text-align: center;
-      min-height: 18px;
-    }
-
-    .auth-msg.err {
-      color: var(--danger);
-    }
-
-    .auth-msg.ok {
-      color: var(--ok);
-    }
-
-    /* GAME */
-    .game-wrapper {
-      position: relative;
-      z-index: 1;
-      display: none;
-    }
-
-    .game-wrapper.visible {
-      display: block !important;
-    }
-
-    .topbar {
-      background: linear-gradient(180deg, #0d1f3c 0%, #050a14 100%);
-      border-bottom: 1px solid var(--border);
-      padding: 0 20px;
-      display: flex;
-      align-items: center;
-      height: 62px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 4px 24px rgba(0, 212, 255, .08);
-      gap: 8px;
-    }
-
-    .logo {
-      font-family: 'Press Start 2P', cursive;
-      font-weight: 900;
-      font-size: .95rem;
-      letter-spacing: .2em;
-      color: var(--accent);
-      text-shadow: 0 0 20px rgba(0, 212, 255, .5);
-      margin-right: 16px;
-      white-space: nowrap;
-    }
-
-    .res-bar {
-      display: flex;
-      gap: 4px;
-      flex: 1;
-      overflow-x: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-      padding-bottom: 2px;
-    }
-
-    .res-chip {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      background: rgba(255, 255, 255, .03);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 6px 10px;
-      white-space: nowrap;
-      min-width: 90px;
-      flex-shrink: 0;
-    }
-
-    .res-chip-top {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .res-icon {
-      font-size: 1.4rem;
-    }
-
-    .res-info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .res-name {
-      font-size: .66rem;
-      color: var(--dim);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-    }
-
-    .res-val {
-      font-size: 1.1rem;
-      font-weight: bold;
-      font-family: 'MedievalSharp', 'VT323', monospace;
-      letter-spacing: 0.05em;
-    }
-
-    .res-rate {
-      font-size: .95rem;
-      color: var(--dim);
-      font-family: 'MedievalSharp', 'VT323', monospace;
-      letter-spacing: 0.05em;
-    }
-
-    .res-chip.ma .res-val {
-      color: var(--madera);
-    }
-
-    .res-chip.pi .res-val {
-      color: var(--piedra);
-    }
-
-    .res-chip.hi .res-val {
-      color: var(--hierro);
-    }
-
-    .res-chip.pr .res-val {
-      color: var(--prov);
-    }
-
-    .res-chip.es .res-val {
-      color: var(--esencia);
-    }
-
-    .cap-bar-wrap {
-      width: 100%;
-      height: 3px;
-      background: rgba(255, 255, 255, .08);
-      border-radius: 2px;
-      margin-top: 3px;
-    }
-
-    .cap-bar {
-      height: 100%;
-      border-radius: 2px;
-      transition: width .5s;
-    }
-
-    .cap-bar.ok {
-      background: var(--ok);
-    }
-
-    .cap-bar.warn {
-      background: var(--gold);
-    }
-
-    .cap-bar.full {
-      background: var(--danger);
-    }
-
-    .res-cap {
-      font-size: .5rem;
-      color: var(--dim);
-    }
-
-    .topbar-right {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-left: auto;
-    }
-
-    .save-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--dim);
-      transition: all .3s;
-    }
-
-    .save-dot.saving {
-      background: var(--gold);
-      animation: pdot 1s ease-in-out infinite;
-    }
-
-    .save-dot.saved {
-      background: var(--ok);
-    }
-
-    @keyframes pdot {
-
-      0%,
-      100% {
-        opacity: .4
-      }
-
-      50% {
-        opacity: 1
-      }
-    }
-
-    .save-txt {
-      font-size: .6rem;
-      color: var(--dim);
-    }
-
-    .village-sel {
-      background: rgba(255, 107, 53, .1);
-      border: 1px solid rgba(255, 107, 53, .3);
-      border-radius: 4px;
-      padding: 5px 10px;
-      font-size: .72rem;
-      color: var(--accent2);
-      font-family: 'VT323', monospace;
-      cursor: pointer;
-      outline: none;
-      color: var(--accent2);
-    }
-
-    #alertsBtn {
-      position: relative;
-      background: rgba(255, 221, 96, .08);
-      border: 1px solid rgba(255, 221, 96, .25);
-      border-radius: 4px;
-      color: var(--gold);
-      padding: 5px 10px;
-      font-size: .68rem;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      letter-spacing: .06em;
-      transition: all .2s;
-    }
-
-    #alertsBtn.has-alerts {
-      background: rgba(255, 61, 90, .15);
-      border-color: rgba(255, 61, 90, .6);
-      color: var(--danger);
-      animation: alertPulse 1.5s ease-in-out infinite;
-    }
-
-    @keyframes alertPulse {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 0 rgba(255, 61, 90, .4);
-      }
-
-      50% {
-        box-shadow: 0 0 0 5px rgba(255, 61, 90, 0);
-      }
-    }
-
-    #alertsBadge {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      background: var(--danger);
-      color: #fff;
-      font-size: .55rem;
-      font-family: sans-serif;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-    }
-
-    .alerts-modal {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      background: rgba(0, 0, 0, .7);
-      display: flex;
-      align-items: flex-start;
-      justify-content: flex-end;
-      padding: 70px 16px 0;
-    }
-
-    .alerts-panel {
-      background: var(--panel);
-      border: 1px solid rgba(255, 61, 90, .4);
-      border-radius: 8px;
-      width: 340px;
-      max-height: 70vh;
-      overflow-y: auto;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, .6);
-    }
-
-    .alerts-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(255, 61, 90, .2);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      background: var(--panel);
-    }
-
-    .alerts-header h3 {
-      margin: 0;
-      font-size: .9rem;
-      color: var(--danger);
-    }
-
-    .alert-item {
-      padding: 10px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, .05);
-      font-size: .75rem;
-    }
-
-    .alert-item:last-child {
-      border-bottom: none;
-    }
-
-    .alert-item .alert-title {
-      font-weight: bold;
-      color: var(--danger);
-      margin-bottom: 3px;
-    }
-
-    .alert-item .alert-sub {
-      color: var(--dim);
-    }
-
-    .alert-item .alert-time {
-      color: var(--gold);
-      font-size: .68rem;
-      margin-top: 3px;
-    }
-
-    .alerts-empty {
-      padding: 24px 16px;
-      text-align: center;
-      color: var(--dim);
-      font-size: .8rem;
-    }
-
-    .logout-btn {
-      background: rgba(255, 61, 90, .08);
-      border: 1px solid rgba(255, 61, 90, .25);
-      border-radius: 4px;
-      color: rgba(255, 61, 90, .7);
-      padding: 5px 10px;
-      font-size: .68rem;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      letter-spacing: .08em;
-      transition: all .2s;
-    }
-
-    .logout-btn:hover {
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    /* LAYOUT */
-    .main-layout {
-      display: grid;
-      grid-template-columns: 190px 1fr;
-      min-height: calc(100vh - 52px);
-    }
-
-    .sidebar {
-      background: var(--panel);
-      border-right: 1px solid var(--border);
-      padding: 12px 0;
-    }
-
-    .nav-section {
-      margin-bottom: 6px;
-    }
-
-    .nav-label {
-      font-size: .56rem;
-      letter-spacing: .15em;
-      color: var(--dim);
-      padding: 8px 14px 4px;
-      text-transform: uppercase;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 9px 14px;
-      cursor: pointer;
-      transition: all .2s;
-      border-left: 3px solid transparent;
-      font-size: .78rem;
-    }
-
-    .nav-item:hover {
-      background: rgba(0, 212, 255, .05);
-      color: var(--accent);
-      border-left-color: var(--accent);
-    }
-
-    .nav-item.active {
-      background: rgba(0, 212, 255, .08);
-      color: var(--accent);
-      border-left-color: var(--accent);
-    }
-
-    .nav-icon {
-      font-size: .95rem;
-      width: 18px;
-      text-align: center;
-    }
-
-    .msg-badge {
-      background: var(--danger);
-      color: white;
-      font-size: .6rem;
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 10px;
-      min-width: 18px;
-      text-align: center;
-      box-shadow: 0 0 8px rgba(224, 64, 64, .6);
-      animation: pulse-badge 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse-badge {
-
-      0%,
-      100% {
-        transform: scale(1);
-      }
-
-      50% {
-        transform: scale(1.1);
-      }
-    }
-
-    .content {
-      padding: 20px;
-      overflow-y: auto;
-    }
-
-    .page {
-      display: none;
-    }
-
-    .page.active {
-      display: block;
-    }
-
-    .page-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: .1em;
-      margin-bottom: 4px;
-    }
-
-    .page-sub {
-      font-size: .7rem;
-      color: var(--dim);
-      margin-bottom: 20px;
-    }
-
-    /* QUEUE */
-    .queue-panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 14px;
-      margin-bottom: 20px;
-    }
-
-    .queue-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .68rem;
-      color: var(--accent);
-      letter-spacing: .1em;
-      margin-bottom: 10px;
-    }
-
-    .queue-empty {
-      font-size: .7rem;
-      color: var(--dim);
-    }
-
-    .queue-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px;
-      background: rgba(79, 255, 176, .04);
-      border: 1px solid rgba(79, 255, 176, .15);
-      border-radius: 4px;
-      margin-bottom: 6px;
-    }
-
-    .queue-icon {
-      font-size: 1.1rem;
-    }
-
-    .queue-info {
-      flex: 1;
-    }
-
-    .queue-name {
-      font-size: .76rem;
-      margin-bottom: 3px;
-    }
-
-    .queue-time {
-      font-size: .66rem;
-      color: var(--ok);
-    }
-
-    .qbar {
-      width: 100%;
-      height: 3px;
-      background: rgba(255, 255, 255, .05);
-      border-radius: 2px;
-      margin-top: 5px;
-    }
-
-    .qbar-fill {
-      height: 100%;
-      background: var(--ok);
-      border-radius: 2px;
-      transition: width .5s;
-    }
-
-    /* BUILDINGS */
-    .bld-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(265px, 1fr));
-      gap: 14px;
-    }
-
-    .bld-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      transition: all .3s;
-    }
-
-    .bld-card:hover {
-      border-color: rgba(0, 212, 255, .4);
-      box-shadow: 0 0 16px rgba(0, 212, 255, .07);
-      transform: translateY(-2px);
-    }
-
-    .bld-head {
-      background: linear-gradient(135deg, #0d1f3c, #091525);
-      padding: 12px 14px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .bld-ico {
-      font-size: 1.6rem;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 212, 255, .08);
-      border-radius: 6px;
-      border: 1px solid rgba(0, 212, 255, .15);
-    }
-
-    .bld-name {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .68rem;
-      font-weight: 700;
-      letter-spacing: .05em;
-      margin-bottom: 2px;
-    }
-
-    .bld-lvl {
-      font-size: .65rem;
-      color: var(--dim);
-    }
-
-    .lvl-n {
-      color: var(--gold);
-      font-weight: bold;
-    }
-
-    .bld-body {
-      padding: 12px 14px;
-    }
-
-    .bld-desc {
-      font-size: .68rem;
-      color: var(--dim);
-      line-height: 1.5;
-      margin-bottom: 9px;
-    }
-
-    .prod-row {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 9px;
-      flex-wrap: wrap;
-    }
-
-    .pbadge {
-      font-size: .6rem;
-      padding: 2px 6px;
-      border-radius: 3px;
-      border: 1px solid;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-    }
-
-    .pbadge.m {
-      color: var(--metal);
-      border-color: rgba(160, 180, 200, .3);
-      background: rgba(160, 180, 200, .05);
-    }
-
-    .pbadge.c {
-      color: var(--crystal);
-      border-color: rgba(126, 232, 250, .3);
-      background: rgba(126, 232, 250, .05);
-    }
-
-    .pbadge.d {
-      color: var(--deut);
-      border-color: rgba(247, 201, 72, .3);
-      background: rgba(247, 201, 72, .05);
-    }
-
-    .pbadge.e {
-      color: var(--energy);
-      border-color: rgba(79, 255, 176, .3);
-      background: rgba(79, 255, 176, .05);
-    }
-
-    .cost-row {
-      display: flex;
-      gap: 7px;
-      margin-bottom: 9px;
-      flex-wrap: wrap;
-    }
-
-    .cost-i {
-      font-size: .65rem;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-    }
-
-    .cost-i.ok {
-      color: var(--text);
-    }
-
-    .cost-i.no {
-      color: var(--danger);
-    }
-
-    .pbar-wrap {
-      height: 3px;
-      background: rgba(255, 255, 255, .05);
-      border-radius: 2px;
-      margin-bottom: 9px;
-      overflow: hidden;
-    }
-
-    .pbar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), var(--ok));
-      border-radius: 2px;
-      transition: width .5s;
-    }
-
-    .bld-btn {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      font-size: .72rem;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      transition: all .2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-    }
-
-    .bld-btn.avail {
-      background: rgba(0, 212, 255, .08);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .bld-btn.avail:hover {
-      background: rgba(0, 212, 255, .2);
-    }
-
-    .bld-btn.busy {
-      background: rgba(79, 255, 176, .05);
-      border-color: var(--ok);
-      color: var(--ok);
-      cursor: not-allowed;
-      animation: pb 1.5s ease-in-out infinite;
-    }
-
-    .bld-btn.insuf {
-      background: rgba(255, 61, 90, .05);
-      border-color: rgba(255, 61, 90, .3);
-      color: rgba(255, 61, 90, .5);
-      cursor: not-allowed;
-    }
-
-    @keyframes pb {
-
-      0%,
-      100% {
-        box-shadow: 0 0 0 rgba(79, 255, 176, .2)
-      }
-
-      50% {
-        box-shadow: 0 0 10px rgba(79, 255, 176, .4)
-      }
-    }
-
-    /* OVERVIEW */
-    .ov-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-
-    .stat-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 18px;
-      text-align: center;
-      transition: all .3s;
-    }
-
-    .stat-card:hover {
-      border-color: rgba(0, 212, 255, .3);
-    }
-
-    .stat-ico {
-      font-size: 1.8rem;
-      margin-bottom: 6px;
-    }
-
-    .stat-val {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--accent);
-      margin-bottom: 3px;
-      word-break: break-all;
-    }
-
-    .stat-lbl {
-      font-size: .65rem;
-      color: var(--dim);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-    }
-
-    .ov-planet {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 18px;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      margin-bottom: 16px;
-    }
-
-    .planet-vis {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%, #2a6496, #0d2d4a, #050a14);
-      box-shadow: 0 0 28px rgba(0, 100, 180, .4), inset -8px -8px 18px rgba(0, 0, 0, .5);
-      flex-shrink: 0;
-    }
-
-    .planet-name-big {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .9rem;
-      color: var(--accent2);
-      margin-bottom: 5px;
-    }
-
-    .planet-coords {
-      font-size: .7rem;
-      color: var(--dim);
-      margin-bottom: 8px;
-    }
-
-    .planet-stats {
-      display: flex;
-      gap: 14px;
-      flex-wrap: wrap;
-    }
-
-    .pstat {
-      font-size: .68rem;
-    }
-
-    .pstat span {
-      color: var(--accent);
-    }
-
-    /* MAP */
-    .map-page-layout {
-      display: flex;
-      gap: 16px;
-      align-items: flex-start;
-    }
-
-    .map-main-col {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .map-mini-col {
-      flex-shrink: 0;
-    }
-
-    .minimap-box {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-    }
-
-    .minimap-title {
-      font-size: .6rem;
-      color: var(--dim);
-      letter-spacing: .08em;
-      text-align: center;
-      margin-bottom: 6px;
-    }
-
-    #minimapCanvas {
-      display: block;
-      border-radius: 3px;
-      image-rendering: pixelated;
-    }
-
-    .minimap-legend {
-      margin-top: 8px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3px 8px;
-      font-size: .55rem;
-      color: var(--dim);
-    }
-
-    .minimap-legend-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .minimap-legend-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 1px;
-      flex-shrink: 0;
-    }
-
-    .map-container {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
-    }
-
-    .map-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-
-    .map-legend {
-      display: flex;
-      gap: 14px;
-      font-size: .65rem;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .legend-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 2px;
-    }
-
-    .map-coords-display {
-      font-size: .65rem;
-      color: var(--dim);
-      margin-bottom: 10px;
-      text-align: center;
-    }
-
-    .map-grid-wrap {
-      overflow: auto;
-      max-height: 540px;
-    }
-
-    .map-grid {
-      display: grid;
-      gap: 2px;
-      width: fit-content;
-    }
-
-    .map-cell {
-      width: 28px;
-      height: 28px;
-      border-radius: 3px;
-      cursor: pointer;
-      transition: all .15s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: .7rem;
-      border: 1px solid transparent;
-    }
-
-    .map-cell.empty {
-      background: rgba(255, 255, 255, .02);
-      border-color: rgba(255, 255, 255, .04);
-    }
-
-    .map-cell.empty:hover {
-      background: rgba(0, 212, 255, .06);
-      border-color: rgba(0, 212, 255, .15);
-    }
-
-    .map-cell.own {
-      background: rgba(0, 212, 255, .18);
-      border-color: rgba(0, 212, 255, .5);
-    }
-
-    .map-cell.own:hover {
-      background: rgba(0, 212, 255, .28);
-      box-shadow: 0 0 8px rgba(0, 212, 255, .3);
-    }
-
-    .map-cell.enemy {
-      background: rgba(255, 61, 90, .18);
-      border-color: rgba(255, 61, 90, .5);
-    }
-
-    .map-cell.enemy:hover {
-      background: rgba(255, 61, 90, .28);
-      box-shadow: 0 0 8px rgba(255, 61, 90, .3);
-    }
-
-    .map-cell.ally {
-      background: rgba(96, 208, 96, .18);
-      border-color: rgba(96, 208, 96, .5);
-    }
-
-    .map-cell.ally:hover {
-      background: rgba(96, 208, 96, .28);
-      box-shadow: 0 0 8px rgba(96, 208, 96, .3);
-    }
-
-    .map-cell.npc {
-      background: rgba(255, 230, 0, .2);
-      border-color: rgba(255, 230, 0, .5);
-    }
-
-    .map-cell.npc:hover {
-      background: rgba(255, 230, 0, .35);
-      box-shadow: 0 0 10px rgba(255, 230, 0, .4);
-    }
-
-    .map-cell.center-marker {
-      box-shadow: 0 0 0 2px var(--accent);
-    }
-
-    .map-cell.out-of-bounds {
-      background: rgba(0, 0, 0, .3);
-      cursor: default;
-      border-color: transparent;
-    }
-
-    .map-panel {
-      margin-top: 14px;
-      background: rgba(0, 0, 0, .3);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 14px;
-      display: none;
-    }
-
-    .map-panel.show {
-      display: block;
-    }
-
-    .map-panel-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .75rem;
-      color: var(--accent);
-      margin-bottom: 6px;
-    }
-
-    .map-panel-sub {
-      font-size: .68rem;
-      color: var(--dim);
-      margin-bottom: 10px;
-    }
-
-    .map-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .map-action-btn {
-      padding: 7px 14px;
-      border-radius: 4px;
-      border: 1px solid;
-      font-family: 'VT323', monospace;
-      font-size: .7rem;
-      cursor: pointer;
-      transition: all .2s;
-      letter-spacing: .06em;
-    }
-
-    .map-action-btn.move {
-      background: rgba(79, 255, 176, .08);
-      border-color: var(--ok);
-      color: var(--ok);
-    }
-
-    .map-action-btn.move:hover {
-      background: rgba(79, 255, 176, .2);
-    }
-
-    .map-action-btn.atk {
-      background: rgba(255, 61, 90, .08);
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .map-action-btn.atk:hover {
-      background: rgba(255, 61, 90, .2);
-    }
-
-    .map-action-btn.spy {
-      background: rgba(247, 201, 72, .08);
-      border-color: var(--gold);
-      color: var(--gold);
-    }
-
-    .map-action-btn.spy:hover {
-      background: rgba(247, 201, 72, .2);
-    }
-
-    /* NOTIF */
-    .notif-wrap {
-      position: fixed;
-      top: 65px;
-      right: 18px;
-      z-index: 999;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      pointer-events: none;
-    }
-
-    .notif {
-      background: var(--panel2);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 9px 14px;
-      font-size: .73rem;
-      color: var(--accent);
-      box-shadow: 0 0 14px rgba(0, 212, 255, .2);
-      animation: nin .3s ease, nout .4s ease 2.6s forwards;
-      max-width: 280px;
-    }
-
-    .notif.ok {
-      border-color: var(--ok);
-      color: var(--ok);
-    }
-
-    .notif.err {
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    @keyframes nin {
-      from {
-        opacity: 0;
-        transform: translateX(16px)
-      }
-
-      to {
-        opacity: 1;
-        transform: translateX(0)
-      }
-    }
-
-    @keyframes nout {
-      from {
-        opacity: 1
-      }
-
-      to {
-        opacity: 0;
-        transform: translateX(16px)
-      }
-    }
-
-    .coming-soon {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 40vh;
-      gap: 14px;
-      color: var(--dim);
-    }
-
-    .cs-icon {
-      font-size: 2.8rem;
-    }
-
-    .cs-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .95rem;
-      letter-spacing: .1em;
-    }
-
-    /* BUILDING DETAIL MODAL */
-    .bld-modal-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 500;
-      background: rgba(5, 10, 20, .88);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(4px);
-    }
-
-    .bld-modal {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      width: min(680px, 95vw);
-      max-height: 88vh;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 0 60px rgba(0, 212, 255, .15);
-      animation: scalein .18s ease;
-    }
-
-    @keyframes scalein {
-      from {
-        transform: scale(.95);
-        opacity: 0
-      }
-
-      to {
-        transform: scale(1);
-        opacity: 1
-      }
-    }
-
-    .bld-modal-head {
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      flex-shrink: 0;
-    }
-
-    .bld-modal-icon {
-      font-size: 2rem;
-      width: 52px;
-      height: 62px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 212, 255, .08);
-      border: 1px solid rgba(0, 212, 255, .2);
-      border-radius: 8px;
-    }
-
-    .bld-modal-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .9rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: .08em;
-      margin-bottom: 3px;
-    }
-
-    .bld-modal-sub {
-      font-size: .68rem;
-      color: var(--dim);
-    }
-
-    .bld-modal-close {
-      margin-left: auto;
-      background: rgba(255, 61, 90, .08);
-      border: 1px solid rgba(255, 61, 90, .25);
-      border-radius: 4px;
-      color: rgba(255, 61, 90, .7);
-      padding: 6px 12px;
-      font-size: .72rem;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      transition: all .2s;
-      white-space: nowrap;
-    }
-
-    .bld-modal-close:hover {
-      background: rgba(255, 61, 90, .2);
-      color: var(--danger);
-    }
-
-    .bld-modal-body {
-      overflow-y: auto;
-      padding: 16px 20px;
-    }
-
-    .bld-modal-note {
-      font-size: .65rem;
-      color: var(--dim);
-      margin-bottom: 12px;
-      padding: 8px 12px;
-      background: rgba(0, 212, 255, .04);
-      border: 1px solid rgba(0, 212, 255, .1);
-      border-radius: 4px;
-    }
-
-    .bld-lvl-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .72rem;
-    }
-
-    .bld-lvl-table th {
-      padding: 8px 10px;
-      text-align: left;
-      font-size: .58rem;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--dim);
-      border-bottom: 1px solid var(--border);
-      background: rgba(0, 0, 0, .25);
-      font-family: 'Press Start 2P', cursive;
-    }
-
-    .bld-lvl-table td {
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, .03);
-      vertical-align: top;
-    }
-
-    .bld-lvl-table tr:hover td {
-      background: rgba(0, 212, 255, .03);
-    }
-
-    .bld-lvl-table tr.row-current td {
-      background: rgba(247, 201, 72, .06);
-      border-left: 3px solid var(--gold);
-    }
-
-    .bld-lvl-table tr.row-next td {
-      background: rgba(0, 212, 255, .06);
-      border-left: 3px solid var(--accent);
-    }
-
-    .lvl-badge {
-      font-family: 'Press Start 2P', cursive;
-      font-weight: 700;
-      font-size: .78rem;
-      color: var(--gold);
-    }
-
-    .lvl-badge.accent {
-      color: var(--accent);
-    }
-
-    .lvl-tag {
-      font-size: .56rem;
-      padding: 1px 5px;
-      border-radius: 3px;
-      vertical-align: middle;
-      margin-left: 4px;
-    }
-
-    .lvl-tag.cur {
-      background: rgba(247, 201, 72, .15);
-      color: var(--gold);
-      border: 1px solid rgba(247, 201, 72, .3);
-    }
-
-    .lvl-tag.nxt {
-      background: rgba(0, 212, 255, .15);
-      color: var(--accent);
-      border: 1px solid rgba(0, 212, 255, .3);
-    }
-
-    .cost-lines,
-    .prod-lines {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .cl {
-      font-size: .65rem;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-    }
-
-    .cl.can {
-      color: var(--text);
-    }
-
-    .cl.cant {
-      color: var(--danger);
-    }
-
-    .pl {
-      font-size: .65rem;
-    }
-
-    .pl.m {
-      color: var(--metal);
-    }
-
-    .pl.c {
-      color: var(--crystal);
-    }
-
-    .pl.d {
-      color: var(--deut);
-    }
-
-    .pl.e {
-      color: var(--energy);
-    }
-
-    .pl.none {
-      color: var(--dim);
-    }
-
-    .ttime {
-      font-size: .68rem;
-      color: var(--text);
-      white-space: nowrap;
-    }
-
-    .bld-modal-footer {
-      padding: 14px 20px;
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .bld-footer-btn {
-      width: 100%;
-      padding: 11px;
-      border: 1px solid;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      font-size: .78rem;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      transition: all .2s;
-    }
-
-    .bld-footer-btn.avail {
-      background: rgba(0, 212, 255, .1);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .bld-footer-btn.avail:hover {
-      background: rgba(0, 212, 255, .25);
-      box-shadow: 0 0 14px rgba(0, 212, 255, .2);
-    }
-
-    .bld-footer-btn.busy {
-      background: rgba(79, 255, 176, .05);
-      border-color: var(--ok);
-      color: var(--ok);
-      cursor: not-allowed;
-    }
-
-    .bld-footer-btn.insuf {
-      background: rgba(255, 61, 90, .05);
-      border-color: rgba(255, 61, 90, .3);
-      color: rgba(255, 61, 90, .4);
-      cursor: not-allowed;
-    }
-
-    .bld-footer-btn.maxlvl {
-      background: rgba(247, 201, 72, .05);
-      border-color: rgba(247, 201, 72, .3);
-      color: var(--gold);
-      cursor: not-allowed;
-    }
-
-    .detail-badge {
-      margin-left: auto;
-      font-size: .58rem;
-      color: var(--dim);
-      border: 1px solid rgba(0, 212, 255, .2);
-      padding: 2px 8px;
-      border-radius: 10px;
-      pointer-events: none;
-    }
-
-    ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: var(--bg);
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 3px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--accent);
-    }
-
-    /* BUILDING DETAIL MODAL */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 500;
-      background: rgba(3, 8, 18, .88);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      backdrop-filter: blur(3px);
-    }
-
-    .modal-overlay.hidden {
-      display: none;
-    }
-
-    .modal-box {
-      background: var(--panel);
-      border: 1px solid var(--accent);
-      border-radius: 8px;
-      width: 100%;
-      max-width: 780px;
-      max-height: 88vh;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 0 60px rgba(0, 212, 255, .12);
-    }
-
-    .modal-head {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .modal-ico {
-      font-size: 2rem;
-      width: 52px;
-      height: 62px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 212, 255, .08);
-      border-radius: 8px;
-      border: 1px solid rgba(0, 212, 255, .18);
-      flex-shrink: 0;
-    }
-
-    .modal-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: .08em;
-    }
-
-    .modal-subtitle {
-      font-size: .68rem;
-      color: var(--dim);
-      margin-top: 3px;
-    }
-
-    .modal-close {
-      margin-left: auto;
-      background: rgba(255, 61, 90, .08);
-      border: 1px solid rgba(255, 61, 90, .3);
-      border-radius: 4px;
-      color: var(--danger);
-      padding: 7px 14px;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      font-size: .72rem;
-      transition: all .2s;
-      flex-shrink: 0;
-    }
-
-    .modal-close:hover {
-      background: rgba(255, 61, 90, .2);
-    }
-
-    .modal-body {
-      overflow-y: auto;
-      padding: 20px;
-    }
-
-    .modal-cur-level {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(247, 201, 72, .08);
-      border: 1px solid rgba(247, 201, 72, .25);
-      border-radius: 4px;
-      padding: 6px 14px;
-      margin-bottom: 18px;
-      font-size: .75rem;
-      color: var(--gold);
-    }
-
-    .detail-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .7rem;
-    }
-
-    .detail-table th {
-      background: rgba(0, 212, 255, .06);
-      color: var(--accent);
-      font-family: 'Press Start 2P', cursive;
-      font-size: .6rem;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      padding: 9px 10px;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    .detail-table td {
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, .04);
-      vertical-align: middle;
-    }
-
-    .detail-table tr.current-row td {
-      background: rgba(0, 212, 255, .07);
-      border-left: 2px solid var(--accent);
-    }
-
-    .detail-table tr:hover td {
-      background: rgba(255, 255, 255, .03);
-    }
-
-    .lvl-badge {
-      display: inline-block;
-      font-family: 'Press Start 2P', cursive;
-      font-size: .65rem;
-      font-weight: 700;
-      padding: 2px 7px;
-      border-radius: 3px;
-      background: rgba(255, 255, 255, .06);
-      color: var(--text);
-    }
-
-    .lvl-badge.active {
-      background: rgba(0, 212, 255, .2);
-      color: var(--accent);
-    }
-
-    .cost-cell {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .cost-line {
-      font-size: .63rem;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .cost-line.m {
-      color: var(--metal);
-    }
-
-    .cost-line.c {
-      color: var(--crystal);
-    }
-
-    .cost-line.d {
-      color: var(--deut);
-    }
-
-    .prod-cell {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .prod-line {
-      font-size: .63rem;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .prod-line.m {
-      color: var(--metal);
-    }
-
-    .prod-line.c {
-      color: var(--crystal);
-    }
-
-    .prod-line.d {
-      color: var(--deut);
-    }
-
-    .prod-line.e {
-      color: var(--energy);
-    }
-
-    .prod-none {
-      color: var(--dim);
-      font-size: .63rem;
-    }
-
-    .time-cell {
-      color: var(--gold);
-      font-size: .68rem;
-      white-space: nowrap;
-    }
-
-    .modal-build-btn {
-      display: block;
-      width: 100%;
-      margin-top: 18px;
-      padding: 11px;
-      background: rgba(0, 212, 255, .1);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      color: var(--accent);
-      font-family: 'VT323', monospace;
-      font-size: .8rem;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all .2s;
-    }
-
-    .modal-build-btn:hover {
-      background: rgba(0, 212, 255, .22);
-      box-shadow: 0 0 14px rgba(0, 212, 255, .2);
-    }
-
-    .modal-build-btn:disabled {
-      opacity: .35;
-      cursor: not-allowed;
-    }
-
-    .modal-note {
-      font-size: .65rem;
-      color: var(--dim);
-      text-align: center;
-      margin-top: 10px;
-    }
-
-    /* VERSION FOOTER */
-    .version-footer {
-      position: fixed;
-      bottom: 6px;
-      right: 12px;
-      z-index: 50;
-      font-size: .52rem;
-      color: var(--dim);
-      letter-spacing: .08em;
-      pointer-events: none;
-      opacity: .6;
-    }
-
-    /* MAP ARROW CONTROLS */
-    .map-nav-pad {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-      margin-top: 10px;
-    }
-
-    .map-nav-row {
-      display: flex;
-      gap: 4px;
-    }
-
-    .map-nav-btn {
-      width: 32px;
-      height: 32px;
-      background: rgba(0, 212, 255, .08);
-      border: 1px solid rgba(0, 212, 255, .25);
-      border-radius: 4px;
-      color: var(--accent);
-      font-size: .9rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all .15s;
-      font-family: 'VT323', monospace;
-    }
-
-    .map-nav-btn:hover {
-      background: rgba(0, 212, 255, .2);
-      border-color: var(--accent);
-    }
-
-    .map-nav-btn:active {
-      transform: scale(.9);
-    }
-
-    /* SOCIAL TABLES */
-    .table {
-      width: 100%;
-      margin-top: 8px;
-    }
-
-    .trow {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-      gap: 10px;
-      align-items: center;
-      padding: 8px 10px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: rgba(0, 0, 0, .12);
-    }
-
-    .trow.thead {
-      font-weight: 700;
-      opacity: .85;
-      background: rgba(255, 255, 255, .06);
-    }
-
-    .btn.btn-sm {
-      padding: 6px 10px;
-      font-size: .8rem;
-    }
-
-    .grid2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-    }
-
-    /* PROFILE MODAL */
-    .profile-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 600;
-      background: rgba(5, 10, 20, .92);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(4px);
-    }
-
-    .profile-overlay.hidden {
-      display: none;
-    }
-
-    .profile-box {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      width: min(440px, 95vw);
-      padding: 28px;
-      box-shadow: 0 0 40px rgba(240, 192, 64, .1);
-    }
-
-    .profile-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: .85rem;
-      color: var(--accent);
-      letter-spacing: .1em;
-      margin-bottom: 18px;
-    }
-
-    .profile-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .profile-label {
-      font-size: .65rem;
-      color: var(--dim);
-      width: 110px;
-      flex-shrink: 0;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-
-    .profile-val {
-      font-size: .8rem;
-      color: var(--text);
-    }
-
-    .profile-sep {
-      border: none;
-      border-top: 1px solid var(--border);
-      margin: 16px 0;
-    }
-
-    .profile-section {
-      font-size: .6rem;
-      color: var(--dim);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      margin-bottom: 10px;
-    }
-
-    .profile-input {
-      flex: 1;
-      background: rgba(255, 255, 255, .04);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 7px 10px;
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      font-size: .85rem;
-      outline: none;
-    }
-
-    .profile-input:focus {
-      border-color: var(--accent);
-    }
-
-    .profile-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 14px;
-    }
-
-    .profile-btn {
-      padding: 8px 14px;
-      border-radius: 4px;
-      border: 1px solid;
-      font-family: 'VT323', monospace;
-      font-size: .75rem;
-      cursor: pointer;
-      letter-spacing: .06em;
-      transition: all .2s;
-    }
-
-    .profile-btn.save {
-      background: rgba(0, 212, 255, .1);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .profile-btn.save:hover {
-      background: rgba(0, 212, 255, .22);
-    }
-
-    .profile-btn.danger {
-      background: rgba(255, 61, 90, .08);
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .profile-btn.danger:hover {
-      background: rgba(255, 61, 90, .2);
-    }
-
-    .profile-btn.cancel {
-      background: rgba(255, 255, 255, .04);
-      border-color: var(--border);
-      color: var(--dim);
-    }
-
-    .profile-btn.cancel:hover {
-      border-color: var(--text);
-      color: var(--text);
-    }
-
-    .profile-msg {
-      font-size: .65rem;
-      margin-top: 10px;
-      min-height: 16px;
-    }
-
-    .profile-msg.ok {
-      color: var(--ok);
-    }
-
-    .profile-msg.err {
-      color: var(--danger);
-    }
-
-    .profile-btn:disabled {
-      opacity: .35;
-      cursor: not-allowed;
-    }
-
-    /* ADMIN USERS */
-    .admin-users-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .72rem;
-      margin-top: 10px;
-    }
-
-    .admin-users-table th {
-      padding: 7px 8px;
-      text-align: left;
-      font-size: .55rem;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--dim);
-      border-bottom: 1px solid var(--border);
-      background: rgba(0, 0, 0, .2);
-    }
-
-    .admin-users-table td {
-      padding: 7px 8px;
-      border-bottom: 1px solid rgba(255, 255, 255, .03);
-      vertical-align: middle;
-    }
-
-    .admin-users-table tr:hover td {
-      background: rgba(255, 255, 255, .02);
-    }
-
-    .admin-del-btn {
-      padding: 3px 8px;
-      background: rgba(255, 61, 90, .1);
-      border: 1px solid rgba(255, 61, 90, .4);
-      border-radius: 3px;
-      color: var(--danger);
-      font-family: 'VT323', monospace;
-      font-size: .68rem;
-      cursor: pointer;
-      transition: all .2s;
-    }
-
-    .admin-del-btn:hover {
-      background: rgba(255, 61, 90, .25);
-    }
-
-    /* RECURSOS PAGE */
-    .recursos-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-    }
-
-    @media(max-width:700px) {
-      .recursos-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .rec-assign-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 6px;
-      flex-wrap: wrap;
-    }
-
-    .rec-btn {
-      padding: 5px 10px;
-      background: rgba(111, 207, 122, .1);
-      border: 1px solid var(--ok);
-      border-radius: 4px;
-      color: var(--ok);
-      font-family: 'VT323', monospace;
-      font-size: .82rem;
-      cursor: pointer;
-      transition: all .2s;
-    }
-
-    .rec-btn:hover {
-      background: rgba(111, 207, 122, .25);
-    }
-
-    .rec-btn.red {
-      background: rgba(224, 64, 64, .08);
-      border-color: var(--danger);
-      color: var(--danger);
-    }
-
-    .rec-btn.red:hover {
-      background: rgba(224, 64, 64, .2);
-    }
-
-    /* ============================================================ */
-    /* MOBILE RESPONSIVE (v0.19) */
-    /* ============================================================ */
-    @media (max-width: 768px) {
-      .main-layout {
-        display: block;
-        padding-bottom: 70px;
-        /* Space for bottom nav */
-      }
-
-      .sidebar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 65px;
-        display: flex;
-        flex-direction: row;
-        justify-content: space-around;
-        align-items: stretch;
-        background: #0d1f3c;
-        border-right: none;
-        border-top: 2px solid var(--accent);
-        z-index: 1000;
-        padding: 0;
-      }
-
-      .nav-section {
-        margin: 0;
-        display: flex;
-        flex: 1;
-        justify-content: space-around;
-      }
-
-      .nav-label {
-        display: none;
-      }
-
-      .nav-item {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        padding: 5px;
-        font-size: 0.6rem;
-        border-left: none;
-        border-bottom: 3px solid transparent;
-        flex: 1;
-        text-align: center;
-      }
-
-      .nav-item.active {
-        border-left-color: transparent;
-        border-bottom-color: var(--accent);
-        background: rgba(240, 192, 64, 0.1);
-      }
-
-      .nav-icon {
-        font-size: 1.2rem;
-        margin: 0;
-      }
-
-      .topbar {
-        height: auto;
-        flex-wrap: wrap;
-        padding: 8px 10px;
-        gap: 10px;
-      }
-
-      .res-bar {
-        order: 2;
-        width: 100%;
-        gap: 5px;
-        padding-bottom: 5px;
-      }
-
-      .topbar-right {
-        order: 1;
-        margin-left: auto;
-      }
-
-      .logo {
-        order: 0;
-        font-size: 0.8rem;
-        margin-right: 0;
-      }
-
-      .ov-grid,
-      .recursos-grid,
-      .bld-grid,
-      .grid2 {
-        grid-template-columns: 1fr !important;
-      }
-
-      .content {
-        padding: 15px 10px 80px;
-      }
-
-      .auth-box {
-        width: 92%;
-        padding: 25px 15px;
-      }
-
-      .bld-modal {
-        width: 100vw;
-        height: 100vh;
-        max-height: 100vh;
-        border-radius: 0;
-      }
-
-      .res-chip {
-        padding: 4px 6px;
-      }
-
-      .version-footer {
-        bottom: 75px;
-        /* Above bottom nav */
-      }
-    }
-
-    /* ADMIN DASHBOARD (v0.19) */
-    .admin-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      background: rgba(0, 0, 0, 0.9);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(5px);
-    }
-
-    .admin-overlay.hidden {
-      display: none;
-    }
-
-    /* Dropdown de usuarios en el panel admin */
-    .admin-users-dropdown {
-      display: none;
-      position: absolute;
-      top: 100%;
-      right: 0;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px;
-      margin-top: 8px;
-      z-index: 200;
-      min-width: 300px;
-      max-height: 400px;
-      overflow-y: auto;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, .4);
-    }
-
-    .admin-users-dropdown.visible {
-      display: block;
-    }
-
-    .admin-users-search {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-
-    .admin-users-search input {
-      flex: 1;
-      min-width: 150px;
-      background: rgba(255, 255, 255, .03);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 6px 8px;
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      font-size: .75rem;
-      outline: none;
-    }
-
-    .admin-users-search input:focus {
-      border-color: var(--accent);
-    }
-
-    .admin-users-search button {
-      background: rgba(0, 212, 255, .15);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      color: var(--accent);
-      padding: 6px 10px;
-      font-family: 'VT323', monospace;
-      font-size: .75rem;
-      cursor: pointer;
-      transition: all .2s;
-      white-space: nowrap;
-    }
-
-    .admin-users-search button:hover {
-      background: rgba(0, 212, 255, .25);
-    }
-
-    .admin-users-list {
-      font-size: .75rem;
-      max-height: 320px;
-      overflow-y: auto;
-    }
-
-    .admin-users-item {
-      padding: 8px;
-      background: rgba(255, 255, 255, .03);
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: 4px;
-      margin-bottom: 6px;
-      cursor: pointer;
-      transition: all .2s;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .admin-users-item:hover {
-      background: rgba(0, 212, 255, .1);
-      border-color: var(--accent);
-    }
-
-    .admin-users-item-info {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .admin-users-item-name {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-weight: bold;
-    }
-
-    .admin-users-item-role {
-      font-size: .65rem;
-      color: var(--dim);
-    }
-
-    .admin-users-item-del {
-      background: rgba(255, 61, 90, .2);
-      border: 1px solid rgba(255, 61, 90, .4);
-      color: rgba(255, 61, 90, .8);
-      padding: 3px 6px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: .65rem;
-      flex-shrink: 0;
-      transition: all .2s;
-    }
-
-    .admin-users-item-del:hover {
-      background: rgba(255, 61, 90, .4);
-      border-color: rgba(255, 61, 90, .6);
-    }
-
-    .admin-box {
-      background: var(--panel);
-      border: 2px solid var(--danger);
-      border-radius: 12px;
-      width: min(600px, 95vw);
-      padding: 30px;
-      box-shadow: 0 0 50px rgba(224, 64, 64, 0.2);
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-
-    .admin-title {
-      font-family: 'Press Start 2P', cursive;
-      font-size: 1rem;
-      color: var(--danger);
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    .admin-search-wrap {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .admin-input-search {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 10px;
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      font-size: 1rem;
-    }
-
-    .admin-results-box {
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-      margin-bottom: 20px;
-      display: none;
-    }
-
-    .admin-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      gap: 15px;
-    }
-
-    .admin-label {
-      font-size: 0.8rem;
-      color: var(--dim);
-      min-width: 100px;
-    }
-
-    .admin-input {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 5px 10px;
-      color: var(--text);
-      font-family: 'VT323', monospace;
-      width: 120px;
-      text-align: right;
-    }
-
-    .admin-btn {
-      padding: 10px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-family: 'VT323', monospace;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      border: 1px solid transparent;
-      transition: all 0.2s;
-    }
-
-    .admin-btn.search {
-      background: var(--accent);
-      color: #000;
-      border-color: var(--gold);
-    }
-
-    .admin-btn.apply {
-      background: var(--danger);
-      color: #fff;
-      border-color: #ff4040;
-    }
-
-    .admin-btn.cancel {
-      background: transparent;
-      color: var(--dim);
-      border-color: var(--border);
-    }
-
-    .admin-btn:hover {
-      filter: brightness(1.2);
-    }
-
-    .admin-village-item {
-      padding: 8px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      font-size: 0.85rem;
-    }
-
-    .admin-village-item:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .admin-village-item.active {
-      border-left: 3px solid var(--danger);
-      background: rgba(224, 64, 64, 0.1);
-    }
-  </style>
+  <script src="game-simulator.js?v=1.32"></script>
+  <script src="game-admin.js?v=1.32"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.32">
 </head>
 
 <body>
@@ -3321,7 +724,7 @@
     } catch (e) { }
 
 
-    const GAME_VERSION = '0.70';
+    const GAME_VERSION = '0.71';
     const MAP_SIZE = 380;
     const MAP_VIEW = 7;  // 15×15 grid (2*7+1)
 
@@ -3572,160 +975,212 @@
     // ============================================================
     // BUILDINGS — todos empiezan en nivel 1, producen desde nivel 1
     // Coste nivel 0 → 1 es muy barato (casi gratis, es la "mejora inicial")
+    // ── Fórmula unificada tres fases ─────────────────────────────
+    // COSTES:  ×2/nivel  hasta nv.10  |  ×1.30/nivel nv.11-30  |  ×1.05/nivel nv.31+
+    // TIEMPOS: ×1.6/nivel hasta nv.10 |  ×1.20/nivel nv.11-30  |  ×1.05/nivel nv.31+
     // ============================================================
+    function phasedVal(l, base, m1, e1, m2, e2, m3) {
+      if (l <= e1) return base * Math.pow(m1, l);
+      var v1 = base * Math.pow(m1, e1);
+      if (l <= e2) return v1 * Math.pow(m2, l - e1);
+      var v2 = v1 * Math.pow(m2, e2 - e1);
+      return v2 * Math.pow(m3, l - e2);
+    }
+
     const BUILDINGS = [
       // ── RECURSOS ─────────────────────────────────────────────
       {
-        id: 'aserradero', name: 'Aserradero', icon: '🌲', desc: 'Produce madera por hora. Nivel 1 ya activo desde el inicio.',
+        id: 'aserradero', name: 'Aserradero', icon: '🌲',
+        desc: 'Produce madera por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio. Coste nv.10: ~67k madera / 16k piedra. Coste nv.30: ~13M madera / 3M piedra.',
         prod: function (l) { return { madera: Math.floor(30 + 40 * l * Math.pow(1.1, l)) }; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0 }
-            : { madera: Math.floor(80 * Math.pow(1.5, l)), piedra: Math.floor(20 * Math.pow(1.5, l)) };
+          if (l === 0) return { madera: 0, piedra: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 65, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 16, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(5, Math.floor(10 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
-        id: 'cantera', name: 'Cantera', icon: '⛰️', desc: 'Produce piedra por hora. Nivel 1 activo desde el inicio.',
+        id: 'cantera', name: 'Cantera', icon: '⛰️',
+        desc: 'Produce piedra por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio. Coste nv.10: ~51k madera / 35k piedra. Coste nv.30: ~10M madera / 7M piedra.',
         prod: function (l) { return { piedra: Math.floor(20 + 30 * l * Math.pow(1.1, l)) }; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0 }
-            : { madera: Math.floor(60 * Math.pow(1.5, l)), piedra: Math.floor(40 * Math.pow(1.5, l)) };
+          if (l === 0) return { madera: 0, piedra: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 50, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 34, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(5, Math.floor(12 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
-        id: 'minehierro', name: 'Mina de Hierro', icon: '⚒️', desc: 'Produce hierro por hora. Nivel 1 activo desde el inicio.',
+        id: 'minehierro', name: 'Mina de Hierro', icon: '⚒️',
+        desc: 'Produce hierro por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio. Coste nv.10: ~87k madera / 70k piedra / 26k hierro. Coste nv.30: ~17M madera / 14M piedra / 5M hierro.',
         prod: function (l) { return { hierro: Math.floor(10 + 20 * l * Math.pow(1.1, l)) }; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, hierro: 0 }
-            : { madera: Math.floor(100 * Math.pow(1.5, l)), piedra: Math.floor(80 * Math.pow(1.5, l)), hierro: Math.floor(30 * Math.pow(1.5, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 85, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 68, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 25, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(8, Math.floor(15 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 18, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       // ── GRANJA ───────────────────────────────────────────────
       {
         id: 'granja', name: 'Granja', icon: '🌾',
-        desc: 'Produce provisiones según los aldeanos asignados. Nivel 1 = 6 provisiones/aldeano/h. Las provisiones se consumen al enviar tropas en misión y no se recuperan al volver.',
+        desc: 'Aumenta las provisiones generadas por aldeano asignado. Nivel 1 = 6 prov./aldeano/h, +1 por nivel. Las provisiones se consumen al enviar tropas en misión y no se recuperan al volver. Coste nv.10: ~51k madera / 35k piedra. Coste nv.30: ~10M madera / 7M piedra.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0 }
-            : { madera: Math.floor(60 * Math.pow(1.5, l)), piedra: Math.floor(40 * Math.pow(1.5, l)) };
+          if (l === 0) return { madera: 0, piedra: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 50, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 34, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(8, Math.floor(10 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       // ── MÁGICO ───────────────────────────────────────────────
       {
-        id: 'circulo', name: 'Círculo Místico', icon: '✨', desc: 'Canaliza la Esencia. No ocupa almacén.',
+        id: 'circulo', name: 'Círculo Místico', icon: '✨',
+        desc: 'Canaliza la Esencia. La Esencia no ocupa almacén. Requiere madera, piedra y Esencia para subir. Coste nv.10: ~174k madera+piedra / 38k esencia. Coste nv.30: ~34M madera+piedra / 7M esencia.',
         prod: function (l) { return { esencia: Math.floor(5 + 15 * l * Math.pow(1.1, l)) }; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, esencia: 0 }
-            : { madera: Math.floor(200 * Math.pow(1.8, l)), piedra: Math.floor(200 * Math.pow(1.8, l)), esencia: Math.floor(50 * Math.pow(1.6, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 170, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 170, 2, 10, 1.3, 30, 1.05)),
+            esencia: Math.floor(phasedVal(l, 37, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(20, Math.floor(30 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 30, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       // ── ALMACENAMIENTO ───────────────────────────────────────
       {
-        id: 'almacen', name: 'Almacén', icon: '🏛️', desc: 'Aumenta la capacidad de almacenamiento de madera, piedra, hierro y provisiones. Nivel 0 = 1.000 unidades, se dobla por nivel. La Esencia tiene límite separado.',
+        id: 'almacen', name: 'Almacén', icon: '🏛️',
+        desc: 'Aumenta la capacidad máxima de madera, piedra, hierro y provisiones. Nv.0 = 1.000 | Nv.10 ≈ 1M | Nv.30 ≈ 195M. Es el edificio más caro de subir — debes priorizar el Almacén antes que el resto. La Esencia tiene límite separado.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, hierro: 0 }
-            : { madera: Math.floor(300 * Math.pow(2, l)), piedra: Math.floor(300 * Math.pow(2, l)), hierro: Math.floor(150 * Math.pow(2, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 500, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 500, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 250, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(15, Math.floor(20 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(15, phasedVal(l, 60, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       // ── MILITAR ──────────────────────────────────────────────
-      // ── MILITAR ──────────────────────────────────────────────
       {
         id: 'barracas', name: 'Barracas', icon: '🏰',
-        desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, crecimiento exponencial x1.40 por nivel (nivel 10 = 1.033 plazas, nivel 20 = 29.882 plazas). Las tropas en misión no ocupan plaza.',
+        desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, ×1.40 por nivel. Las tropas en misión no ocupan plaza. Coste nv.10: ~205k madera / 307k piedra / 102k hierro. Coste nv.30: ~40M madera / 61M piedra / 20M hierro.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, hierro: 0 }
-            : { madera: Math.floor(200 * Math.pow(1.8, l)), piedra: Math.floor(300 * Math.pow(1.8, l)), hierro: Math.floor(100 * Math.pow(1.8, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 200, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(15, Math.floor(20 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(15, phasedVal(l, 40, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
         id: 'reclutamiento', name: 'Reclutamiento', icon: '⚔️',
-        desc: 'Genera aldeanos automáticamente. Nivel 1 ≈ 9 min 54 s por aldeano. Cada nivel reduce el intervalo un 1% del total (nivel 25 = exactamente 7 min 30 s, nivel 50 = 5 min, mínimo 1 min desde el nivel 90). Los aldeanos se pierden si las Barracas están llenas.',
+        desc: 'Genera aldeanos automáticamente. Nv.1 ≈ 9 min 54s por aldeano. Cada nivel reduce el intervalo un 1% (nv.50 = 5 min, mínimo 1 min desde nv.90). Los aldeanos se pierden si las Barracas están llenas. Coste nv.10: ~133k madera / 92k piedra / 46k hierro. Coste nv.30: ~26M madera / 18M piedra / 9M hierro.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, hierro: 0 }
-            : { madera: Math.floor(150 * Math.pow(1.8, l)), piedra: Math.floor(100 * Math.pow(1.8, l)), hierro: Math.floor(50 * Math.pow(1.8, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 130, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 90, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 45, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(10, Math.floor(15 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 25, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
         id: 'muralla', name: 'Muralla', icon: '🏰',
-        desc: 'Escudo de la aldea con HP propio. El atacante debe destruirla antes de dañar a tus tropas. Nivel 1 = 500 HP de muralla, +500 HP por nivel. Nivel 10 = 5.000 HP.',
+        desc: 'Escudo de la aldea con HP propio. El atacante debe destruirla antes de dañar tus tropas. +500 HP por nivel. Solo requiere piedra y hierro. Coste nv.10: ~358k piedra / 143k hierro. Coste nv.30: ~70M piedra / 28M hierro.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { piedra: 0, hierro: 0 }
-            : { piedra: Math.floor(500 * Math.pow(2, l)), hierro: Math.floor(200 * Math.pow(2, l)) };
+          if (l === 0) return { piedra: 0, hierro: 0 };
+          return {
+            piedra: Math.floor(phasedVal(l, 350, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(30, Math.floor(40 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(30, phasedVal(l, 50, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
-        id: 'lab', name: 'Laboratorio', icon: '📜', desc: 'Permite investigar nuevas tecnologías. Módulo en desarrollo — próximamente activo.',
+        id: 'lab', name: 'Laboratorio', icon: '📜',
+        desc: 'Permite investigar nuevas tecnologías (próximamente activo). Uno de los edificios más caros: requiere madera, piedra y Esencia. Coste nv.10: ~287k madera / 430k piedra / 102k esencia. Coste nv.30: ~56M madera / 84M piedra / 20M esencia.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, esencia: 0 }
-            : { madera: Math.floor(200 * Math.pow(2, l)), piedra: Math.floor(400 * Math.pow(2, l)), esencia: Math.floor(100 * Math.pow(2, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 280, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 420, 2, 10, 1.3, 30, 1.05)),
+            esencia: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(15, Math.floor(25 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(15, phasedVal(l, 45, 1.6, 10, 1.2, 30, 1.05))); }
       },
+
       {
         id: 'cuarteles', name: 'Cuarteles', icon: '🎖️',
-        desc: 'Acelera el entrenamiento de tropas (excepto aldeanos y criaturas). Cada nivel reduce un 1% el tiempo de entrenamiento, hasta un máximo del 50% (nivel 50).',
+        desc: 'Reduce el tiempo de entrenamiento de tropas (excepto aldeanos y criaturas) un 1% por nivel, hasta un máximo del 50% en nv.50. Coste nv.10: ~225k madera / 307k piedra / 123k hierro. Coste nv.30: ~44M madera / 61M piedra / 24M hierro.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, hierro: 0 }
-            : { madera: Math.floor(250 * Math.pow(1.9, l)), piedra: Math.floor(350 * Math.pow(1.9, l)), hierro: Math.floor(150 * Math.pow(1.9, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 220, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+            hierro: Math.floor(phasedVal(l, 120, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(20, Math.floor(30 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 40, 1.6, 10, 1.2, 30, 1.05))); }
       },
 
       {
         id: 'torre', name: 'Torre de Vigía', icon: '🗼',
-        desc: 'Controla el alcance de tu aldea. Nivel 1 = 10 casillas de alcance, +10 por nivel. El alcance es circular (radio real). Sin Torre no puedes atacar, espiar ni fundar nuevas aldeas.',
+        desc: 'Controla el alcance de tu aldea. Nivel 1 = 10 casillas de alcance, +10 por nivel (radio circular real). Sin Torre no puedes atacar, espiar ni fundar nuevas aldeas. Coste nv.10: ~72k madera / 143k piedra. Coste nv.30: ~14M madera / 28M piedra.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0 }
-            : { madera: Math.floor(80 * Math.pow(1.9, l)), piedra: Math.floor(160 * Math.pow(1.9, l)) };
+          if (l === 0) return { madera: 0, piedra: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 70, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(20, Math.floor(30 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 35, 1.6, 10, 1.2, 30, 1.05))); }
       },
+
       {
         id: 'torreinvocacion', name: 'Torre de Invocación', icon: '🔮',
-        desc: 'Desbloquea la invocación de criaturas poderosas. Cada nivel reduce un 5% el tiempo de invocación. Necesitas Invocadores entrenados para invocar criaturas.',
+        desc: 'Desbloquea la invocación de criaturas poderosas. Reduce un 5% el tiempo de invocación por nivel. Necesitas Invocadores entrenados. Requiere madera, piedra y Esencia. Coste nv.10: ~205k madera / 307k piedra / 102k esencia. Coste nv.30: ~40M madera / 61M piedra / 20M esencia.',
         prod: function () { return {}; },
         cost: function (l) {
-          return l === 0
-            ? { madera: 0, piedra: 0, esencia: 0 }
-            : { madera: Math.floor(200 * Math.pow(2, l)), piedra: Math.floor(300 * Math.pow(2, l)), esencia: Math.floor(100 * Math.pow(2, l)) };
+          if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
+          return {
+            madera: Math.floor(phasedVal(l, 200, 2, 10, 1.3, 30, 1.05)),
+            piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+            esencia: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+          };
         },
-        time: function (l) { return l === 0 ? 0 : Math.max(40, Math.floor(50 * (l + 1))); }
+        time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(40, phasedVal(l, 55, 1.6, 10, 1.2, 30, 1.05))); }
       },
     ];
 
@@ -3740,7 +1195,7 @@
     function getBarracksCapacity(blds) {
       var lvl = (blds['barracas'] && blds['barracas'].level) || 0;
       if (lvl === 0) return 0;
-      // v1.27: fórmula exponencial base 1.40
+      // v1.30: fórmula exponencial base 1.40
       // lvl1=50, lvl5=192, lvl10=1.033, lvl15=5.556, lvl20=29.882
       return Math.round(50 * Math.pow(1.40, lvl - 1));
     }
@@ -3799,7 +1254,7 @@
     }
 
     // Minutos entre un aldeano y el siguiente según nivel del edificio reclutamiento.
-    // v1.27: Fórmula: 10 * (1 - 0.01 * lvl). Mínimo: 1 min (a partir del nivel 90).
+    // v1.30: Fórmula: 10 * (1 - 0.01 * lvl). Mínimo: 1 min (a partir del nivel 90).
     // Ejemplos: lvl1≈9:54, lvl25=7:30, lvl50=5:00, lvl90=1:00
     function getAldeanosIntervalMs(blds) {
       var lvl = (blds['reclutamiento'] && blds['reclutamiento'].level) || 0;
@@ -3844,10 +1299,18 @@
 
     // Provisiones por aldeano en granja: base 5 + nivel granja (nivel 1 = 6/h por aldeano)
 
-    // Capacidad del almacen: nivel 0 = 1000, se dobla cada nivel
+    // Capacidad del almacen: tres fases
+    // nv.0=1.000 | nv.10≈1.024.000 | nv.30≈195M | nv.50≈517M
+    function almacenCapForLevel(l) {
+      if (l <= 10) return 1000 * Math.pow(2, l);
+      var v10 = 1000 * Math.pow(2, 10); // 1.024.000
+      if (l <= 30) return v10 * Math.pow(1.3, l - 10);
+      var v30 = v10 * Math.pow(1.3, 20); // ~194.6M
+      return v30 * Math.pow(1.05, l - 30);
+    }
     function getCapacity(blds) {
       var lvl = (blds['almacen'] && blds['almacen'].level) || 0;
-      return Math.floor(1000 * Math.pow(2, lvl));
+      return Math.floor(almacenCapForLevel(lvl));
     }
 
     // Recursos que cuentan para el almacen
@@ -3981,7 +1444,6 @@
       // Remaining items: grouped by creature type, just count
       if (queue.length > 1) {
         var waiting = queue.slice(1);
-        // Count by type
         var counts = {};
         waiting.forEach(function (s) {
           counts[s.creature] = (counts[s.creature] || 0) + 1;
@@ -4556,7 +2018,6 @@
     }
 
     function calculateLoot(defenderResources, capacity) {
-      // Calcular total disponible
       var available = {
         madera: defenderResources.madera || 0,
         piedra: defenderResources.piedra || 0,
@@ -4588,7 +2049,6 @@
       result, loot, attackerXP, defenderXP, isNPC) {
       var winner = result.winner === 1 ? 'atacante' : result.winner === 2 ? 'defensor' : 'empate';
 
-      // Calcular bajas y recuperación para atacante
       var attackerInitial = {};
       var attackerFinal = result.survivors1 || {};
       var attackerCasualties = {};
@@ -4604,7 +2064,6 @@
       });
       attackerRecovered = calculateRecovery(attackerCasualties);
 
-      // Calcular bajas y recuperación para defensor
       var defenderInitial = {};
       var defenderFinal = result.survivors2 || {};
       var defenderCasualties = {};
@@ -4734,31 +2193,6 @@
         logDiv.style.display = 'none';
         btn.textContent = 'Ver detalles de combate ▼';
       }
-    }
-
-    // Solo dispara los ataques de un ejército contra el otro (sin respuesta)
-    function executeTurnOneDirection(attackers, defenders, log) {
-      attackers.forEach(function (group) {
-        if (group.count <= 0 || defenders.length === 0) return;
-        for (var i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
-          if (defenders.length === 0) break;
-          var targetIndex = Math.floor(Math.random() * defenders.length);
-          var target = defenders[targetIndex];
-          var totalDamage = group.count * group.stats.damage;
-          var attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
-          if (attackRoll > target.stats.defense) {
-            target.totalHP -= totalDamage;
-            var newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
-            var killed = target.count - newCount;
-            target.count = newCount;
-            if (log) log.push(group.stats.icon + ' G' + group.groupId + ' atacó a ' + target.stats.icon + ' G' + target.groupId + ': ' + totalDamage + ' daño, ' + killed + ' bajas.');
-            if (target.count <= 0) {
-              var idx = defenders.indexOf(target);
-              if (idx !== -1) defenders.splice(idx, 1);
-            }
-          }
-        }
-      });
     }
 
     function executeTurn(army1, army2, log) {
@@ -5584,7 +3018,6 @@
               continue;
             } else if (m.type === 'return') {
               // ── TROPAS REGRESAN ──
-              // Calcular espacio real disponible en barracas
               var barrCap = getBarracksCapacity(vs.buildings);
               var usedNow = getBarracksUsed(vs);
               var freeSlots = Math.max(0, barrCap - usedNow);
@@ -5831,7 +3264,6 @@
       var result = simulateBattle(_atkFullArmy, knightArmy, 0);
       var victoria = result.winner === 1;
 
-      // Calcular bajas para XP (ANTES de recuperación)
       var attackerCasualties = {};
       var defenderCasualties = {};
 
@@ -5889,7 +3321,6 @@
       // Supervivientes propios incluyendo recuperados
       var ownSurv = Object.assign({}, totalSurv);
 
-      // Calcular saqueo — NPC no tiene recursos
       var loot = null;
       if (victoria) {
         loot = { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 };
@@ -5955,7 +3386,9 @@
         Object.keys(CREATURE_TYPES).forEach(function (k) { var n = (ts.creatures && ts.creatures[k]) || 0; if (n > 0) defOwnerTroops[k] = n; });
         var defenderContingents = [{
           owner_id:     targetVillage.owner_id,
-          name:         (profileCache[targetVillage.owner_id] && profileCache[targetVillage.owner_id].username) || 'Defensor',
+          name:         targetVillage.owner_id === GHOST_OWNER_ID
+                          ? (targetVillage.name || 'Aldea Fantasma')
+                          : (profileCache[targetVillage.owner_id] && profileCache[targetVillage.owner_id].username) || 'Defensor',
           village_name: targetVillage.name || '',
           village_id:   targetVillage.id,
           troops:       defOwnerTroops
@@ -6059,6 +3492,7 @@
         var titleDef   = (victoria ? '🚨' : '🛡️') + ' BATALLA PvP: ' + leaderName + ' atacó tu aldea';
         var sentTo = new Set();
         async function notifyParticipant(uid, title) {
+          if (!uid || uid === GHOST_OWNER_ID) return; // aldeas fantasma no tienen buzón
           if (!sentTo.has(uid)) { await sendSystemReport(uid, title, reportHtml); sentTo.add(uid); }
         }
         await notifyParticipant(currentUser.id, titleAtk);
@@ -6180,7 +3614,6 @@
             await sbClient.from('villages').update({ state: JSON.stringify(lvState) }).eq('id', lvr.data.id);
           }
         }
-        // Limpiar tabla
         await sbClient.from('active_missions').delete().eq('mission_id', missionId);
         showNotif('⚔️ Ataque conjunto cancelado. Tropas regresando.', 'ok');
         if (activeVillage && activeVillage.id === leaderVillageId) await flushVillage();
@@ -6222,7 +3655,6 @@
         if (!vs.buildings[id]) vs.buildings[id] = { level: 1 };
         else vs.buildings[id].level++;
 
-        // Clear queue
         vs.build_queue = null;
 
         var def = BUILDINGS.find(function (b) { return b.id === id; });
@@ -6499,7 +3931,6 @@
       if (typeof resetUiAnimation === 'function') resetUiAnimation();
       if (typeof ensureUiAnim === 'function') ensureUiAnim();
 
-      // Load world data
       if (typeof loadAllVillages === 'function') loadAllVillages();
       // Cargar estado de alianza para el overview (sin bloquear)
       refreshMyAlliance().catch(function () { });
@@ -6610,7 +4041,6 @@
           }
         }
 
-        // Fetch Buildings
         let { data: blds, error: bErr } = await sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle();
         if (bErr) console.warn('Error loading buildings for village', v.id, bErr);
 
@@ -6625,7 +4055,6 @@
           }
         }
 
-        // Fetch Troops
         let { data: trp, error: tErr } = await sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle();
         if (tErr) console.warn('Error loading troops for village', v.id, tErr);
 
@@ -6643,7 +4072,6 @@
           }
         }
 
-        // Fetch Creatures
         let { data: crs, error: cErr } = await sbClient.from('creatures').select('*').eq('village_id', v.id).maybeSingle();
         if (cErr) console.warn('Error loading creatures for village', v.id, cErr);
 
@@ -6815,7 +4243,6 @@
     async function createFirstVillage() {
       showNotif('Fundando primera colonia...', 'ok');
 
-      // Find empty spot
       let cx, cy;
       let found = false;
       for (let i = 0; i < 100; i++) {
@@ -7074,7 +4501,6 @@
     function tick() {
       if (!activeVillage) return;
 
-      // Check if build completed
       if (!activeVillage.state.build_queue) activeVillage.state.build_queue = null;
       var oldQ = activeVillage.state.build_queue ? JSON.stringify(activeVillage.state.build_queue) : null;
       if (!activeVillage.state.mission_queue) activeVillage.state.mission_queue = [];
@@ -7368,7 +4794,6 @@
     }
 
     // ============================================================
-    // BUILD — saves finish_at timestamp immediately
     // ============================================================
     function startBuild(id) {
       if (!activeVillage) return;
@@ -7411,7 +4836,6 @@
     }
 
     // ============================================================
-    // RENDER BUILDINGS
     // ============================================================
     function renderBuildings(res) {
       if (!activeVillage) return;
@@ -7476,7 +4900,6 @@
     }
 
     // ============================================================
-    // RENDER QUEUE
     // ============================================================
     function renderQueue(vs) {
       var ids = ['qItems', 'qItemsOv'];
@@ -7500,7 +4923,6 @@
           + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div></div>';
       });
 
-      // RENDER MISSIONS
       var mIds = ['qItems', 'qItemsOv']; // We use the same containers or add specific ones
       mIds.forEach(function (elId) {
         var el = document.getElementById(elId);
@@ -7754,7 +5176,6 @@
         'Cámara: [' + cx + ', ' + cy + ']' +
         (isOffCenter ? '  |  Tu aldea: [' + activeVillage.x + ', ' + activeVillage.y + ']  |  (⌂ para volver)' : '  |  Vista: [' + (cx - r) + ',' + (cy - r) + '] a [' + (cx + r) + ',' + (cy + r) + ']');
 
-      // Renderizar minimapa con la misma cámara
       renderMinimap(cx, cy);
 
       for (var dy2 = -r; dy2 <= r; dy2++) {
@@ -7887,7 +5308,6 @@
           }
         });
 
-        // Add creatures
         var creatures = vs.creatures || defaultCreatures();
         var hasCreatures = false;
         Object.keys(CREATURE_TYPES).forEach(k => {
@@ -7970,7 +5390,6 @@
       if (!activeVillage) return;
       var dist = Math.max(Math.abs(destX - activeVillage.x), Math.abs(destY - activeVillage.y));
       var minSpeed = Infinity;
-      // Check all selected troops
       Object.keys(TROOP_TYPES).forEach(function (k) {
         var input = document.getElementById('mUnits_' + k);
         if (input && parseInt(input.value) > 0) {
@@ -8230,7 +5649,6 @@
       // Navigate to messages and open DM
       showPage('messages', document.querySelector('.nav-item[onclick*="messages"]'));
       await new Promise(r => setTimeout(r, 300));
-      // Find or create DM thread with this user
       try {
         var r = await sbClient.rpc('get_or_create_dm_thread', {
           p_user1: currentUser.id, p_user2: targetUserId
@@ -9242,7 +6660,6 @@
       var troops = {};
       try { troops = JSON.parse(troopsJson); } catch (e) { showNotif('Error', 'err'); return; }
 
-      // Calcular tiempo de viaje desde aldea actual
       var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
       var minSpeed = 999;
       Object.keys(troops).forEach(function (k) {
@@ -9306,123 +6723,12 @@
     }
 
     // ============================================================
-    // SIMULADOR DE BATALLA
+    // SIMULADOR DE BATALLA — v0.23 embebido, motor unificado con standalone
     // ============================================================
-    function renderSimulator() {
-      var box = document.getElementById('simulatorContent');
-      if (!box) return;
-      window._simContingents = window._simContingents || [
-        { id: 'atk0', side: 'atk', name: 'Atacante 1' },
-        { id: 'def0', side: 'def', name: 'Defensor 1' }
-      ];
+    var _simIframe = null;
 
-      function troopInputsHtml(cid) {
-        var rows = Object.keys(TROOP_TYPES).map(function (k) {
-          var t = TROOP_TYPES[k];
-          return '<tr style="border-bottom:1px solid rgba(255,255,255,.04);">'
-            + '<td style="padding:4px 6px;font-size:.78rem;white-space:nowrap;">' + t.icon + ' ' + t.name + '</td>'
-            + '<td style="padding:3px 4px;"><input type="number" id="' + cid + '_qty_' + k + '" value="0" min="0" style="width:55px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:VT323,monospace;font-size:.8rem;"></td>'
-            + '</tr>';
-        }).join('');
-        var crows = Object.keys(CREATURE_TYPES).map(function (k) {
-          var c = CREATURE_TYPES[k];
-          return '<tr style="border-bottom:1px solid rgba(255,255,255,.04);">'
-            + '<td style="padding:4px 6px;font-size:.78rem;white-space:nowrap;color:var(--accent2);">' + c.icon + ' ' + c.name + '</td>'
-            + '<td style="padding:3px 4px;"><input type="number" id="' + cid + '_qty_' + k + '" value="0" min="0" style="width:55px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:VT323,monospace;font-size:.8rem;"></td>'
-            + '</tr>';
-        }).join('');
-        return '<table style="border-collapse:collapse;width:100%;">'
-          + '<thead><tr><th style="text-align:left;padding:3px 6px;font-size:.62rem;color:var(--dim);">TROPA</th>'
-          + '<th style="padding:3px 4px;font-size:.62rem;color:var(--dim);">CANT.</th></tr></thead>'
-          + '<tbody>' + rows + crows + '</tbody></table>';
-      }
+    // Simulador cargado desde game-simulator.js
 
-      function contingentCard(c) {
-        var sideColor = c.side === 'atk' ? '#e87030' : '#4090e0';
-        var sideLabel = c.side === 'atk' ? '⚔ ATACANTE' : '🛡 DEFENSOR';
-        return '<div id="simcard_' + c.id + '" style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ' + sideColor + ';padding:10px 12px;margin-bottom:6px;">'
-          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-          + '<div style="display:flex;align-items:center;gap:8px;">'
-          + '<span style="font-size:.62rem;padding:1px 6px;background:' + sideColor + '22;border:1px solid ' + sideColor + '55;color:' + sideColor + ';">' + sideLabel + '</span>'
-          + '<input id="simname_' + c.id + '" value="' + escapeAttr(c.name) + '" placeholder="Nombre" style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:VT323,monospace;font-size:.9rem;width:120px;outline:none;">'
-          + '</div>'
-          + '<button onclick="simRemoveContingent(\'' + c.id + '\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:2px 7px;border-radius:3px;font-size:.65rem;cursor:pointer;">✗</button>'
-          + '</div>'
-          + troopInputsHtml(c.id)
-          + '</div>';
-      }
-
-      var atkCards = window._simContingents.filter(function (c) { return c.side === 'atk'; }).map(contingentCard).join('');
-      var defCards = window._simContingents.filter(function (c) { return c.side === 'def'; }).map(contingentCard).join('');
-
-      box.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;max-width:640px;">'
-        // MURALLA
-        + '<div style="background:var(--panel2);border:1px solid var(--border);padding:10px 14px;">'
-        + '<label style="font-size:.72rem;color:var(--dim);display:flex;align-items:center;gap:10px;">🏰 Nivel de muralla defensora:'
-        + '<input type="number" id="simWallLvl" value="0" min="0" max="20" style="width:55px;background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 5px;font-family:VT323,monospace;font-size:.85rem;">'
-        + '</label></div>'
-        // ATACANTES
-        + '<div style="font-family:VT323,monospace;font-size:1.1rem;color:#e87030;letter-spacing:1px;padding:4px 0;">⚔ BANDO ATACANTE</div>'
-        + atkCards
-        + '<button onclick="simAddContingent(\'atk\')" style="background:rgba(232,112,48,.1);border:1px dashed rgba(232,112,48,.4);color:#e87030;padding:6px;width:100%;cursor:pointer;font-size:.75rem;">+ Añadir atacante</button>'
-        // DEFENSORES
-        + '<div style="font-family:VT323,monospace;font-size:1.1rem;color:#4090e0;letter-spacing:1px;padding:4px 0;">🛡 BANDO DEFENSOR</div>'
-        + defCards
-        + '<button onclick="simAddContingent(\'def\')" style="background:rgba(64,144,224,.1);border:1px dashed rgba(64,144,224,.4);color:#4090e0;padding:6px;width:100%;cursor:pointer;font-size:.75rem;">+ Añadir defensor</button>'
-        + '<button class="btn" onclick="runSimulation()" style="width:100%;margin-top:4px;">⚔️ Simular batalla</button>'
-        + '<div id="simResult"></div>'
-        + '</div>';
-    }
-
-    function escapeAttr(s) { return String(s || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-    function simAddContingent(side) {
-      window._simContingents = window._simContingents || [];
-      var idx = window._simContingents.filter(function (c) { return c.side === side; }).length;
-      var label = side === 'atk' ? 'Atacante ' : 'Defensor ';
-      window._simContingents.push({ id: side + Date.now(), side: side, name: label + (idx + 1) });
-      renderSimulator();
-    }
-
-    function simRemoveContingent(id) {
-      window._simContingents = (window._simContingents || []).filter(function (c) { return c.id !== id; });
-      renderSimulator();
-    }
-
-    function runSimulation() {
-      var contingents = window._simContingents || [];
-      var wallLvl = parseInt(document.getElementById('simWallLvl').value) || 0;
-
-      function collectContingent(c) {
-        // Actualizar nombre del input
-        var nameEl = document.getElementById('simname_' + c.id);
-        if (nameEl) c.name = nameEl.value || c.name;
-        var troops = {};
-        Object.keys(TROOP_TYPES).forEach(function (k) {
-          var el = document.getElementById(c.id + '_qty_' + k);
-          var v = el ? (parseInt(el.value) || 0) : 0;
-          if (v > 0) troops[k] = v;
-        });
-        Object.keys(CREATURE_TYPES).forEach(function (k) {
-          var el = document.getElementById(c.id + '_qty_' + k);
-          var v = el ? (parseInt(el.value) || 0) : 0;
-          if (v > 0) troops[k] = v;
-        });
-        return { owner_id: c.id, name: c.name, village_name: '', troops: troops };
-      }
-
-      var atkContingents = contingents.filter(function (c) { return c.side === 'atk'; }).map(collectContingent);
-      var defContingents = contingents.filter(function (c) { return c.side === 'def'; }).map(collectContingent);
-
-      var atkHasTroops = atkContingents.some(function (c) { return Object.keys(c.troops).length > 0; });
-      var defHasTroops = defContingents.some(function (c) { return Object.keys(c.troops).length > 0; });
-      if (!atkHasTroops) { showNotif('Añade al menos 1 tropa atacante', 'err'); return; }
-      if (!defHasTroops) { showNotif('Añade al menos 1 tropa defensora', 'err'); return; }
-
-      var bResult = simulateBattlePvP(atkContingents, defContingents, wallLvl);
-      var reportHtml = generateBattlePvPReport(bResult, wallLvl, null, null);
-      document.getElementById('simResult').innerHTML = reportHtml;
-    }
 
     function showPage(name, el) {
       document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
@@ -9496,7 +6802,6 @@
       var aldTotal = (vs.troops && vs.troops.aldeano !== undefined) ? vs.troops.aldeano : 0;
       var aldLibres = Math.max(0, aldTotal - totalAssigned);
 
-      // Mostrar aldeanos disponibles
       var el = document.getElementById('aldLibresDisplay');
       if (el) el.textContent = aldLibres + ' / ' + aldTotal;
 
@@ -9821,7 +7126,6 @@
       var r = await sbClient.from('villages').update({ name: newName }).eq('id', activeVillage.id);
       if (r.error) { showNotif('Error al renombrar: ' + r.error.message, 'err'); return; }
       activeVillage.name = newName;
-      // Update selector
       populateVillageSel();
       document.getElementById('villageSel').value = activeVillage.id;
       document.getElementById('renameForm').style.display = 'none';
@@ -9912,7 +7216,6 @@
 
         if (isReclutamiento) {
           var prodAld = (lvl === 0) ? 0 : Math.max(2, Math.floor(2 + lvl * 2));
-          // Calcular intervalo entre aldeanos para este nivel
           var fakeBldRec = {};
           BUILDINGS.forEach(function (b) { fakeBldRec[b.id] = { level: (vs.buildings[b.id] && vs.buildings[b.id].level) || 1 }; });
           fakeBldRec['reclutamiento'] = { level: lvl };
@@ -9935,7 +7238,7 @@
           plines = '<div class="pl" style="color:var(--aldeanos)">🏠 ' + plazas + ' plazas</div>';
 
         } else if (isAlmacen) {
-          var cap = Math.floor(1000 * Math.pow(2, lvl));
+          var cap = Math.floor(almacenCapForLevel(lvl));
           plines = '<div class="pl" style="color:var(--accent)">📦 ' + fmt(cap) + ' unidades</div>'
             + '<div class="pl none" style="font-size:.58rem;opacity:.7">(madera+piedra+hierro+provisiones — la Esencia NO usa almacén)</div>';
 
@@ -10045,7 +7348,7 @@
         var curPlazas = getBarracksCapacity(fakeBldBarCur);
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;🏠 ' + curPlazas + ' plazas para tropas normales';
       } else if (isAlmacen) {
-        var curCap = Math.floor(1000 * Math.pow(2, curLvl));
+        var curCap = Math.floor(almacenCapForLevel(curLvl));
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;📦 Capacidad actual: ' + fmt(curCap) + ' unidades';
       } else if (isGranja) {
         modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;🌾 ' + (5 + curLvl) + ' provisiones/aldeano/h';
@@ -10166,14 +7469,13 @@
       }
     });
 
-    // Check existing session on load
 
     // ============================================================
     // EPIC WARRIOS V2 — SOCIAL + RANKING + TROOPS SYNC (v2)
     // ============================================================
     let currentThreadId = null;
     let currentThreadType = null;
-    var _selectedReportIds = new Set(); // v1.27: multi-select para informes de sistema
+    var _selectedReportIds = new Set(); // v1.30: multi-select para informes de sistema
 
     async function ensureLogged() {
       if (!currentUser) { showNotif('Inicia sesión primero.', 'err'); return false; }
@@ -10707,7 +8009,6 @@
       if (!(await ensureLogged())) return;
       if (_myAllianceRole !== 'leader') { showNotif('Solo el líder puede disolver la alianza.', 'err'); return; }
       if (!confirm('¿Seguro? Esto eliminará la alianza y expulsará a todos sus miembros. Esta acción es IRREVERSIBLE.')) return;
-      // Borrar todos los miembros y luego la alianza
       await sbClient.from('alliance_members').delete().eq('alliance_id', _myAllianceId);
       const del = await sbClient.from('alliances').delete().eq('id', _myAllianceId);
       if (del.error) { showNotif('Error: ' + del.error.message, 'err'); return; }
@@ -10935,19 +8236,16 @@
       const chatBox = document.getElementById('chatBox');
 
       if (type === 'system') {
-        // Mostrar panel de reportes
         reportsList.style.display = 'flex';
         chatBox.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--dim);text-align:center;"><div style="font-size:2rem;margin-bottom:10px;">📋</div><div style="font-size:.85rem;">Selecciona un informe<br>de la lista</div></div>';
         await loadSystemReports();
         renderMessagesHeader('system', 'Informes del Sistema');
       } else {
-        // Ocultar panel de reportes, mostrar chat normal
         reportsList.style.display = 'none';
 
         var headerTitle = type === 'alliance' ? 'Chat de alianza' : 'Mensaje directo';
 
         if (type === 'dm') {
-          // Obtener el nombre del otro usuario en el DM
           try {
             var { data: members } = await sbClient
               .from('thread_members')
@@ -11183,7 +8481,7 @@
     var currentReportId = null;
 
     async function loadSystemReports() {
-      // v1.27: reset selection state on every reload
+      // v1.30: reset selection state on every reload
       _selectedReportIds = new Set();
       var selChk = document.getElementById('selectAllReportsChk');
       if (selChk) { selChk.checked = false; selChk.indeterminate = false; }
@@ -11583,7 +8881,7 @@
     // viene directamente de sbClient.auth.getUser() y se sobreescribe en cada login.
 
     // ============================================================
-    // v1.27: MOTD — Mensaje del día del administrador
+    // v1.30: MOTD — Mensaje del día del administrador
     // Guardado en tabla 'config' (clave 'motd') en Supabase
     // ============================================================
     async function saveMOTD() {
@@ -11613,749 +8911,7 @@
       setTimeout(function () { msg.textContent = ''; }, 2000);
     }
 
-    async function _loadMOTDForAdmin() {
-      if (!isAdmin()) return;
-      var r = await sbClient.from('config').select('value').eq('key', 'motd').maybeSingle();
-      if (r.data && r.data.value) {
-        var el = document.getElementById('motdInput');
-        if (el) el.value = r.data.value;
-      }
-    }
-
-    async function checkAndShowMOTD() {
-      try {
-        var r = await sbClient.from('config').select('value').eq('key', 'motd').maybeSingle();
-        if (!r.data || !r.data.value || !r.data.value.trim()) return;
-        var text = r.data.value.trim();
-        // Solo mostrar si no lo vio ya en esta sesión
-        var seen = sessionStorage.getItem('EW_motd_seen');
-        if (seen === text) return;
-        sessionStorage.setItem('EW_motd_seen', text);
-        document.getElementById('motdModalText').textContent = text;
-        document.getElementById('motdModal').style.display = 'flex';
-      } catch (e) {
-        console.warn('MOTD check error:', e);
-      }
-    }
-
-    function closeMOTD() {
-      document.getElementById('motdModal').style.display = 'none';
-    }
-
-    function isAdmin() {
-      if (!currentUser) return false;
-      if (currentUser.email !== 'sementalac@gmail.com') return false;
-      // Verificación extra: el id debe ser un UUID válido (no manipulado)
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) return false;
-      return true;
-    }
-
-    function checkAdminButton() {
-      var btn = document.getElementById('adminBtn');
-      var nav = document.getElementById('adminNavSection');
-      if (btn) btn.style.display = isAdmin() ? 'inline-block' : 'none';
-      if (nav) nav.style.display = isAdmin() ? 'block' : 'none';
-    }
-
-    // ── Admin recursos panel ──
-    // ── Admin Control Panel (Universal v0.19) ──
-    let adEditingVillage = null;
-
-    function openAdmin() {
-      if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
-      document.getElementById('adSearchInp').value = '';
-      _loadMOTDForAdmin();
-      document.getElementById('adSearchResults').style.display = 'none';
-      document.getElementById('adVillagesBox').style.display = 'none';
-      document.getElementById('adEditBox').style.display = 'none';
-      document.getElementById('adminMsg').textContent = '';
-      document.getElementById('adminOverlay').classList.remove('hidden');
-
-      // v1.17: Mostrar botón "Ver todos" solo para sementalac@gmail.com
-      var btn = document.getElementById('adminViewAllBtn');
-      if (btn) {
-        btn.style.display = (currentUser && currentUser.email === 'sementalac@gmail.com') ? 'inline-block' : 'none';
-      }
-    }
-
-    async function searchAdminPlayer() {
-      const q = document.getElementById('adSearchInp').value.trim();
-      if (q.length < 3) { showNotif('Escribe al menos 3 letras.', 'err'); return; }
-
-      const box = document.getElementById('adSearchResults');
-      const list = document.getElementById('adPlayersList');
-      list.innerHTML = '<div class="muted">Buscando...</div>';
-      box.style.display = 'block';
-
-      // Mejoramos la consulta: si no parece un UUID, no filtramos por ID para evitar error de tipo
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q);
-
-      let res;
-      if (isUuid) {
-        res = await sbClient.from('profiles').select('id, username')
-          .or(`id.eq.${q}, username.ilike.%${q}%`)
-          .limit(10);
-      } else {
-        res = await sbClient.from('profiles').select('id, username')
-          .ilike('username', `%${q}%`)
-          .limit(10);
-      }
-
-      list.innerHTML = '';
-      if (res.error) {
-        list.innerHTML = `<div class="muted" style="color:var(--danger)">Error: ${res.error.message}</div>`;
-        return;
-      }
-
-      if (!res.data?.length) {
-        list.innerHTML = '<div class="muted">No se encontraron jugadores.</div>';
-      } else {
-        res.data.forEach(p => {
-          const div = document.createElement('div');
-          div.className = 'admin-village-item';
-          div.textContent = `👤 ${p.username} (${p.id.substring(0, 8)}...)`;
-          div.onclick = () => loadAdminVillages(p.id);
-          list.appendChild(div);
-        });
-      }
-    }
-
-    async function loadAdminVillages(userId) {
-      // Usamos owner_id que es el nombre real en esta versión
-      const res = await sbClient.from('villages').select('id, name').eq('owner_id', userId);
-      const box = document.getElementById('adVillagesBox');
-      const list = document.getElementById('adVillagesList');
-      list.innerHTML = '';
-
-      if (res.error || !res.data?.length) {
-        list.innerHTML = '<div class="muted">Este jugador no tiene aldeas o error: ' + (res.error?.message || 'Ninguna') + '</div>';
-      } else {
-        res.data.forEach(v => {
-          const div = document.createElement('div');
-          div.className = 'admin-village-item';
-          div.textContent = `🏘️ ${v.name} (ID: ${v.id})`;
-          div.onclick = () => selectAdminVillage(v);
-          list.appendChild(div);
-        });
-      }
-      box.style.display = 'block';
-      document.getElementById('adEditBox').style.display = 'none';
-    }
-
-    async function selectAdminVillage(village) {
-      adEditingVillage = village;
-      document.getElementById('adEditingName').textContent = village.name;
-      document.getElementById('adminMsg').textContent = 'Cargando datos de aldea...';
-
-      // Cargar recursos, tropas y perfil del jugador
-      const r = await sbClient.from('resources').select('*').eq('village_id', village.id).maybeSingle();
-      const t = await sbClient.from('troops').select('*').eq('village_id', village.id).maybeSingle();
-      const p = await sbClient.from('profiles').select('experience').eq('id', village.owner_id).maybeSingle();
-
-      const vRes = r.data || { madera: 0, piedra: 0, hierro: 0, prov: 0, esencia: 0 };
-      const vTrp = t.data || { aldeano: 0 };
-
-      document.getElementById('adMadera').value = vRes.madera || 0;
-      document.getElementById('adPiedra').value = vRes.piedra || 0;
-      document.getElementById('adHierro').value = vRes.hierro || 0;
-      document.getElementById('adProv').value = vRes.prov || 0;
-      document.getElementById('adEsencia').value = vRes.esencia || 0;
-      document.getElementById('adAldeanos').value = vTrp.aldeano || 0;
-      document.getElementById('adExperience').value = (p.data && p.data.experience) || 0;
-
-      document.getElementById('adEditBox').style.display = 'block';
-      document.getElementById('adminMsg').textContent = '';
-
-      // Resaltar aldea seleccionada
-      document.querySelectorAll('#adVillagesList .admin-village-item').forEach(el => {
-        el.classList.toggle('active', el.textContent.includes(village.name));
-      });
-    }
-
-    async function adminApplyUniversal() {
-      if (!adEditingVillage) return;
-
-      const madera = parseInt(document.getElementById('adMadera').value) || 0;
-      const piedra = parseInt(document.getElementById('adPiedra').value) || 0;
-      const hierro = parseInt(document.getElementById('adHierro').value) || 0;
-      const prov = parseInt(document.getElementById('adProv').value) || 0;
-      const esencia = parseInt(document.getElementById('adEsencia').value) || 0;
-      const aldeanos = parseInt(document.getElementById('adAldeanos').value) || 0;
-      const experience = parseInt(document.getElementById('adExperience').value) || 0;
-
-      showNotif('Guardando cambios en tablas...', 'ok');
-
-      // Update Resources
-      const updRes = await sbClient.from('resources')
-        .update({ madera, piedra, hierro, prov, esencia, last_update: new Date().toISOString() })
-        .eq('village_id', adEditingVillage.id);
-
-      // Update Troops (Aldeanos)
-      const updTrp = await sbClient.from('troops')
-        .update({ aldeano: aldeanos })
-        .eq('village_id', adEditingVillage.id);
-
-      // Update Experience in Profiles
-      const updPrf = await sbClient.from('profiles')
-        .update({ experience: experience })
-        .eq('id', adEditingVillage.owner_id);
-
-      if (updRes.error || updTrp.error) {
-        showNotif('Error guardando: ' + (updRes.error?.message || updTrp.error?.message), 'err');
-      } else {
-        showNotif('✓ Datos actualizados con éxito', 'ok');
-        document.getElementById('adminMsg').textContent = `✓ Guardado: ${fmt(madera)}🌲 ${fmt(piedra)}⛰️ ${fmt(hierro)}⚙️ ${fmt(prov)}🌾`;
-
-        // Si es nuestra propia aldea activa, forzamos recarga para ver cambios
-        if (activeVillage && activeVillage.id === adEditingVillage.id) {
-          await loadMyVillages();
-          switchVillage(activeVillage.id);
-        }
-      }
-    }
-
-    // ── Admin — Reparación Global de misiones fantasma ──────────────
-    // Recorre TODAS las aldeas de TODOS los jugadores.
-    // Para cada aldea con misiones 'return' cuyo finish_at ya pasó
-    // (y no se resolvieron solas por el bug), devuelve las tropas
-    // respetando la capacidad de barracas y limpia la cola.
-    // Almacena el resultado del escaneo para usarlo en la fase de reparación
-    var _repairScanResults = null;
-
-    // ── FASE 1: Escanear — solo lectura, sin escribir nada ──────────
-    async function adminRepairAll() {
-      if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
-      var { data: { user } } = await sbClient.auth.getUser();
-      if (!user || user.email !== 'sementalac@gmail.com') {
-        showNotif('Sesión no verificada. Vuelve a hacer login.', 'err'); return;
-      }
-
-      var logEl = document.getElementById('repairLog');
-      var btnEl = document.getElementById('repairBtn');
-      var confirmEl = document.getElementById('repairConfirmBox');
-      if (!logEl || !btnEl) return;
-
-      _repairScanResults = null;
-      btnEl.disabled = true;
-      btnEl.textContent = '⏳ Escaneando...';
-      if (confirmEl) confirmEl.style.display = 'none';
-      logEl.style.display = 'block';
-      logEl.innerHTML = '<div style="color:var(--gold)">🔍 Escaneando todas las aldeas (solo lectura)...</div>';
-
-      var now = Date.now();
-      var affected = []; // aldeas con problemas
-      var log = [];
-
-      try {
-        var { data: villages, error: vErr } = await sbClient
-          .from('villages').select('id, name, owner_id, mission_queue');
-        if (vErr) throw new Error('Error cargando aldeas: ' + vErr.message);
-
-        // Cargar perfiles para tener nombres de jugador
-        var { data: profiles } = await sbClient.from('profiles').select('id, username');
-        var profileMap = {};
-        (profiles || []).forEach(function (p) { profileMap[p.id] = p.username || p.id; });
-
-        log.push('📋 ' + villages.length + ' aldeas escaneadas — ' + new Date().toLocaleTimeString('es-ES'));
-        log.push('─────────────────────────────────');
-
-        for (var v of villages) {
-          var mq = Array.isArray(v.mission_queue) ? v.mission_queue : [];
-          var stuck = mq.filter(function (m) {
-            if (m.type !== 'return') return false;
-            var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
-            return ft <= now;
-          });
-
-          var { data: trpRow } = await sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle();
-          var { data: bldRow } = await sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle();
-          if (!trpRow || !bldRow) continue;
-
-          var barrLvl = bldRow.barracas || 1;
-          // v1.20: usar getBarracksCapacity para consistencia con la fórmula exponencial
-          var _fakeBldScan = { barracas: { level: barrLvl } };
-          var barrCap = getBarracksCapacity(_fakeBldScan);
-          var otherSlots = 0;
-          Object.keys(TROOP_TYPES).forEach(function (k) {
-            if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
-          });
-          var maxAld = Math.max(0, barrCap - otherSlots);
-          var currentAld = trpRow.aldeano || 0;
-          var isOvercapped = currentAld > maxAld;
-
-          var returningAld = 0;
-          stuck.forEach(function (m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
-
-          if (stuck.length === 0 && !isOvercapped) continue;
-
-          var playerName = profileMap[v.owner_id] || v.owner_id.substring(0, 8) + '…';
-          var problems = [];
-          if (stuck.length > 0) {
-            var oldestStuck = stuck.reduce(function (min, m) {
-              return new Date(m.finish_at).getTime() < new Date(min.finish_at).getTime() ? m : min;
-            });
-            var horasAtascado = Math.round((now - new Date(oldestStuck.finish_at).getTime()) / 3600000 * 10) / 10;
-            problems.push(stuck.length + ' misión(es) retorno atascada(s) hace ' + horasAtascado + 'h · ' + returningAld + ' aldeanos esperando');
-          }
-          if (isOvercapped) {
-            problems.push('sobreocupación: ' + currentAld + ' aldeanos en barracas de ' + barrCap + ' plazas (exceso: ' + (currentAld - maxAld) + ')');
-          }
-
-          var entry = {
-            village: v, trpRow: trpRow, bldRow: bldRow,
-            stuck: stuck, isOvercapped: isOvercapped,
-            barrCap: barrCap, maxAld: maxAld, currentAld: currentAld,
-            returningAld: returningAld, mq: mq
-          };
-          affected.push(entry);
-
-          log.push('⚠️ [' + playerName + '] ' + (v.name || v.id));
-          problems.forEach(function (p) { log.push('   → ' + p); });
-        }
-
-        log.push('─────────────────────────────────');
-        if (affected.length === 0) {
-          log.push('✅ Todo correcto — ninguna aldea necesita reparación.');
-        } else {
-          log.push('🔎 ' + affected.length + ' aldea(s) con problemas detectada(s).');
-          log.push('Revisa el informe y confirma si quieres proceder.');
-        }
-
-        _repairScanResults = affected;
-
-      } catch (e) {
-        log.push('❌ Error crítico: ' + e.message);
-        showNotif('Error en escaneo: ' + e.message, 'err');
-      }
-
-      logEl.innerHTML = log.map(function (l) {
-        var color = l.startsWith('❌') ? 'var(--danger)'
-          : l.startsWith('⚠️') ? 'var(--gold)'
-            : l.startsWith('✅') ? 'var(--ok)'
-              : l.startsWith('   →') ? '#ccc'
-                : 'var(--dim)';
-        return '<div style="color:' + color + ';margin-bottom:2px;">' + escapeHtml(l) + '</div>';
-      }).join('');
-
-      btnEl.disabled = false;
-      btnEl.textContent = '🔍 Escanear de nuevo';
-
-      // Mostrar botón de confirmar solo si hay problemas
-      if (confirmEl) {
-        if (_repairScanResults && _repairScanResults.length > 0) {
-          confirmEl.style.display = 'block';
-          document.getElementById('repairConfirmCount').textContent = _repairScanResults.length;
-        } else {
-          confirmEl.style.display = 'none';
-        }
-      }
-    }
-
-    // ── FASE 2: Aplicar reparación — escribe en Supabase ───────────
-    async function adminRepairConfirm() {
-      if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
-      if (!_repairScanResults || _repairScanResults.length === 0) {
-        showNotif('Primero escanea para detectar problemas.', 'err'); return;
-      }
-      var { data: { user } } = await sbClient.auth.getUser();
-      if (!user || user.email !== 'sementalac@gmail.com') {
-        showNotif('Sesión no verificada.', 'err'); return;
-      }
-
-      var logEl = document.getElementById('repairLog');
-      var confirmEl = document.getElementById('repairConfirmBox');
-      var confirmBtn = document.getElementById('repairConfirmBtn');
-      var now = Date.now();
-      var totalFixed = 0;
-      var errors = 0;
-      var log = ['🔧 APLICANDO REPARACIONES...', '─────────────────────────────────'];
-
-      if (confirmBtn) confirmBtn.disabled = true;
-
-      for (var entry of _repairScanResults) {
-        var v = entry.village;
-        var stuck = entry.stuck;
-        var mq = entry.mq;
-
-        // Recalcular con datos del escaneo
-        var currentAld = entry.currentAld;
-        var maxAld = entry.maxAld;
-        var barrCap = entry.barrCap;
-        var trpRow = entry.trpRow;
-        var otherSlots = 0;
-        Object.keys(TROOP_TYPES).forEach(function (k) {
-          if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
-        });
-
-        // Saneamiento sobreocupación
-        var overcapFixed = 0;
-        if (currentAld > maxAld) {
-          overcapFixed = currentAld - maxAld;
-          currentAld = maxAld;
-        }
-
-        var freeSlots = Math.max(0, barrCap - currentAld - otherSlots);
-
-        // Calcular tropas que vuelven
-        var returningAld = 0;
-        var returningOther = {};
-        stuck.forEach(function (m) {
-          returningAld += (m.troops && m.troops.aldeano) || 0;
-          Object.keys(m.troops || {}).forEach(function (k) {
-            if (k !== 'aldeano') returningOther[k] = (returningOther[k] || 0) + (m.troops[k] || 0);
-          });
-        });
-
-        var aldEntra = Math.min(returningAld, freeSlots);
-        var newAld = currentAld + aldEntra;
-        freeSlots -= aldEntra;
-
-        var trpUpdate = { aldeano: newAld };
-        Object.keys(returningOther).forEach(function (k) {
-          var slots = (TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1;
-          var unitsIn = Math.min(returningOther[k], Math.floor(freeSlots / slots));
-          trpUpdate[k] = (trpRow[k] || 0) + unitsIn;
-          freeSlots -= unitsIn * slots;
-        });
-
-        var newMq = mq.filter(function (m) {
-          if (m.type !== 'return') return true;
-          return new Date(m.finish_at).getTime() > now;
-        });
-
-        var { error: tErr } = await sbClient.from('troops').update(trpUpdate).eq('village_id', v.id);
-        var { error: vErr } = await sbClient.from('villages').update({ mission_queue: newMq }).eq('id', v.id);
-
-        if (tErr || vErr) {
-          log.push('❌ ' + (v.name || v.id) + ': error — ' + ((tErr || vErr).message));
-          errors++;
-        } else {
-          var linea = '✅ ' + (v.name || v.id) + ':';
-          if (overcapFixed > 0) linea += ' exceso -' + overcapFixed + ' ald.';
-          if (stuck.length > 0) linea += ' · ' + stuck.length + ' misión(es) · +' + aldEntra + ' ald. recuperados';
-          if (returningAld - aldEntra > 0) linea += ' · ' + (returningAld - aldEntra) + ' perdidos (sin espacio)';
-          log.push(linea);
-          totalFixed++;
-        }
-      }
-
-      log.push('─────────────────────────────────');
-      log.push('✅ ' + totalFixed + ' aldea(s) reparadas' + (errors > 0 ? ' · ❌ ' + errors + ' errores' : ''));
-
-      logEl.innerHTML = log.map(function (l) {
-        var color = l.startsWith('❌') ? 'var(--danger)' : l.startsWith('✅') ? 'var(--ok)' : l.startsWith('🔧') ? 'var(--gold)' : 'var(--dim)';
-        return '<div style="color:' + color + ';margin-bottom:2px;">' + escapeHtml(l) + '</div>';
-      }).join('');
-
-      if (confirmEl) confirmEl.style.display = 'none';
-      if (confirmBtn) confirmBtn.disabled = false;
-      _repairScanResults = null;
-
-      showNotif('Reparación completada: ' + totalFixed + ' aldeas arregladas.', 'ok');
-
-      if (activeVillage) {
-        await loadMyVillages();
-        switchVillage(activeVillage.id);
-      }
-    }
-
-    function closeAdmin() { document.getElementById('adminOverlay').classList.add('hidden'); }
-
-    // v1.17: Página de usuarios admin (solo para sementalac@gmail.com)
-    let _adminUsersPageCache = [];
-
-    function openAdminUsersPage() {
-      if (!currentUser || currentUser.email !== 'sementalac@gmail.com') {
-        showNotif('Acceso denegado', 'err');
-        return;
-      }
-
-      closeAdmin(); // Cerrar el panel admin modal
-      showPage('admin-users', null); // Mostrar la página
-      loadAdminUsersPage();
-    }
-
-    async function loadAdminUsersPage() {
-      const res = await sbClient.from('profiles').select('id,username,role').order('username');
-      if (res.error) {
-        document.getElementById('adminUsersPageList').innerHTML = '<div style="color:var(--danger);">Error: ' + escapeHtml(res.error.message) + '</div>';
-        return;
-      }
-
-      _adminUsersPageCache = res.data || [];
-      renderAdminUsersPage();
-    }
-
-    function filterAdminUsersPage() {
-      renderAdminUsersPage();
-    }
-
-    function renderAdminUsersPage() {
-      const search = (document.getElementById('adminUsersSearch')?.value || '').toLowerCase();
-      let filtered = _adminUsersPageCache;
-
-      if (search) {
-        filtered = _adminUsersPageCache.filter(u => (u.username || '').toLowerCase().includes(search));
-      }
-
-      const list = document.getElementById('adminUsersPageList');
-      if (!filtered.length) {
-        list.innerHTML = '<div style="text-align:center;color:var(--dim);">Sin usuarios</div>';
-        return;
-      }
-
-      let html = '';
-      filtered.forEach(u => {
-        const isMe = u.id === currentUser.id;
-        html += '<div style="padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'
-          + '<div style="flex:1;">'
-          + '<div style="font-weight:bold;color:var(--text);">' + escapeHtml(u.username || '-') + (isMe ? ' (tú)' : '') + '</div>'
-          + '<div style="font-size:.65rem;color:var(--dim);">' + (u.role === 'admin' ? '👑 Admin' : '👤 Jugador') + '</div>'
-          + '</div>'
-          + '<div>'
-          + (isMe ? '' : '<button onclick="adminDeleteUserFromPage(\'' + escapeJs(u.id) + '\',\'' + escapeJs(u.username || '-') + '\')" style="padding:4px 8px;background:rgba(255,61,90,.2);border:1px solid rgba(255,61,90,.4);border-radius:3px;color:rgba(255,61,90,.8);font-size:.7rem;cursor:pointer;">🗑 Borrar</button>')
-          + '</div>'
-          + '</div>';
-      });
-
-      list.innerHTML = html;
-    }
-
-    async function adminDeleteUserFromPage(userId, username) {
-      if (!confirm('¿Borrar cuenta de "' + username + '"?')) return;
-
-      try {
-        await sbClient.from('profiles').delete().eq('id', userId);
-        showNotif('Usuario eliminado', 'ok');
-        loadAdminUsersPage();
-      } catch (e) {
-        console.error('Error:', e);
-        showNotif('Error al eliminar', 'err');
-      }
-    }
-
-    // ── Admin dropdown de usuarios (v1.12) ──
-    let _adminUsersCache = [];
-
-    function toggleAdminUsersDropdown() {
-      const dropdown = document.getElementById('adminUsersDropdown');
-      const isVisible = dropdown.classList.contains('visible');
-      if (!isVisible) {
-        loadAllAdminUsers();
-      } else {
-        dropdown.classList.remove('visible');
-      }
-    }
-
-    async function loadAllAdminUsers() {
-      if (!isAdmin()) return;
-      const dropdown = document.getElementById('adminUsersDropdown');
-      const list = document.getElementById('adminUsersList');
-
-      list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--dim);">Cargando usuarios...</div>';
-      dropdown.classList.add('visible');
-
-      const res = await sbClient.from('profiles').select('id,username,role').order('username');
-      if (res.error) {
-        list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--danger);">Error: ' + escapeHtml(res.error.message) + '</div>';
-        return;
-      }
-
-      _adminUsersCache = res.data || [];
-      renderAdminUsersList();
-    }
-
-    function renderAdminUsersList() {
-      const list = document.getElementById('adminUsersList');
-      const filterInput = document.getElementById('adUsersSearchInp');
-      const filterTerm = (filterInput?.value || '').toLowerCase().trim();
-
-      let filtered = _adminUsersCache;
-      if (filterTerm) {
-        filtered = _adminUsersCache.filter(u => (u.username || '').toLowerCase().includes(filterTerm));
-      }
-
-      if (!filtered.length) {
-        list.innerHTML = '<div style="font-size: .7rem; text-align: center; color: var(--dim);">No se encontraron usuarios</div>';
-        return;
-      }
-
-      let html = '';
-      filtered.forEach(u => {
-        const isMe = u.id === currentUser.id;
-        const roleClass = u.role === 'admin' ? 'style="color:var(--danger);font-weight:bold;"' : '';
-        html += `<div class="admin-users-item">
-          <div class="admin-users-item-info">
-            <div class="admin-users-item-name">${escapeHtml(u.username || '-')}${isMe ? ' (tú)' : ''}</div>
-            <div class="admin-users-item-role" ${roleClass}>${escapeHtml(u.role || 'player')}</div>
-          </div>
-          <button class="admin-users-item-del" onclick="adminDeleteUser('${u.id}', '${escapeJs(u.username || '-')}')">🗑</button>
-        </div>`;
-      });
-
-      list.innerHTML = html;
-    }
-
-    function filterAdminUsers() {
-      renderAdminUsersList();
-    }
-
-    // ── Admin usuarios ──
-    async function loadAdminUsers(searchTerm) {
-      if (!isAdmin()) return;
-      var box = document.getElementById('adminUsersBox');
-      var count = document.getElementById('adminUserCount');
-      if (box) box.innerHTML = '<div class="muted">Cargando usuarios…</div>';
-
-      // Carga perfiles con aldeas
-      let query = sbClient.from('profiles').select('id,username,role,username_changed').order('username');
-
-      // Si hay término de búsqueda, filtrar
-      if (searchTerm && searchTerm.trim()) {
-        query = query.ilike('username', '%' + searchTerm.trim() + '%');
-      }
-
-      const p = await query;
-      if (p.error) { if (box) box.innerHTML = '<div class="muted">Error: ' + escapeHtml(p.error.message) + '</div>'; return; }
-      const users = p.data || [];
-      if (count) count.textContent = users.length + ' usuario' + (users.length !== 1 ? 's' : '') + (searchTerm ? ' encontrado' + (users.length !== 1 ? 's' : '') : ' registrados');
-
-      if (users.length === 0) {
-        if (box) box.innerHTML = '<div class="muted">No se encontraron usuarios</div>';
-        return;
-      }
-
-      let html = '<table class="admin-users-table"><thead><tr>'
-        + '<th>Usuario</th><th>Email (ID)</th><th>Rol</th><th>Nombre cambiado</th><th>Acción</th>'
-        + '</tr></thead><tbody>';
-
-      users.forEach(u => {
-        const isMe = u.id === currentUser.id;
-        html += '<tr>'
-          + '<td><b style="cursor:pointer;color:var(--accent);text-decoration:underline;" onclick="viewAdminUserDetails(\'' + u.id + '\',\'' + escapeJs(u.username || '-') + '\')">' + escapeHtml(u.username || '-') + '</b>' + (isMe ? ' <span style="color:var(--gold)">(tú)</span>' : '') + '</td>'
-          + '<td style="font-size:.6rem;color:var(--dim)">' + escapeHtml(u.id.substring(0, 12)) + '…</td>'
-          + '<td class="' + (u.role === 'admin' ? 'admin-role' : '') + '">' + escapeHtml(u.role || 'player') + '</td>'
-          + '<td>' + (u.username_changed ? '✅' : '—') + '</td>'
-          + '<td>' + (isMe ? '<span style="color:var(--dim);font-size:.6rem">No puedes borrarte</span>'
-            : '<button class="admin-del-btn" onclick="adminDeleteUser(\'' + u.id + '\',\'' + escapeJs(u.username || '-') + '\')">🗑 Borrar</button>') + '</td>'
-          + '</tr>';
-      });
-      html += '</tbody></table>';
-      if (box) box.innerHTML = html;
-    }
-
-    async function searchAdminUser() {
-      const input = document.getElementById('adminSearchUser');
-      const searchTerm = input ? input.value : '';
-      await loadAdminUsers(searchTerm);
-    }
-
-    async function viewAdminUserDetails(userId, username) {
-      if (!isAdmin()) return;
-
-      // Obtener datos del usuario
-      const profile = await sbClient.from('profiles').select('*').eq('id', userId).single();
-      const villages = await sbClient.from('villages').select('id,name,cx,cy,resources,last_updated').eq('owner_id', userId);
-      const objectives = await sbClient.from('objectives').select('*').eq('user_id', userId);
-
-      if (profile.error) {
-        showNotif('Error cargando perfil: ' + profile.error.message, 'err');
-        return;
-      }
-
-      const p = profile.data;
-      const vills = villages.data || [];
-      const objs = objectives.data || [];
-
-      let info = '═══════════════════════════════\n';
-      info += '👤 USUARIO: ' + username + '\n';
-      info += '═══════════════════════════════\n\n';
-      info += '📧 Email: ' + (currentUser.id === userId ? currentUser.email : 'Oculto') + '\n';
-      info += '🆔 ID: ' + userId + '\n';
-      info += '🎖️ Rol: ' + (p.role || 'player') + '\n';
-      info += '⭐ XP: ' + (p.experience || 0) + '\n';
-      info += '⚔️ Score Militar: ' + (p.military_score || 0) + '\n';
-      info += '✏️ Nombre cambiado: ' + (p.username_changed ? 'Sí' : 'No') + '\n';
-      info += '🕐 Última vez visto: ' + (p.last_seen ? new Date(p.last_seen).toLocaleString('es-ES') : 'Nunca') + '\n\n';
-
-      info += '🏘️ ALDEAS (' + vills.length + '):\n';
-      info += '─────────────────────────────\n';
-      if (vills.length === 0) {
-        info += '  Sin aldeas\n';
-      } else {
-        vills.forEach((v, i) => {
-          info += '  ' + (i + 1) + '. ' + v.name + ' [' + v.cx + ',' + v.cy + ']\n';
-          if (v.resources) {
-            info += '     Recursos: 🌲' + Math.floor(v.resources.madera || 0) + ' ⛰️' + Math.floor(v.resources.piedra || 0) + ' ⚙️' + Math.floor(v.resources.hierro || 0) + ' 🌾' + Math.floor(v.resources.provisiones || 0) + ' ✨' + Math.floor(v.resources.esencia || 0) + '\n';
-          }
-        });
-      }
-
-      info += '\n🎯 OBJETIVOS NPC (' + objs.length + '):\n';
-      info += '─────────────────────────────\n';
-      if (objs.length === 0) {
-        info += '  Sin objetivos completados\n';
-      } else {
-        const cleared = objs.filter(o => o.status === 'cleared').length;
-        info += '  Completados: ' + cleared + ' / ' + objs.length + '\n';
-      }
-
-      alert(info);
-    }
-
-    async function adminDeleteUser(userId, username) {
-      if (!isAdmin()) return;
-      if (!confirm('¿Borrar la cuenta de "' + username + '"?\nEsto eliminará su aldea y todos sus datos.\nEsta acción no se puede deshacer.')) return;
-
-      try {
-        // Primero obtener todas las aldeas del usuario
-        const vQuery = await sbClient.from('villages').select('id').eq('owner_id', userId);
-        if (vQuery.error) {
-          showNotif('Error obteniendo aldeas: ' + vQuery.error.message, 'err');
-          return;
-        }
-
-        const villageIds = (vQuery.data || []).map(v => v.id);
-
-        if (villageIds.length > 0) {
-          // Borrar buildings, troops, creatures de esas aldeas
-          await sbClient.from('buildings').delete().in('village_id', villageIds);
-          await sbClient.from('troops').delete().in('village_id', villageIds);
-          await sbClient.from('creatures').delete().in('village_id', villageIds);
-
-          // Borrar aldeas
-          const vDel = await sbClient.from('villages').delete().eq('owner_id', userId);
-          if (vDel.error) {
-            showNotif('Error borrando aldeas: ' + vDel.error.message, 'err');
-            return;
-          }
-        }
-
-        // Borrar guest_troops
-        await sbClient.from('guest_troops').delete().eq('owner_id', userId);
-
-        // Borrar objectives
-        await sbClient.from('objectives').delete().eq('user_id', userId);
-
-        // Borrar alliance_members
-        await sbClient.from('alliance_members').delete().eq('user_id', userId);
-
-        // Borrar perfil
-        const pDel = await sbClient.from('profiles').delete().eq('id', userId);
-        if (pDel.error) {
-          showNotif('Error borrando perfil: ' + pDel.error.message, 'err');
-          return;
-        }
-
-        // Nota: auth.users no se puede borrar desde el cliente (requiere service_role)
-        showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
-        await loadAdminUsers();
-      } catch (e) {
-        console.error('Error in adminDeleteUser:', e);
-        showNotif('Error al eliminar usuario: ' + e.message, 'err');
-      }
-    }
-
+    // Admin cargado desde game-admin.js
     // ============================================================
     // PERFIL DE USUARIO — cambio de nombre (1 vez) + eliminar cuenta
     // ============================================================
@@ -12439,7 +8995,6 @@
       if (!confirm('¿Borrar la aldea "' + vilName + '" y todo su contenido?\nTropas, edificios y recursos se perderán.\nEsta acción no se puede deshacer.')) return;
 
       try {
-        // Borrar en Supabase
         await sbClient.from('buildings').delete().eq('village_id', activeVillage.id);
         await sbClient.from('troops').delete().eq('village_id', activeVillage.id);
         await sbClient.from('creatures').delete().eq('village_id', activeVillage.id);
@@ -12469,9 +9024,7 @@
         return;
       }
       if (!confirm('¿Estás SEGURO de que quieres eliminar tu cuenta? Todos tus datos se perderán.')) return;
-      // Borrar aldeas
       await sbClient.from('villages').delete().eq('user_id', currentUser.id);
-      // Borrar perfil
       await sbClient.from('profiles').delete().eq('id', currentUser.id);
       // Cerrar sesión (el usuario de auth.users queda; si quieres borrarlo del todo necesitas el trigger)
       await sbClient.auth.signOut();
@@ -12653,6 +9206,35 @@
 
       <!-- ── Reparación Global ── -->
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+      <!-- ── Aldeas Fantasma ── -->
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">🏚️ ALDEAS FANTASMA (TEST PvP)</div>
+          <button class="admin-btn search" onclick="ghostToggleForm()" style="font-size:.68rem;padding:4px 10px;">+ Nueva</button>
+        </div>
+        <div id="ghostForm" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">NOMBRE</div>
+              <input id="ghostName" placeholder="Aldea Oscura" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+              <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">X</div>
+                <input id="ghostX" type="number" value="100" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
+              <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">Y</div>
+                <input id="ghostY" type="number" value="100" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
+            </div>
+          </div>
+          <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">TROPAS (deja en 0 las que no quieras)</div>
+          <div id="ghostTroopInputs" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;"></div>
+          <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">NIVEL MURALLA</div>
+          <input id="ghostWall" type="number" value="0" min="0" max="20" style="width:80px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 6px;font-family:VT323,monospace;font-size:.85rem;margin-bottom:10px;">
+          <div style="display:flex;gap:8px;">
+            <button class="admin-btn apply" style="flex:1;" onclick="ghostCreate()">✓ Crear Aldea Fantasma</button>
+            <button class="admin-btn cancel" onclick="ghostToggleForm()">Cancelar</button>
+          </div>
+        </div>
+        <div id="ghostList" style="font-size:.72rem;"></div>
+      </div>
+
         <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px;letter-spacing:.1em;">MANTENIMIENTO GLOBAL</div>
         <div style="font-size:.68rem;color:var(--dim);margin-bottom:10px;">
           Fase 1: escanea todas las aldeas y muestra un informe de problemas sin tocar nada.
@@ -12681,7 +9263,7 @@
         </div>
       </div>
 
-      <!-- v1.27: Mensaje del día (MOTD) -->
+      <!-- v1.30: Mensaje del día (MOTD) -->
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
         <div style="font-size:.7rem;color:var(--dim);letter-spacing:.08em;margin-bottom:8px;">📢 MENSAJE DEL DÍA
           (visible para todos al entrar)</div>
@@ -12697,7 +9279,7 @@
     </div>
   </div>
 
-  <!-- v1.27: Modal MOTD para jugadores -->
+  <!-- v1.30: Modal MOTD para jugadores -->
   <div id="motdModal"
     style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;">
     <div
@@ -12715,7 +9297,7 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.27</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.32</div>
 </body>
 
 </html>
