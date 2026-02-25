@@ -11,6 +11,8 @@ El usuario NO sube los archivos del juego al inicio. El flujo es este:
 4. Haces el cambio
 5. **Entregas solo los archivos que han cambiado** — el usuario reemplaza solo esos en su carpeta
 
+> ⚠️ **Si el cambio introduce nueva arquitectura, nuevas reglas, nuevas tablas, nuevos archivos o elimina comportamientos anteriores**, debes actualizar también `REFERENCIA_PARA_IA.md` y `ARQUITECTURA.md` y entregarlos junto con los archivos modificados. Ver sección **📋 PROTOCOLO DE ACTUALIZACIÓN DE DOCUMENTOS**.
+
 ### Archivos que el usuario tiene en su carpeta local y en GitHub Pages
 Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 
@@ -21,8 +23,8 @@ Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 | `game-data.js` | NPC_CASTLES — 250 castillos NPC | Casi nunca |
 | `game-simulator.js` | `renderSimulator()` — simulador de batalla | Cambios en el simulador |
 | `game-admin.js` | Todo el panel de administración | Cambios en funciones admin |
-| `REFERENCIA_PARA_IA.md` | Este documento | Al actualizar docs |
-| `ARQUITECTURA.md` | Reglas de arquitectura | Al actualizar docs |
+| `REFERENCIA_PARA_IA.md` | Este documento | Al introducir nueva arquitectura o reglas |
+| `ARQUITECTURA.md` | Reglas de arquitectura | Al introducir nueva arquitectura o reglas |
 
 ### Qué pedir según el cambio solicitado
 | Si el usuario quiere... | Pide... |
@@ -41,6 +43,62 @@ Cuando el HTML cambia, actualizar el número de versión en 2 sitios y en los qu
 <link rel="stylesheet" href="epic-warriors.css?v=1.XX">
 ```
 Y en: `<title>`, `#versionFooter`.
+
+---
+
+## 📋 PROTOCOLO DE ACTUALIZACIÓN DE DOCUMENTOS
+
+### Cuándo actualizar los docs (obligatorio)
+
+La IA **debe** actualizar `REFERENCIA_PARA_IA.md` y/o `ARQUITECTURA.md` cuando el cambio incluye cualquiera de estos:
+
+| Tipo de cambio | Actualizar |
+|---|---|
+| Nueva tabla en Supabase o columna nueva | Ambos |
+| Nueva función crítica (tick, save, etc.) | Ambos |
+| Nueva regla de arquitectura o restricción | Ambos |
+| Nuevo archivo del proyecto | Ambos |
+| Nuevo RPC en Supabase | Solo REFERENCIA |
+| Nuevo módulo o separación de código | Ambos |
+| Cambio en cómo se calculan recursos/costes | Ambos |
+| Nueva mecánica de juego (edificio, tropa, etc.) | REFERENCIA |
+| Eliminación de comportamiento anterior | Ambos |
+| Cambio en el esquema de versionado | Ambos |
+
+**No es necesario actualizar** para: cambios de UI menores, ajustes de balance, corrección de bugs que no alteran arquitectura, cambios de estilos.
+
+### Cómo actualizar los docs
+
+**Paso 1 — Identificar qué secciones tocar:**
+- ¿Hay una nueva tabla/columna? → Actualizar `🗄️ ESQUEMA DE BASE DE DATOS SUPABASE`
+- ¿Hay una nueva función crítica? → Actualizar `🔢 ESTRUCTURA DEL HTML — MAPEO RÁPIDO` y `🔐 REGLAS OBLIGATORIAS`
+- ¿Hay un nuevo RPC? → Actualizar tabla de RPCs en `📦 QUÉ TOCA CADA ARCHIVO > game-admin.js`
+- ¿Hay una nueva restricción? → Añadir a `🔴 PROHIBIDO` o `🟡 CUIDADO`
+- ¿Hay algo que ya no aplica? → Eliminar o tachar con nota de versión
+
+**Paso 2 — Añadir entrada al historial:**
+
+Copiar esta plantilla y rellenarla al final de `📊 HISTORIAL DE CAMBIOS RELEVANTES`:
+
+```markdown
+### vX.XX — [Título del cambio]
+- **[Componente afectado]:** descripción del cambio
+- **[Supabase]:** nuevas tablas/columnas/RPCs si aplica
+- **[Restricción nueva]:** qué NO se puede hacer ahora
+- **[Eliminado]:** qué comportamiento anterior ya no existe
+```
+
+**Paso 3 — Actualizar "Última actualización" al pie del documento.**
+
+**Paso 4 — Hacer lo mismo en `ARQUITECTURA.md`:**
+- Actualizar la versión en la cabecera
+- Añadir entrada al `## HISTORIAL DE VERSIONES`
+- Actualizar las tablas o reglas afectadas
+
+### Qué NO hacer al actualizar docs
+- No eliminar entradas del historial — solo añadir
+- No reescribir secciones enteras si solo cambia una parte — editar lo mínimo necesario
+- No actualizar los docs si el cambio es puramente cosmético o de UI
 
 ---
 
@@ -110,6 +168,8 @@ Línea ~9475:    Admin overlay HTML (inline, no en game-admin.js)
 Línea ~9610:    motdModal, versionFooter
 ```
 
+> ⚠️ Estas líneas son aproximadas. Si añades o eliminas bloques grandes, actualiza este mapa.
+
 ---
 
 ## 📦 QUÉ TOCA CADA ARCHIVO
@@ -149,6 +209,8 @@ Todas las funciones del panel de administración. Solo accesible para `sementala
 | `admin_ghost_create(p_name, p_cx, p_cy, p_wall, p_troops, p_creatures)` | Crea aldea fantasma en tablas separadas |
 | `admin_ghost_list()` | Lista todas las aldeas fantasma (join de 5 tablas) |
 | `admin_ghost_delete(p_id)` | Borra aldea fantasma de todas las tablas |
+
+> Si añades un RPC nuevo, añádelo a esta tabla con su firma y descripción.
 
 ### `game-data.js`
 Inmutable. Contiene `NPC_CASTLES` (250 castillos con stats de combate). No modificar.
@@ -200,11 +262,28 @@ experience, military_score, alliance_tag, last_seen,
 battles_won_pvp, battles_lost_pvp, battles_won_npc
 ```
 
+**`messages`** — informes de batalla, espionaje y sistema:
+```
+id, owner_id, title, body, read, created_at
+```
+
+**`objectives`** — estado de objetivos NPC por jugador:
+```
+id, owner_id, castle_id, completed_at
+```
+
+**`guest_troops`** — tropas de refuerzo en aldeas ajenas:
+```
+id, from_village_id, to_village_id, troops (JSON), sent_at
+```
+
 ### Aldeas Fantasma
 - `owner_id = '00000000-0000-0000-0000-000000000000'` (GHOST_OWNER_ID)
-- Usuario ghost existe en `auth.users` y `profiles` (username: 'GHOST_SYSTEM', role: 'ghost')
+- No usan columna `state` — datos en las 5 tablas separadas igual que cualquier aldea
 - Al atacar/espiar aldeas fantasma, cargar datos desde las 5 tablas separadas (no tienen `state`)
 - Al guardar resultado de combate, hacer UPDATE en `troops`, `creatures`, `resources` directamente
+
+> Si añades una tabla nueva o columna nueva, añádela aquí con su PK y descripción.
 
 ---
 
@@ -285,6 +364,9 @@ grep -n "1000 \* Math.pow(2, lvl)" index.html
 # Resultado esperado: vacío
 ```
 
+### Paso 5: Actualizar docs si aplica
+Ver sección **📋 PROTOCOLO DE ACTUALIZACIÓN DE DOCUMENTOS**.
+
 ---
 
 ## 🗂️ TABLA DE UBICACIONES IMPORTANTES
@@ -361,6 +443,23 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ## 📊 HISTORIAL DE CAMBIOS RELEVANTES
 
+> Añadir siempre al principio. No eliminar entradas antiguas.
+
+### vX.XX — [Plantilla para nuevas versiones]
+- **[Componente]:** descripción del cambio
+- **[Supabase]:** nuevas tablas/columnas/triggers/RPCs si aplica
+- **[Regla nueva]:** qué restricción se añade
+- **[Eliminado]:** qué comportamiento anterior ya no existe
+
+---
+
+### v1.38 — Bestiario completo: 60 criaturas en 30 tiers
+- **CREATURE_TYPES:** 10 → 60 criaturas; 2 por tier; tiers 1-30; claves JS existentes conservadas
+- **Bug corregido:** Dragón/Arconte eran tier 5 inalcanzable → ahora tier 22
+- **getTroopLevel:** 4 niveles → 30 umbrales (1 invocador=nv1, 5000=nv30)
+- **Torre de Invocación:** ya no bloquea criaturas, solo reduce tiempos (-5%/nivel)
+- **Supabase:** tabla `creatures` necesita 50 columnas nuevas con DEFAULT 0 (ver SQL en propuesta_criaturas.html)
+
 ### v1.33 — Aldeas fantasma funcionales + persistencia de batallas
 - **Aldeas fantasma:** `executeAttackPvP` y `executeSpyMission` cargan datos desde tablas separadas cuando la aldea no tiene `state`
 - **Combate fantasma:** al guardar resultado, hace UPDATE en `troops`, `creatures`, `resources` en lugar de `state`
@@ -394,16 +493,23 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ## 📝 CHECKLIST ANTES DE ENTREGAR VERSIÓN
 
+### Código
 - [ ] `<title>Epic Warriors Online v1.XX</title>`
 - [ ] `<div id="versionFooter">EPIC WARRIORS v1.XX</div>`
 - [ ] Query strings de imports actualizados: `?v=1.XX`
 - [ ] `phasedVal` y `almacenCapForLevel` siguen en el HTML
 - [ ] `grep -n "Math.pow(1\.5, l)\|1000 \* Math.pow(2, lvl)"` → vacío
 - [ ] Abrir en navegador, F12, cero errores rojos
-- [ ] NO se tocó tick(), saveVillage(), simulateBattle()
-- [ ] Supabase sigue funcionando
+- [ ] NO se tocó tick(), saveVillage(), simulateBattle() sin justificación
+
+### Documentación (solo si el cambio lo requiere)
+- [ ] `REFERENCIA_PARA_IA.md` actualizado con nueva arquitectura/reglas/tablas
+- [ ] `ARQUITECTURA.md` actualizado con nueva arquitectura/reglas/tablas
+- [ ] Historial de versiones añadido en ambos archivos
+- [ ] "Última actualización" actualizada al pie de ambos documentos
+- [ ] Plantilla de nueva versión NO incluida en la entrega (es solo referencia)
 
 ---
 
-**Última actualización:** v1.33
+**Última actualización:** v1.38
 **Archivos del proyecto:** index.html · epic-warriors.css · game-data.js · game-simulator.js · game-admin.js

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Batallas — Epic Warriors</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:     #07060a;
+      --panel:  #110f1a;
+      --panel2: #1a1726;
+      --border: #2e2a42;
+      --accent: #c8a0ff;
+      --gold:   #f0c040;
+      --text:   #d8cef0;
+      --dim:    #6a6080;
+      --danger: #e05060;
+      --ok:     #50d090;
+      --atk:    #ff6060;
+      --def:    #60b0ff;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:var(--bg); color:var(--text); font-family:'VT323',monospace; min-height:100vh; }
+
+    .header { text-align:center; padding:28px 20px 8px; }
+    .header h1 { font-size:2.8rem; color:var(--gold); text-shadow:0 0 20px rgba(240,192,64,.35); letter-spacing:.08em; }
+    .header p  { color:var(--dim); font-size:.95rem; margin-top:4px; }
+
+    .main { max-width:1600px; margin:0 auto; padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .full { grid-column:1/-1; }
+
+    /* SIDE COLUMN */
+    .side-col { display:flex; flex-direction:column; gap:10px; }
+    .side-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-radius:6px 6px 0 0; font-size:1.3rem; }
+    .side-header.atk { background:rgba(255,96,96,.12); color:var(--atk); border:1px solid rgba(255,96,96,.25); border-bottom:none; }
+    .side-header.def { background:rgba(96,176,255,.12); color:var(--def); border:1px solid rgba(96,176,255,.25); border-bottom:none; }
+
+    .btn-add { background:transparent; border:1px dashed; border-radius:4px; font-family:'VT323',monospace; font-size:.9rem; padding:4px 12px; cursor:pointer; transition:all .15s; }
+    .btn-add.atk { color:var(--atk); border-color:rgba(255,96,96,.4); }
+    .btn-add.atk:hover { background:rgba(255,96,96,.1); }
+    .btn-add.def { color:var(--def); border-color:rgba(96,176,255,.4); }
+    .btn-add.def:hover { background:rgba(96,176,255,.1); }
+
+    /* ARMY PANEL */
+    .army-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .army-panel.atk { border-top:3px solid var(--atk); }
+    .army-panel.def { border-top:3px solid var(--def); }
+    .panel-head { padding:8px 14px; background:var(--panel2); border-bottom:1px solid var(--border); font-size:1rem; display:flex; justify-content:space-between; align-items:center; }
+    .panel-head.atk { color:var(--atk); }
+    .panel-head.def { color:var(--def); }
+    .btn-remove { background:transparent; border:none; color:var(--dim); font-family:'VT323',monospace; font-size:1rem; cursor:pointer; padding:0 4px; }
+    .btn-remove:hover { color:var(--danger); }
+    .panel-body { padding:10px 14px; }
+
+    .sec-label { font-size:.65rem; color:var(--dim); letter-spacing:.12em; padding:3px 0; border-bottom:1px solid var(--border); margin:10px 0 6px; }
+    .sec-label:first-child { margin-top:0; }
+
+    .troop-table { width:100%; border-collapse:collapse; }
+    .troop-table th { font-size:.62rem; color:var(--dim); letter-spacing:.08em; text-align:right; padding:2px 5px 5px; font-weight:normal; }
+    .troop-table th:first-child { text-align:left; }
+    .troop-table td { padding:2px 3px; vertical-align:middle; }
+    .troop-table tr:hover td { background:rgba(255,255,255,.02); }
+    .t-name { font-size:.78rem; color:var(--text); white-space:nowrap; padding-left:2px; width:80px; }
+    .t-icon { font-size:.95rem; text-align:center; width:24px; }
+
+    .t-input { width:58px; background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:3px; color:var(--gold); font-family:'VT323',monospace; font-size:.85rem; padding:2px 4px; text-align:right; }
+    .t-input.qty  { color:var(--gold); }
+    .t-input.wpn  { color:#90d0ff; width:42px; }
+    .t-input.arm  { color:#90ffb0; width:42px; }
+    .t-input.lvl  { color:var(--accent); width:42px; }
+    .t-input:focus { outline:none; border-color:var(--accent); }
+    .t-input[disabled] { opacity:.3; cursor:not-allowed; }
+    .col-h-qty { color:var(--gold) !important; }
+    .col-h-wpn { color:#90d0ff !important; }
+    .col-h-arm { color:#90ffb0 !important; }
+    .col-h-lvl { color:var(--accent) !important; }
+
+    /* Creature table — collapsible */
+    .creature-toggle { font-size:.65rem; color:var(--accent); background:none; border:none; cursor:pointer; font-family:'VT323',monospace; letter-spacing:.1em; float:right; }
+    .creature-section { overflow:hidden; transition:max-height .2s; }
+    .creature-section.collapsed { max-height:0 !important; }
+
+    .formula-hint { font-size:.58rem; color:var(--dim); margin:3px 0 0; line-height:1.5; }
+
+    .summary { background:var(--panel2); border:1px solid var(--border); border-radius:4px; padding:6px 10px; margin-top:8px; font-size:.75rem; }
+    .sum-row { display:flex; justify-content:space-between; padding:1px 0; }
+    .sum-k { color:var(--dim); }
+    .sum-v { color:var(--gold); }
+
+    /* WALL */
+    .wall-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:10px 16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .wall-panel label { color:var(--dim); font-size:.9rem; }
+    .wall-input { width:60px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'VT323',monospace; font-size:1.1rem; padding:3px 7px; }
+    .wall-info { color:var(--ok); font-size:.82rem; }
+
+    /* BUTTONS */
+    .btn-row { text-align:center; padding:4px 0; }
+    .btn-sim { background:linear-gradient(135deg,var(--gold),#c07800); color:#000; border:none; padding:12px 44px; font-family:'VT323',monospace; font-size:1.3rem; border-radius:6px; cursor:pointer; letter-spacing:.06em; box-shadow:0 4px 18px rgba(240,192,64,.22); transition:all .15s; }
+    .btn-sim:hover { transform:translateY(-2px); box-shadow:0 6px 24px rgba(240,192,64,.32); }
+    .btn-sim:active { transform:translateY(1px); }
+    .btn-clr { background:transparent; color:var(--dim); border:1px solid var(--border); padding:12px 20px; font-family:'VT323',monospace; font-size:1.05rem; border-radius:6px; cursor:pointer; margin-left:10px; }
+    .btn-clr:hover { color:var(--text); border-color:var(--dim); }
+
+    /* LOG */
+    .log-panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .log-head { padding:10px 16px; background:var(--panel2); border-bottom:1px solid var(--border); font-size:1.05rem; color:var(--accent); display:flex; justify-content:space-between; align-items:center; }
+    .log-body { max-height:520px; overflow-y:auto; padding:8px; font-size:.76rem; line-height:1.5; }
+    .log-body::-webkit-scrollbar { width:5px; }
+    .log-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    .le { padding:2px 8px; margin:1px 0; border-left:3px solid transparent; border-radius:0 3px 3px 0; }
+    .la  { border-color:var(--atk); color:#ffaaaa; background:rgba(224,80,96,.04); }
+    .ld  { border-color:var(--def); color:#aaccff; background:rgba(96,176,255,.04); }
+    .lm  { border-color:var(--border); color:var(--dim); }
+    .lx  { border-color:var(--danger); color:var(--danger); }
+    .lt  { border-color:var(--accent); color:var(--accent); padding:5px 8px; margin:6px 0 1px; background:rgba(200,160,255,.04); font-size:.85rem; }
+    .ls  { color:var(--border); font-size:.65rem; padding:1px 8px; }
+    .lv  { border-color:var(--ok); color:var(--ok); font-size:1rem; padding:8px 16px; margin:10px 0; background:rgba(80,208,144,.06); text-align:center; }
+    .li  { border-color:var(--dim); color:var(--dim); }
+    .empty-log { text-align:center; color:var(--dim); padding:36px 0; font-size:.9rem; }
+
+    /* RESULT CARD */
+    .res-card { margin:10px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+    .res-winner-banner { text-align:center; padding:8px 16px; font-size:1rem; font-weight:bold; }
+    .res-winner-banner.atk  { background:rgba(224,80,96,.15); color:var(--atk); border-bottom:1px solid rgba(224,80,96,.25); }
+    .res-winner-banner.def  { background:rgba(96,176,255,.15); color:var(--def); border-bottom:1px solid rgba(96,176,255,.25); }
+    .res-winner-banner.draw { background:rgba(200,160,255,.1); color:var(--accent); border-bottom:1px solid rgba(200,160,255,.2); }
+    .res-sides { display:grid; grid-template-columns:1fr 1fr; gap:0; }
+    .res-side { padding:10px 14px; }
+    .res-side.atk { border-right:1px solid var(--border); }
+    .res-title { font-size:.95rem; margin-bottom:8px; padding-bottom:5px; border-bottom:1px solid var(--border); }
+    .res-title.atk { color:var(--atk); }
+    .res-title.def { color:var(--def); }
+    .res-troop-table { width:100%; border-collapse:collapse; font-size:.7rem; }
+    .res-troop-table th { color:var(--dim); text-align:right; padding:2px 5px 5px; font-weight:normal; font-size:.6rem; letter-spacing:.07em; }
+    .res-troop-table th:first-child { text-align:left; }
+    .res-troop-table td { padding:2px 5px; text-align:right; border-top:1px solid rgba(255,255,255,.03); }
+    .res-troop-table td:first-child { text-align:left; color:var(--text); }
+    .rc-ini { color:var(--dim); }
+    .rc-fin { color:var(--ok); }
+    .rc-rec { color:#90d0ff; }
+    .rc-tot { color:var(--gold); font-weight:bold; }
+    .res-totals { border-top:1px solid var(--border); padding:5px 14px; display:flex; justify-content:space-between; font-size:.7rem; color:var(--dim); background:rgba(255,255,255,.02); }
+    .res-totals span { color:var(--gold); }
+    .wall-tag { display:inline-block; font-size:.65rem; padding:1px 5px; background:rgba(80,208,144,.08); border:1px solid rgba(80,208,144,.25); color:var(--ok); border-radius:2px; margin-left:8px; vertical-align:middle; }
+    .wall-tag.resisted { background:rgba(96,176,255,.1); border-color:rgba(96,176,255,.3); color:var(--def); }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚔ SIMULADOR DE BATALLAS ⚔</h1>
+  <p>Epic Warriors — Reglas idénticas al juego real</p>
+</div>
+
+<div class="main">
+
+  <!-- ATACANTES -->
+  <div class="side-col" id="atk-col">
+    <div class="side-header atk">
+      <span>⚔️ Atacantes</span>
+      <button class="btn-add atk" onclick="addArmy('atk')">+ Añadir atacante</button>
+    </div>
+    <!-- armies injected here -->
+  </div>
+
+  <!-- DEFENSORES -->
+  <div class="side-col" id="def-col">
+    <div class="side-header def">
+      <span>🛡️ Defensores</span>
+      <button class="btn-add def" onclick="addArmy('def')">+ Añadir defensor</button>
+    </div>
+    <!-- armies injected here -->
+  </div>
+
+  <!-- MURALLA -->
+  <div class="full">
+    <div class="wall-panel">
+      <label>🏰 Nivel de Muralla (Defensores):</label>
+      <input class="wall-input" type="number" id="wallLevel" value="0" min="0" max="30" oninput="updateWallInfo()">
+      <div class="wall-info" id="wallInfo">Sin muralla</div>
+    </div>
+  </div>
+
+  <!-- BOTONES -->
+  <div class="full btn-row">
+    <button class="btn-sim" onclick="runSimulation()">⚔️ INICIAR BATALLA</button>
+    <button class="btn-clr" onclick="clearLog()">Limpiar log</button>
+  </div>
+
+  <!-- LOG -->
+  <div class="full">
+    <div class="log-panel">
+      <div class="log-head">
+        <span>📜 Registro de Batalla</span>
+        <span id="logStats" style="font-size:.78rem;color:var(--dim);"></span>
+      </div>
+      <div class="log-body" id="battleLog">
+        <div class="empty-log">Configura los ejércitos y pulsa "Iniciar Batalla"</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATOS — idénticos al juego real
+// ============================================================
+const TROOPS = {
+  aldeano:    { name:'Aldeano',    icon:'👤', attackChance:8,  hp:10,  attacksPerTurn:1, damage:2,  defense:10, dexterity:5  },
+  soldado:    { name:'Guerrero',   icon:'⚔️', attackChance:12, hp:25,  attacksPerTurn:1, damage:8,  defense:14, dexterity:8  },
+  mago:       { name:'Mago',       icon:'🧙', attackChance:15, hp:15,  attacksPerTurn:2, damage:12, defense:10, dexterity:12 },
+  druida:     { name:'Druida',     icon:'🌿', attackChance:14, hp:20,  attacksPerTurn:1, damage:6,  defense:12, dexterity:10 },
+  explorador: { name:'Explorador', icon:'🏹', attackChance:16, hp:12,  attacksPerTurn:2, damage:5,  defense:11, dexterity:15 },
+  asesino:    { name:'Asesino',    icon:'🎯', attackChance:18, hp:8,   attacksPerTurn:1, damage:14, defense:9,  dexterity:20 },
+  paladin:    { name:'Paladín',    icon:'🛡️', attackChance:10, hp:35,  attacksPerTurn:1, damage:5,  defense:18, dexterity:6  },
+  chaman:     { name:'Chamán',     icon:'🔮', attackChance:14, hp:18,  attacksPerTurn:1, damage:10, defense:11, dexterity:11 },
+  invocador:  { name:'Invocador',  icon:'🧙‍♂️', attackChance:6,  hp:7,   attacksPerTurn:1, damage:1,  defense:7,  dexterity:5  },
+};
+
+const CREATURES = {
+  orco:            { name:'Orco',            icon:'👹', attackChance:10, hp:30,   attacksPerTurn:1, damage:10,  defense:12, dexterity:6  },
+  hada:            { name:'Hada',            icon:'🧚', attackChance:14, hp:20,   attacksPerTurn:2, damage:8,   defense:10, dexterity:15 },
+  golem:           { name:'Gólem',           icon:'🗿', attackChance:8,  hp:80,   attacksPerTurn:1, damage:18,  defense:18, dexterity:4  },
+  espectro:        { name:'Espectro',        icon:'👻', attackChance:16, hp:50,   attacksPerTurn:1, damage:22,  defense:8,  dexterity:18 },
+  kobold:          { name:'Kobold',          icon:'👺', attackChance:15, hp:40,   attacksPerTurn:1, damage:12,  defense:10, dexterity:22 },
+  silfide:         { name:'Sílfide',         icon:'🌬️', attackChance:16, hp:30,   attacksPerTurn:2, damage:9,   defense:8,  dexterity:24 },
+  troll:           { name:'Troll',           icon:'🧌', attackChance:9,  hp:140,  attacksPerTurn:1, damage:22,  defense:24, dexterity:5  },
+  banshee:         { name:'Banshee',         icon:'💀', attackChance:19, hp:75,   attacksPerTurn:1, damage:32,  defense:10, dexterity:22 },
+  grifo:           { name:'Grifo',           icon:'🦅', attackChance:15, hp:165,  attacksPerTurn:2, damage:36,  defense:16, dexterity:18 },
+  quimera:         { name:'Quimera',         icon:'🔥', attackChance:14, hp:130,  attacksPerTurn:2, damage:32,  defense:15, dexterity:14 },
+  hidra:           { name:'Hidra',           icon:'🐉', attackChance:13, hp:250,  attacksPerTurn:3, damage:27,  defense:18, dexterity:11 },
+  ciclope:         { name:'Cíclope',         icon:'👁️', attackChance:10, hp:210,  attacksPerTurn:1, damage:55,  defense:20, dexterity:6  },
+  basilisco:       { name:'Basilisco',       icon:'🐍', attackChance:21, hp:140,  attacksPerTurn:1, damage:58,  defense:12, dexterity:20 },
+  valquiria:       { name:'Valquiria',       icon:'⚔️', attackChance:17, hp:200,  attacksPerTurn:2, damage:42,  defense:22, dexterity:20 },
+  minotauro:       { name:'Minotauro',       icon:'🐂', attackChance:12, hp:320,  attacksPerTurn:1, damage:50,  defense:26, dexterity:8  },
+  salamandra:      { name:'Salamandra',      icon:'🦎', attackChance:15, hp:220,  attacksPerTurn:2, damage:65,  defense:15, dexterity:16 },
+  manticora:       { name:'Manticora',       icon:'🦁', attackChance:17, hp:270,  attacksPerTurn:3, damage:48,  defense:18, dexterity:19 },
+  ondina:          { name:'Ondina',          icon:'💧', attackChance:20, hp:190,  attacksPerTurn:1, damage:55,  defense:17, dexterity:26 },
+  centauro:        { name:'Centauro',        icon:'🏇', attackChance:16, hp:350,  attacksPerTurn:2, damage:60,  defense:22, dexterity:22 },
+  medusa:          { name:'Medusa',          icon:'🌀', attackChance:23, hp:260,  attacksPerTurn:1, damage:80,  defense:15, dexterity:22 },
+  wyvern:          { name:'Wyvern',          icon:'🐲', attackChance:17, hp:380,  attacksPerTurn:2, damage:75,  defense:21, dexterity:24 },
+  nereida:         { name:'Nereida',         icon:'🧜', attackChance:21, hp:290,  attacksPerTurn:1, damage:70,  defense:18, dexterity:28 },
+  gigante:         { name:'Gigante',         icon:'🏔️', attackChance:10, hp:650,  attacksPerTurn:1, damage:75,  defense:38, dexterity:4  },
+  harpia:          { name:'Harpía',          icon:'🦤', attackChance:19, hp:320,  attacksPerTurn:3, damage:68,  defense:17, dexterity:26 },
+  fenix:           { name:'Fénix',           icon:'🔥', attackChance:18, hp:460,  attacksPerTurn:2, damage:62,  defense:16, dexterity:22 },
+  cerbero:         { name:'Cerbero',         icon:'🐕', attackChance:16, hp:500,  attacksPerTurn:3, damage:65,  defense:24, dexterity:14 },
+  behemot:         { name:'Behemot',         icon:'🦏', attackChance:11, hp:760,  attacksPerTurn:1, damage:98,  defense:33, dexterity:7  },
+  quetzal:         { name:'Quetzal',         icon:'🦜', attackChance:19, hp:430,  attacksPerTurn:2, damage:90,  defense:18, dexterity:24 },
+  leviatan:        { name:'Leviatán',        icon:'🌊', attackChance:12, hp:920,  attacksPerTurn:1, damage:105, defense:40, dexterity:6  },
+  serafin:         { name:'Serafín',         icon:'😇', attackChance:20, hp:610,  attacksPerTurn:2, damage:112, defense:28, dexterity:22 },
+  titan:           { name:'Titán',           icon:'⛰️', attackChance:11, hp:1100, attacksPerTurn:1, damage:115, defense:45, dexterity:5  },
+  lich:            { name:'Lich',            icon:'💀', attackChance:24, hp:560,  attacksPerTurn:1, damage:145, defense:16, dexterity:24 },
+  pegaso:          { name:'Pegaso',          icon:'🐎', attackChance:18, hp:660,  attacksPerTurn:2, damage:102, defense:22, dexterity:28 },
+  naga:            { name:'Naga',            icon:'🐍', attackChance:16, hp:760,  attacksPerTurn:3, damage:92,  defense:26, dexterity:18 },
+  yeti:            { name:'Yeti',            icon:'❄️', attackChance:10, hp:1320, attacksPerTurn:1, damage:125, defense:48, dexterity:5  },
+  satiro:          { name:'Sátiro',          icon:'🎭', attackChance:20, hp:720,  attacksPerTurn:2, damage:132, defense:20, dexterity:28 },
+  simurgh:         { name:'Simurgh',         icon:'🦅', attackChance:18, hp:860,  attacksPerTurn:3, damage:118, defense:24, dexterity:26 },
+  gorgona:         { name:'Gorgona',         icon:'🌑', attackChance:25, hp:720,  attacksPerTurn:1, damage:168, defense:18, dexterity:24 },
+  kraken:          { name:'Kraken',          icon:'🦑', attackChance:14, hp:1240, attacksPerTurn:4, damage:135, defense:35, dexterity:12 },
+  angelcaido:      { name:'Ángel Caído',     icon:'😈', attackChance:22, hp:920,  attacksPerTurn:2, damage:188, defense:22, dexterity:22 },
+  ammit:           { name:'Ammit',           icon:'⚖️', attackChance:13, hp:1520, attacksPerTurn:1, damage:158, defense:42, dexterity:8  },
+  roc:             { name:'Roc',             icon:'🦅', attackChance:19, hp:970,  attacksPerTurn:2, damage:148, defense:24, dexterity:26 },
+  dragon:          { name:'Dragón',          icon:'🐲', attackChance:20, hp:1420, attacksPerTurn:3, damage:128, defense:26, dexterity:16 },
+  arconte:         { name:'Arconte',         icon:'👼', attackChance:22, hp:1200, attacksPerTurn:2, damage:108, defense:38, dexterity:20 },
+  coloso:          { name:'Coloso',          icon:'⚙️', attackChance:11, hp:2050, attacksPerTurn:1, damage:175, defense:55, dexterity:4  },
+  sleipnir:        { name:'Sleipnir',        icon:'🐴', attackChance:21, hp:1130, attacksPerTurn:2, damage:188, defense:22, dexterity:30 },
+  abismo:          { name:'Abismo',          icon:'🌑', attackChance:12, hp:2450, attacksPerTurn:2, damage:185, defense:52, dexterity:5  },
+  nemea:           { name:'Nemea',           icon:'🦁', attackChance:22, hp:1340, attacksPerTurn:2, damage:235, defense:24, dexterity:22 },
+  tifon:           { name:'Tifón',           icon:'🌪️', attackChance:18, hp:1850, attacksPerTurn:4, damage:215, defense:32, dexterity:16 },
+  equidna:         { name:'Equidna',         icon:'🐍', attackChance:20, hp:1650, attacksPerTurn:2, damage:225, defense:36, dexterity:20 },
+  tarasca:         { name:'Tarasca',         icon:'🐊', attackChance:12, hp:2850, attacksPerTurn:1, damage:228, defense:60, dexterity:4  },
+  garuda:          { name:'Garuda',          icon:'🦅', attackChance:21, hp:1750, attacksPerTurn:2, damage:285, defense:26, dexterity:26 },
+  jormungandr:     { name:'Jörmungandr',     icon:'🐍', attackChance:15, hp:3050, attacksPerTurn:3, damage:248, defense:44, dexterity:10 },
+  valquiriaoscura: { name:'Valquiria Oscura',icon:'🖤', attackChance:25, hp:1850, attacksPerTurn:2, damage:325, defense:28, dexterity:24 },
+  primordio:       { name:'Primordio',       icon:'🪨', attackChance:11, hp:3550, attacksPerTurn:1, damage:268, defense:65, dexterity:4  },
+  azrael:          { name:'Azrael',          icon:'⚰️', attackChance:26, hp:2050, attacksPerTurn:2, damage:385, defense:24, dexterity:26 },
+  ignisrex:        { name:'Ignis Rex',       icon:'🔴', attackChance:20, hp:2550, attacksPerTurn:3, damage:348, defense:35, dexterity:18 },
+  fenrir:          { name:'Fenrir',          icon:'🐺', attackChance:22, hp:2250, attacksPerTurn:3, damage:365, defense:28, dexterity:28 },
+  moloch:          { name:'Moloch',          icon:'🔱', attackChance:18, hp:4050, attacksPerTurn:2, damage:510, defense:50, dexterity:12 },
+  metatron:        { name:'Metatrón',        icon:'✨', attackChance:24, hp:3100, attacksPerTurn:3, damage:462, defense:44, dexterity:24 },
+};
+
+// ============================================================
+// ARMY MANAGEMENT
+// ============================================================
+let atkCounter = 0;
+let defCounter = 0;
+const armies = { atk: [], def: [] }; // arrays of army IDs
+
+function addArmy(side) {
+  const id = side === 'atk' ? `atk_${++atkCounter}` : `def_${++defCounter}`;
+  armies[side].push(id);
+  const col = document.getElementById(`${side}-col`);
+  const div = document.createElement('div');
+  div.id = `army_${id}`;
+  div.className = `army-panel ${side}`;
+  const label = side === 'atk'
+    ? (atkCounter === 1 ? 'Atacante' : `Atacante ${atkCounter}`)
+    : (defCounter === 1 ? 'Defensor' : `Defensor ${defCounter}`);
+  div.innerHTML = buildArmyHTML(id, side, label);
+  col.appendChild(div);
+  updateSummary(id);
+}
+
+function removeArmy(id, side) {
+  if (armies[side].length <= 1) return; // keep at least 1
+  armies[side] = armies[side].filter(a => a !== id);
+  const el = document.getElementById(`army_${id}`);
+  if (el) el.remove();
+}
+
+function buildArmyHTML(id, side, label) {
+  const removeBtn = `<button class="btn-remove" onclick="removeArmy('${id}','${side}')" title="Eliminar">✕</button>`;
+
+  // Troop rows
+  let troopRows = '';
+  Object.keys(TROOPS).forEach(k => {
+    const t = TROOPS[k];
+    troopRows += `<tr>
+      <td class="t-icon">${t.icon}</td><td class="t-name">${t.name}</td>
+      <td><input class="t-input qty" type="number" id="${id}_qty_${k}" value="0" min="0" oninput="updateSummary('${id}')"></td>
+      <td><input class="t-input lvl" type="number" id="${id}_lvl_${k}" value="1" min="1" max="30" oninput="updateSummary('${id}')"></td>
+      <td><input class="t-input wpn" type="number" id="${id}_wpn_${k}" value="0" min="0" max="30" oninput="updateSummary('${id}')"></td>
+      <td><input class="t-input arm" type="number" id="${id}_arm_${k}" value="0" min="0" max="30" oninput="updateSummary('${id}')"></td>
+    </tr>`;
+  });
+
+  // Creature rows
+  let creatureRows = '';
+  Object.keys(CREATURES).forEach(k => {
+    const t = CREATURES[k];
+    creatureRows += `<tr>
+      <td class="t-icon">${t.icon}</td><td class="t-name">${t.name}</td>
+      <td><input class="t-input qty" type="number" id="${id}_qty_${k}" value="0" min="0" oninput="updateSummary('${id}')"></td>
+      <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;"></td>
+      <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;"></td>
+      <td><input class="t-input" disabled value="—" style="width:42px;text-align:center;"></td>
+    </tr>`;
+  });
+
+  return `
+    <div class="panel-head ${side}">
+      <span>${label}</span>
+      ${removeBtn}
+    </div>
+    <div class="panel-body">
+      <div class="sec-label">TROPAS — Cantidad · Niv · Arma · Armadura</div>
+      <table class="troop-table">
+        <thead><tr>
+          <th></th><th></th>
+          <th class="col-h-qty">Cant.</th>
+          <th class="col-h-lvl">Niv</th>
+          <th class="col-h-wpn">Arma</th>
+          <th class="col-h-arm">Arm.</th>
+        </tr></thead>
+        <tbody>${troopRows}</tbody>
+      </table>
+      <div class="formula-hint">
+        Arma: impares +1 Daño, pares +1 AtkChance &nbsp;|&nbsp;
+        Armadura: impares +1 Def, pares +2 HP &nbsp;|&nbsp;
+        Nivel: HP/Daño ×(1+(nv-1)×0.04), Chance +(nv-1)×0.5
+      </div>
+      <div class="sec-label" style="margin-top:8px;">
+        CRIATURAS — Cantidad
+        <button class="creature-toggle" onclick="toggleCreatures('${id}')">▼ mostrar</button>
+      </div>
+      <div class="creature-section collapsed" id="crt_${id}" style="max-height:2000px;">
+        <table class="troop-table">
+          <thead><tr><th></th><th></th><th class="col-h-qty">Cant.</th><th></th><th></th><th></th></tr></thead>
+          <tbody>${creatureRows}</tbody>
+        </table>
+      </div>
+      <div class="summary">
+        <div class="sum-row"><span class="sum-k">Total unidades</span><span class="sum-v" id="sum_total_${id}">0</span></div>
+        <div class="sum-row"><span class="sum-k">Poder estimado</span><span class="sum-v" id="sum_power_${id}">0</span></div>
+        <div class="sum-row"><span class="sum-k">Grupos</span><span class="sum-v" id="sum_groups_${id}">—</span></div>
+      </div>
+    </div>`;
+}
+
+function toggleCreatures(id) {
+  const sec = document.getElementById(`crt_${id}`);
+  const btn = sec.previousElementSibling.querySelector('.creature-toggle');
+  sec.classList.toggle('collapsed');
+  btn.textContent = sec.classList.contains('collapsed') ? '▼ mostrar' : '▲ ocultar';
+}
+
+// Init with 1 attacker and 1 defender
+addArmy('atk');
+addArmy('def');
+
+// ============================================================
+// FORMULAS (identical to game)
+// ============================================================
+function calcStats(base, lvl, wpn, arm) {
+  const growth = 1 + (lvl - 1) * 0.04;
+  const hpBonus     = Math.floor(arm / 2) * 2;
+  const dmgBonus    = Math.ceil(wpn / 2);
+  const chanceBonus = Math.floor(wpn / 2);
+  const defBonus    = Math.ceil(arm / 2);
+  return {
+    hp:             Math.floor(base.hp * growth) + hpBonus,
+    damage:         Math.floor(base.damage * growth) + dmgBonus,
+    attackChance:   base.attackChance + (lvl - 1) * 0.5 + chanceBonus,
+    defense:        base.defense + (lvl - 1) * 0.5 + defBonus,
+    dexterity:      base.dexterity + (lvl - 1) * 0.5,
+    attacksPerTurn: base.attacksPerTurn,
+    icon:           base.icon,
+    name:           base.name,
+  };
+}
+
+// ============================================================
+// SUMMARY
+// ============================================================
+function getComp(armyId) {
+  const comp = [];
+  Object.keys(TROOPS).forEach(k => {
+    const qty = parseInt(document.getElementById(`${armyId}_qty_${k}`)?.value) || 0;
+    if (!qty) return;
+    comp.push({
+      key: k, data: TROOPS[k], qty, isCreature: false,
+      lvl: parseInt(document.getElementById(`${armyId}_lvl_${k}`)?.value) || 1,
+      wpn: parseInt(document.getElementById(`${armyId}_wpn_${k}`)?.value) || 0,
+      arm: parseInt(document.getElementById(`${armyId}_arm_${k}`)?.value) || 0,
+    });
+  });
+  Object.keys(CREATURES).forEach(k => {
+    const qty = parseInt(document.getElementById(`${armyId}_qty_${k}`)?.value) || 0;
+    if (qty) comp.push({ key: k, data: CREATURES[k], qty, lvl: 1, wpn: 0, arm: 0, isCreature: true });
+  });
+  return comp;
+}
+
+function updateSummary(armyId) {
+  const comp = getComp(armyId);
+  const total = comp.reduce((s, c) => s + c.qty, 0);
+  let power = 0;
+  comp.forEach(({ data, qty, lvl, wpn, arm, isCreature }) => {
+    const s = isCreature ? data : calcStats(data, lvl, wpn, arm);
+    power += qty * (s.hp * 0.5 + s.damage * (data.attacksPerTurn || 1) * 3 + s.defense * 0.5);
+  });
+  let groups = 0;
+  comp.forEach(({ qty }) => { let r = qty, gs = 10; while (r > 0) { groups++; r -= Math.min(r, gs); gs *= 10; } });
+  document.getElementById(`sum_total_${armyId}`).textContent = total.toLocaleString();
+  document.getElementById(`sum_power_${armyId}`).textContent = Math.round(power).toLocaleString();
+  document.getElementById(`sum_groups_${armyId}`).textContent = groups > 0 ? `${groups} grp · ${comp.length} tipos` : '—';
+}
+
+function updateWallInfo() {
+  const lvl = parseInt(document.getElementById('wallLevel').value) || 0;
+  document.getElementById('wallInfo').textContent = lvl === 0
+    ? 'Sin muralla'
+    : `Nivel ${lvl} → ${(lvl * 500).toLocaleString()} HP`;
+}
+updateWallInfo();
+
+// ============================================================
+// BUILD GROUPS
+// ============================================================
+function divGroups(qty) {
+  const g = []; let r = qty, gs = 10;
+  while (r > 0) { g.push(Math.min(r, gs)); r -= Math.min(r, gs); gs *= 10; }
+  return g;
+}
+
+function buildGroupsForSide(side) {
+  const groups = [];
+  let gid = 1;
+  armies[side].forEach(armyId => {
+    const comp = getComp(armyId);
+    comp.forEach(({ data, qty, lvl, wpn, arm, isCreature }) => {
+      const eff = isCreature ? { ...data } : calcStats(data, lvl, wpn, arm);
+      divGroups(qty).forEach(size => {
+        groups.push({
+          gid: gid++, side,
+          name: data.name, icon: data.icon,
+          stats: eff,
+          count: size, startCount: size, totalHP: size * eff.hp,
+        });
+      });
+    });
+  });
+  return groups;
+}
+
+// ============================================================
+// COMBAT ENGINE — idéntico al juego real (v1.37)
+// ============================================================
+function armyAlive(army) { return army.some(g => g.count > 0); }
+
+const logEl = () => document.getElementById('battleLog');
+function addLog(msg, cls = '') {
+  const d = document.createElement('div');
+  d.className = `le ${cls}`; d.textContent = msg;
+  logEl().appendChild(d);
+}
+function clearLog() {
+  logEl().innerHTML = '<div class="empty-log">Log limpiado.</div>';
+  document.getElementById('logStats').textContent = '';
+}
+
+function executeTurn(atk, def, wallObj) {
+  const all = [];
+  atk.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: true  }); });
+  def.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: false }); });
+
+  all.sort((a, b) => {
+    if (b.group.stats.dexterity !== a.group.stats.dexterity) return b.group.stats.dexterity - a.group.stats.dexterity;
+    if (a.group.count !== b.group.count) return a.group.count - b.group.count;
+    return Math.random() - 0.5;
+  });
+
+  all.forEach(item => {
+    const group = item.group;
+    if (group.count <= 0) return;
+    const enemies = item.isAtk ? def : atk;
+
+    for (let i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
+      if (group.count <= 0) break;
+
+      if (item.isAtk && wallObj && wallObj.hp > 0) {
+        const dmg = group.count * (group.stats.damage || 0);
+        wallObj.hp = Math.max(0, wallObj.hp - dmg);
+        addLog(`${group.icon}${group.count}x${group.name} golpea la muralla: ${dmg} → ${wallObj.hp} HP`, 'la');
+        if (wallObj.hp <= 0) addLog('💥 ¡Muralla destruida!', 'lv');
+        continue;
+      }
+
+      const aliveEnemies = enemies.filter(e => e.count > 0);
+      if (aliveEnemies.length === 0) break;
+
+      const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+      const roll = group.stats.attackChance + Math.floor(Math.random() * 20) + 1;
+      const gIcon = item.isAtk ? '⚔️' : '🛡️';
+      const tIcon = item.isAtk ? '🛡️' : '⚔️';
+
+      if (roll > target.stats.defense) {
+        const dmg = group.count * group.stats.damage;
+        target.totalHP -= dmg;
+        const newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
+        const killed = target.count - newCount;
+        target.count = newCount;
+        addLog(
+          `${gIcon}${group.icon}${group.count}x${group.name} → ${tIcon}${target.icon}${target.name}: tirada ${Math.floor(roll)} vs DEF ${Math.floor(target.stats.defense)} → ${dmg} dmg → ${killed} bajas`,
+          item.isAtk ? 'la' : 'ld'
+        );
+        if (target.count <= 0) {
+          const idx = enemies.indexOf(target);
+          if (idx !== -1) enemies.splice(idx, 1);
+          addLog(`💀 ${tIcon}${target.icon}${target.name} (Grp ${target.gid}) eliminado`, 'lx');
+        }
+      } else {
+        addLog(
+          `${gIcon}${group.icon}${group.count}x${group.name} falla vs ${tIcon}${target.icon}${target.name}: ${Math.floor(roll)} vs DEF ${Math.floor(target.stats.defense)}`,
+          'lm'
+        );
+      }
+    }
+  });
+}
+
+// ============================================================
+// SIMULATION LOOP
+// ============================================================
+function runSimulation() {
+  logEl().innerHTML = '';
+
+  const wallLvl = parseInt(document.getElementById('wallLevel').value) || 0;
+  const wallObj = { hp: wallLvl > 0 ? wallLvl * 500 : 0 };
+
+  const atk = buildGroupsForSide('atk');
+  const def = buildGroupsForSide('def');
+
+  if (!atk.length) { addLog('⚠️ Los Atacantes no tienen tropas.', 'lm'); return; }
+  if (!def.length) { addLog('⚠️ Los Defensores no tienen tropas.', 'lm'); return; }
+
+  const atkTot = atk.reduce((s, g) => s + g.count, 0);
+  const defTot = def.reduce((s, g) => s + g.count, 0);
+  const atkArmies = armies.atk.length;
+  const defArmies = armies.def.length;
+
+  if (wallObj.hp > 0) {
+    addLog(`🏰 MURALLA NIVEL ${wallLvl}: ${wallObj.hp.toLocaleString()} HP`, 'li');
+    addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'ls');
+  }
+
+  addLog(`⚔️ ATACANTES: ${atkTot.toLocaleString()} unidades${atkArmies > 1 ? ` (${atkArmies} jugadores)` : ''}`, 'li');
+  const atkComp = {}; atk.forEach(g => { atkComp[g.name] = (atkComp[g.name] || 0) + g.count; });
+  Object.entries(atkComp).forEach(([n, q]) => addLog(`   · ${q.toLocaleString()}x ${n}`, 'li'));
+
+  addLog(`🛡️ DEFENSORES: ${defTot.toLocaleString()} unidades${defArmies > 1 ? ` (${defArmies} jugadores)` : ''}`, 'li');
+  const defComp = {}; def.forEach(g => { defComp[g.name] = (defComp[g.name] || 0) + g.count; });
+  Object.entries(defComp).forEach(([n, q]) => addLog(`   · ${q.toLocaleString()}x ${n}`, 'li'));
+  addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'ls');
+
+  const atkSnap = atk.map(g => ({ name: g.name, icon: g.icon, count: g.count }));
+  const defSnap = def.map(g => ({ name: g.name, icon: g.icon, count: g.count }));
+
+  let turn = 1;
+  while (armyAlive(atk) && armyAlive(def)) {
+    addLog(`🎯 TURNO ${turn}`, 'lt');
+    executeTurn(atk, def, wallObj);
+    turn++;
+    if (turn > 300) { addLog('⚠️ Batalla detenida — límite de turnos.', 'lm'); break; }
+  }
+
+  const wallResisted = wallObj.hp > 0;
+  addLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'ls');
+
+  const atkSurv = atk.reduce((s, g) => s + g.count, 0);
+  const defSurv = def.reduce((s, g) => s + g.count, 0);
+
+  let winSide;
+  if (wallResisted) {
+    winSide = 'def';
+    addLog(`🛡️ VICTORIA DEL DEFENSOR — La muralla resistió. ${defSurv.toLocaleString()} tropas intactas (${turn-1} turnos)`, 'lv');
+  } else if (atkSurv > 0 && defSurv === 0) {
+    winSide = 'atk';
+    addLog(`🎉 VICTORIA DEL ATACANTE — ${atkSurv.toLocaleString()} supervivientes (${turn-1} turnos)`, 'lv');
+  } else if (defSurv > 0 && atkSurv === 0) {
+    winSide = 'def';
+    addLog(`🛡️ VICTORIA DEL DEFENSOR — ${defSurv.toLocaleString()} supervivientes (${turn-1} turnos)`, 'lv');
+  } else {
+    winSide = 'draw';
+    addLog(`⚔️ EMPATE — Ambos ejércitos eliminados (${turn-1} turnos)`, 'lv');
+  }
+
+  logEl().scrollTop = logEl().scrollHeight;
+  showResult(atk, def, atkSnap, defSnap, winSide, wallLvl, wallResisted, atkArmies, defArmies);
+  document.getElementById('logStats').textContent = `${turn-1} turnos`;
+}
+
+// ============================================================
+// RESULT CARD
+// ============================================================
+function showResult(atk, def, atkSnap, defSnap, winSide, wallLvl, wallResisted, atkArmies, defArmies) {
+  const atkRecRate = wallResisted ? 0 : 0.10 + Math.random() * 0.20;
+  const defRecRate = 0.10 + Math.random() * 0.20;
+
+  const mergeSurv = groups => {
+    const m = {};
+    groups.forEach(g => { if (!m[g.name]) m[g.name] = { icon: g.icon, alive: 0 }; m[g.name].alive += g.count; });
+    return m;
+  };
+  const mergeSnap = snap => {
+    const m = {};
+    snap.forEach(g => { if (!m[g.name]) m[g.name] = { icon: g.icon, count: 0 }; m[g.name].count += g.count; });
+    return m;
+  };
+
+  const atkS = mergeSurv(atk), defS = mergeSurv(def);
+  const atkSt = mergeSnap(atkSnap), defSt = mergeSnap(defSnap);
+
+  const buildRows = (st, surv, recRate) => {
+    const names = Object.keys(st).filter(n => st[n].count > 0);
+    if (!names.length) return '<tr><td colspan="5" style="color:var(--dim);text-align:center;padding:6px;">Sin tropas</td></tr>';
+    return names.map(name => {
+      const ini = st[name].count, fin = surv[name]?.alive || 0;
+      const dead = ini - fin, rec = Math.floor(dead * recRate), tot = fin + rec;
+      return `<tr>
+        <td>${st[name].icon} ${name}</td>
+        <td class="rc-ini">${ini.toLocaleString()}</td>
+        <td class="rc-fin">${fin.toLocaleString()}</td>
+        <td class="rc-rec">+${rec.toLocaleString()}</td>
+        <td class="rc-tot">${tot.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+  };
+
+  const calcTotals = (st, surv, recRate) => {
+    let ini = 0, fin = 0, rec = 0;
+    Object.keys(st).forEach(n => {
+      const i = st[n].count, f = surv[n]?.alive || 0, d = i - f;
+      ini += i; fin += f; rec += Math.floor(d * recRate);
+    });
+    return { ini, fin, rec, total: fin + rec };
+  };
+
+  const atkT = calcTotals(atkSt, atkS, atkRecRate);
+  const defT = calcTotals(defSt, defS, defRecRate);
+
+  const bannerCls = winSide === 'draw' ? 'draw' : winSide;
+  const bannerTxt = winSide === 'atk'
+    ? `⚔️ VICTORIA DEL ATACANTE`
+    : winSide === 'def'
+    ? (wallResisted ? `🏰 VICTORIA DEL DEFENSOR — MURALLA INTACTA` : `🛡️ VICTORIA DEL DEFENSOR`)
+    : `⚔️ EMPATE — Ambos ejércitos eliminados`;
+
+  const wallTag = wallLvl > 0
+    ? `<span class="wall-tag ${wallResisted ? 'resisted' : ''}">🏰 Muralla nv.${wallLvl} — ${wallResisted ? 'resistió' : 'destruida'}</span>`
+    : '';
+
+  const atkLabel = atkArmies > 1 ? `⚔️ Atacantes (${atkArmies} jugadores) — recuperan ${Math.round(atkRecRate * 100)}%` : `⚔️ Atacante — recupera ${Math.round(atkRecRate * 100)}%`;
+  const defLabel = defArmies > 1 ? `🛡️ Defensores (${defArmies} jugadores) — recuperan ${Math.round(defRecRate * 100)}%` : `🛡️ Defensor — recupera ${Math.round(defRecRate * 100)}%`;
+
+  const thead = `<thead><tr>
+    <th>Tropa</th>
+    <th class="rc-ini">Iniciales</th>
+    <th class="rc-fin">Finales</th>
+    <th class="rc-rec">Recuperan</th>
+    <th class="rc-tot">Total</th>
+  </tr></thead>`;
+
+  const card = document.createElement('div');
+  card.className = 'res-card';
+  card.innerHTML = `
+    <div class="res-winner-banner ${bannerCls}">${bannerTxt} ${wallTag}</div>
+    <div class="res-sides">
+      <div class="res-side atk">
+        <div class="res-title atk">${atkLabel}</div>
+        <table class="res-troop-table">${thead}<tbody>${buildRows(atkSt, atkS, atkRecRate)}</tbody></table>
+        <div class="res-totals">ini <span>${atkT.ini.toLocaleString()}</span> · fin <span>${atkT.fin.toLocaleString()}</span> · rec <span>+${atkT.rec.toLocaleString()}</span> · <b style="color:var(--gold)">= ${atkT.total.toLocaleString()}</b></div>
+      </div>
+      <div class="res-side def">
+        <div class="res-title def">${defLabel}</div>
+        <table class="res-troop-table">${thead}<tbody>${buildRows(defSt, defS, defRecRate)}</tbody></table>
+        <div class="res-totals">ini <span>${defT.ini.toLocaleString()}</span> · fin <span>${defT.fin.toLocaleString()}</span> · rec <span>+${defT.rec.toLocaleString()}</span> · <b style="color:var(--gold)">= ${defT.total.toLocaleString()}</b></div>
+      </div>
+    </div>`;
+  logEl().appendChild(card);
+  logEl().scrollTop = logEl().scrollHeight;
+}
+</script>
+</body>
+</html>

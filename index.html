@@ -6,16 +6,16 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.33</title>
+  <title>Epic Warriors Online v1.38</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Datos estáticos del juego (NPC_CASTLES) — debe cargarse antes del script principal -->
   <script src="game-data.js"></script>
-  <script src="game-simulator.js?v=1.33"></script>
-  <script src="game-admin.js?v=1.33"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.33">
+  <script src="game-simulator.js?v=1.38"></script>
+  <script src="game-admin.js?v=1.38"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.38">
 </head>
 
 <body>
@@ -168,7 +168,7 @@
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
           <div class="nav-item" onclick="showPage('defense',this)"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
-          <div class="nav-item" onclick="window.open('battle-simulator-v0_22.html','_blank')"><span
+          <div class="nav-item" onclick="window.open('battle-simulator.html','_blank')"><span
               class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
         <div class="nav-section">
@@ -448,10 +448,28 @@
           </div>
         </div>
         <div class="page" id="page-research">
-          <div class="coming-soon">
-            <div class="cs-icon">&#x1F52C;</div>
-            <div class="cs-title">MODULO DE INVESTIGACION</div>
-            <div>Proximamente</div>
+          <div class="page-title">CENTRO DE INVESTIGACIÓN</div>
+          <div class="page-sub">Mejora el nivel de tus tropas gastando experiencia</div>
+
+          <!-- XP disponible -->
+          <div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div class="muted" style="font-size:.72rem;margin-bottom:2px;">TU EXPERIENCIA DISPONIBLE</div>
+              <div id="researchXPDisplay" style="font-size:1.3rem;color:var(--gold);font-weight:700;">—</div>
+            </div>
+            <button class="btn btn-sm" onclick="renderResearch()">↻ Actualizar</button>
+          </div>
+
+          <!-- Tabla de tropas -->
+          <div class="card" id="researchTroopGrid" style="display:grid;gap:12px;">
+            <div class="muted">Cargando…</div>
+          </div>
+
+          <!-- Leyenda stats -->
+          <div class="card" style="margin-top:14px;font-size:.72rem;color:var(--dim);line-height:1.8;">
+            <div style="color:var(--accent);font-weight:700;margin-bottom:6px;">📖 Efectos por nivel de tropa</div>
+            <div>Cada nivel sube los stats según la tabla oficial (HP, Daño, Defensa, etc.).</div>
+            <div>Nivel máximo: <strong style="color:var(--gold);">30</strong> &nbsp;|&nbsp; Los aldeanos cuestan XP reducida (×2 en lugar de ×10).</div>
           </div>
         </div>
 
@@ -872,85 +890,515 @@
     };
 
     const CREATURE_TYPES = {
+      // ── TIER 1 — 1 invocador ─────────────────────────────────────
       orco: {
         name: 'Orco', icon: '👹', tier: 1,
         attackChance: 10, hp: 30, attacksPerTurn: 1, damage: 10,
         defense: 12, armor: 0, weapon: 0, dexterity: 6,
         speed: 2, capacity: 0,
-        summonersNeeded: 10, cost: { esencia: 50 }, time: 900, // 15 min
-        desc: 'Guerrero brutal. Tier 1. Requiere 10 invocadores.'
+        summonersNeeded: 1, cost: { esencia: 50 }, time: 300, // 5 min
+        desc: 'Guerrero brutal de primera línea. Tier 1.'
       },
       hada: {
         name: 'Hada', icon: '🧚', tier: 1,
         attackChance: 14, hp: 20, attacksPerTurn: 2, damage: 8,
         defense: 10, armor: 0, weapon: 0, dexterity: 15,
         speed: 3, capacity: 0,
-        summonersNeeded: 10, cost: { esencia: 50 }, time: 900,
-        desc: 'Criatura veloz con doble ataque. Tier 1. Requiere 10 invocadores.'
+        summonersNeeded: 1, cost: { esencia: 50 }, time: 300,
+        desc: 'Criatura veloz con doble ataque. Tier 1.'
       },
+      // ── TIER 2 — 8 invocadores ───────────────────────────────────
       golem: {
         name: 'Gólem', icon: '🗿', tier: 2,
         attackChance: 8, hp: 80, attacksPerTurn: 1, damage: 18,
         defense: 18, armor: 0, weapon: 0, dexterity: 4,
         speed: 1, capacity: 0,
-        summonersNeeded: 50, cost: { esencia: 150 }, time: 1800, // 30 min
-        desc: 'Tanque de piedra. Tier 2. Requiere 50 invocadores.'
+        summonersNeeded: 8, cost: { esencia: 150 }, time: 540, // 9 min
+        desc: 'Tanque de piedra casi indestructible. Tier 2.'
       },
       espectro: {
         name: 'Espectro', icon: '👻', tier: 2,
         attackChance: 16, hp: 50, attacksPerTurn: 1, damage: 22,
         defense: 8, armor: 0, weapon: 0, dexterity: 18,
         speed: 2, capacity: 0,
-        summonersNeeded: 50, cost: { esencia: 150 }, time: 1800,
-        desc: 'Asesino etéreo con alta precisión. Tier 2. Requiere 50 invocadores.'
+        summonersNeeded: 8, cost: { esencia: 150 }, time: 540,
+        desc: 'Asesino etéreo con alta precisión. Tier 2.'
       },
-      grifo: {
-        name: 'Grifo', icon: '🦅', tier: 3,
-        attackChance: 14, hp: 120, attacksPerTurn: 2, damage: 28,
-        defense: 14, armor: 0, weapon: 0, dexterity: 16,
+      // ── TIER 3 — 20 invocadores ──────────────────────────────────
+      kobold: {
+        name: 'Kobold', icon: '👺', tier: 3,
+        attackChance: 15, hp: 40, attacksPerTurn: 1, damage: 12,
+        defense: 10, armor: 0, weapon: 0, dexterity: 22,
         speed: 4, capacity: 0,
-        summonersNeeded: 150, cost: { esencia: 400 }, time: 3600, // 60 min
-        desc: 'Bestia alada con doble ataque. Tier 3. Requiere 150 invocadores.'
+        summonersNeeded: 20, cost: { esencia: 250 }, time: 840, // 14 min
+        desc: 'Criatura ágil y escurridiza. Alta destreza. Tier 3.'
       },
-      hidra: {
-        name: 'Hidra', icon: '🐉', tier: 3,
-        attackChance: 12, hp: 180, attacksPerTurn: 3, damage: 20,
-        defense: 16, armor: 0, weapon: 0, dexterity: 10,
-        speed: 2, capacity: 0,
-        summonersNeeded: 150, cost: { esencia: 400 }, time: 3600,
-        desc: 'Monstruo de múltiples cabezas. Tier 3. Requiere 150 invocadores.'
-      },
-      fenix: {
-        name: 'Fénix', icon: '🔥', tier: 4,
-        attackChance: 16, hp: 200, attacksPerTurn: 2, damage: 45,
-        defense: 12, armor: 0, weapon: 0, dexterity: 20,
+      silfide: {
+        name: 'Sílfide', icon: '🌬️', tier: 3,
+        attackChance: 16, hp: 30, attacksPerTurn: 2, damage: 9,
+        defense: 8, armor: 0, weapon: 0, dexterity: 24,
         speed: 3, capacity: 0,
-        summonersNeeded: 400, cost: { esencia: 1000 }, time: 7200, // 120 min
-        desc: 'Ave de fuego inmortal. Tier 4. Requiere 400 invocadores.'
+        summonersNeeded: 20, cost: { esencia: 250 }, time: 840,
+        desc: 'Espíritu del aire con doble ataque y extrema agilidad. Tier 3.'
       },
-      behemot: {
-        name: 'Behemot', icon: '🦏', tier: 4,
-        attackChance: 10, hp: 350, attacksPerTurn: 1, damage: 55,
-        defense: 22, armor: 0, weapon: 0, dexterity: 6,
+      // ── TIER 4 — 45 invocadores ──────────────────────────────────
+      troll: {
+        name: 'Troll', icon: '🧌', tier: 4,
+        attackChance: 9, hp: 140, attacksPerTurn: 1, damage: 22,
+        defense: 24, armor: 0, weapon: 0, dexterity: 5,
         speed: 1, capacity: 0,
-        summonersNeeded: 400, cost: { esencia: 1000 }, time: 7200,
-        desc: 'Coloso imparable. Tier 4. Requiere 400 invocadores.'
+        summonersNeeded: 45, cost: { esencia: 350 }, time: 1500, // 25 min
+        desc: 'Bestia montañesa de enorme resistencia. Tier 4.'
       },
-      dragon: {
-        name: 'Dragón', icon: '🐲', tier: 5,
-        attackChance: 18, hp: 500, attacksPerTurn: 3, damage: 80,
-        defense: 20, armor: 0, weapon: 0, dexterity: 14,
+      banshee: {
+        name: 'Banshee', icon: '💀', tier: 4,
+        attackChance: 19, hp: 75, attacksPerTurn: 1, damage: 32,
+        defense: 10, armor: 0, weapon: 0, dexterity: 22,
+        speed: 2, capacity: 0,
+        summonersNeeded: 45, cost: { esencia: 350 }, time: 1500,
+        desc: 'Espectro de alta precisión y daño devastador. Tier 4.'
+      },
+      // ── TIER 5 — 90 invocadores ──────────────────────────────────
+      grifo: {
+        name: 'Grifo', icon: '🦅', tier: 5,
+        attackChance: 15, hp: 165, attacksPerTurn: 2, damage: 36,
+        defense: 16, armor: 0, weapon: 0, dexterity: 18,
+        speed: 4, capacity: 0,
+        summonersNeeded: 90, cost: { esencia: 550 }, time: 3000, // 50 min
+        desc: 'Bestia alada con doble ataque y gran velocidad. Tier 5.'
+      },
+      quimera: {
+        name: 'Quimera', icon: '🔥', tier: 5,
+        attackChance: 14, hp: 130, attacksPerTurn: 2, damage: 32,
+        defense: 15, armor: 0, weapon: 0, dexterity: 14,
+        speed: 2, capacity: 0,
+        summonersNeeded: 90, cost: { esencia: 550 }, time: 3000,
+        desc: 'Bestia tricéfala de fuego con doble ataque. Tier 5.'
+      },
+      // ── TIER 6 — 150 invocadores ─────────────────────────────────
+      hidra: {
+        name: 'Hidra', icon: '🐉', tier: 6,
+        attackChance: 13, hp: 250, attacksPerTurn: 3, damage: 27,
+        defense: 18, armor: 0, weapon: 0, dexterity: 11,
+        speed: 2, capacity: 0,
+        summonersNeeded: 150, cost: { esencia: 750 }, time: 4500, // 75 min
+        desc: 'Monstruo de múltiples cabezas con triple ataque. Tier 6.'
+      },
+      ciclope: {
+        name: 'Cíclope', icon: '👁️', tier: 6,
+        attackChance: 10, hp: 210, attacksPerTurn: 1, damage: 55,
+        defense: 20, armor: 0, weapon: 0, dexterity: 6,
+        speed: 1, capacity: 0,
+        summonersNeeded: 150, cost: { esencia: 750 }, time: 4500,
+        desc: 'Gigante de un ojo con golpe devastador. Tier 6.'
+      },
+      // ── TIER 7 — 230 invocadores ─────────────────────────────────
+      basilisco: {
+        name: 'Basilisco', icon: '🐍', tier: 7,
+        attackChance: 21, hp: 140, attacksPerTurn: 1, damage: 58,
+        defense: 12, armor: 0, weapon: 0, dexterity: 20,
+        speed: 2, capacity: 0,
+        summonersNeeded: 230, cost: { esencia: 1000 }, time: 6600, // 110 min
+        desc: 'Serpiente letal de mirada paralizante y veneno mortal. Tier 7.'
+      },
+      valquiria: {
+        name: 'Valquiria', icon: '⚔️', tier: 7,
+        attackChance: 17, hp: 200, attacksPerTurn: 2, damage: 42,
+        defense: 22, armor: 0, weapon: 0, dexterity: 20,
         speed: 3, capacity: 0,
-        summonersNeeded: 1000, cost: { esencia: 2500 }, time: 14400, // 240 min
-        desc: 'Dragón antiguo legendario. Tier 5. Requiere 1000 invocadores.'
+        summonersNeeded: 230, cost: { esencia: 1000 }, time: 6600,
+        desc: 'Guerrera divina equilibrada en ataque y defensa. Tier 7.'
+      },
+      // ── TIER 8 — 320 invocadores ─────────────────────────────────
+      minotauro: {
+        name: 'Minotauro', icon: '🐂', tier: 8,
+        attackChance: 12, hp: 320, attacksPerTurn: 1, damage: 50,
+        defense: 26, armor: 0, weapon: 0, dexterity: 8,
+        speed: 1, capacity: 0,
+        summonersNeeded: 320, cost: { esencia: 1400 }, time: 9000, // 150 min
+        desc: 'Bestia mitad hombre mitad toro, coloso imparable. Tier 8.'
+      },
+      salamandra: {
+        name: 'Salamandra', icon: '🦎', tier: 8,
+        attackChance: 15, hp: 220, attacksPerTurn: 2, damage: 65,
+        defense: 15, armor: 0, weapon: 0, dexterity: 16,
+        speed: 2, capacity: 0,
+        summonersNeeded: 320, cost: { esencia: 1400 }, time: 9000,
+        desc: 'Criatura ígnea con doble ataque abrasador. Tier 8.'
+      },
+      // ── TIER 9 — 410 invocadores ─────────────────────────────────
+      manticora: {
+        name: 'Manticora', icon: '🦁', tier: 9,
+        attackChance: 17, hp: 270, attacksPerTurn: 3, damage: 48,
+        defense: 18, armor: 0, weapon: 0, dexterity: 19,
+        speed: 3, capacity: 0,
+        summonersNeeded: 410, cost: { esencia: 1800 }, time: 12600, // 210 min
+        desc: 'León alado con cola de escorpión y triple ataque. Tier 9.'
+      },
+      ondina: {
+        name: 'Ondina', icon: '💧', tier: 9,
+        attackChance: 20, hp: 190, attacksPerTurn: 1, damage: 55,
+        defense: 17, armor: 0, weapon: 0, dexterity: 26,
+        speed: 3, capacity: 0,
+        summonersNeeded: 410, cost: { esencia: 1800 }, time: 12600,
+        desc: 'Espíritu del agua de extrema agilidad y precisión. Tier 9.'
+      },
+      // ── TIER 10 — 500 invocadores ────────────────────────────────
+      centauro: {
+        name: 'Centauro', icon: '🏇', tier: 10,
+        attackChance: 16, hp: 350, attacksPerTurn: 2, damage: 60,
+        defense: 22, armor: 0, weapon: 0, dexterity: 22,
+        speed: 4, capacity: 0,
+        summonersNeeded: 500, cost: { esencia: 2500 }, time: 18000, // 300 min
+        desc: 'Guerrero mitad hombre mitad caballo, rápido y poderoso. Tier 10.'
+      },
+      medusa: {
+        name: 'Medusa', icon: '🌀', tier: 10,
+        attackChance: 23, hp: 260, attacksPerTurn: 1, damage: 80,
+        defense: 15, armor: 0, weapon: 0, dexterity: 22,
+        speed: 2, capacity: 0,
+        summonersNeeded: 500, cost: { esencia: 2500 }, time: 18000,
+        desc: 'Gorgona de mirada letal y daño excepcional. Tier 10.'
+      },
+      // ── TIER 11 — 850 invocadores ────────────────────────────────
+      wyvern: {
+        name: 'Wyvern', icon: '🐲', tier: 11,
+        attackChance: 17, hp: 380, attacksPerTurn: 2, damage: 75,
+        defense: 21, armor: 0, weapon: 0, dexterity: 24,
+        speed: 4, capacity: 0,
+        summonersNeeded: 850, cost: { esencia: 3200 }, time: 25200, // 420 min
+        desc: 'Dragón menor de dos alas, rápido y letal. Tier 11.'
+      },
+      nereida: {
+        name: 'Nereida', icon: '🧜', tier: 11,
+        attackChance: 21, hp: 290, attacksPerTurn: 1, damage: 70,
+        defense: 18, armor: 0, weapon: 0, dexterity: 28,
+        speed: 3, capacity: 0,
+        summonersNeeded: 850, cost: { esencia: 3200 }, time: 25200,
+        desc: 'Ninfa marina de destreza sin igual. Tier 11.'
+      },
+      // ── TIER 12 — 1.200 invocadores ──────────────────────────────
+      gigante: {
+        name: 'Gigante', icon: '🏔️', tier: 12,
+        attackChance: 10, hp: 650, attacksPerTurn: 1, damage: 75,
+        defense: 38, armor: 0, weapon: 0, dexterity: 4,
+        speed: 1, capacity: 0,
+        summonersNeeded: 1200, cost: { esencia: 4000 }, time: 36000, // 600 min
+        desc: 'Colosal titan de roca y fuerza inmensurable. Tier 12.'
+      },
+      harpia: {
+        name: 'Harpía', icon: '🦤', tier: 12,
+        attackChance: 19, hp: 320, attacksPerTurn: 3, damage: 68,
+        defense: 17, armor: 0, weapon: 0, dexterity: 26,
+        speed: 4, capacity: 0,
+        summonersNeeded: 1200, cost: { esencia: 4000 }, time: 36000,
+        desc: 'Criatura alada con triple ataque devastador. Tier 12.'
+      },
+      // ── TIER 13 — 1.550 invocadores ──────────────────────────────
+      fenix: {
+        name: 'Fénix', icon: '🔥', tier: 13,
+        attackChance: 18, hp: 460, attacksPerTurn: 2, damage: 62,
+        defense: 16, armor: 0, weapon: 0, dexterity: 22,
+        speed: 3, capacity: 0,
+        summonersNeeded: 1550, cost: { esencia: 5500 }, time: 50400, // 840 min
+        desc: 'Ave inmortal de fuego que renace de sus cenizas. Tier 13.'
+      },
+      cerbero: {
+        name: 'Cerbero', icon: '🐕', tier: 13,
+        attackChance: 16, hp: 500, attacksPerTurn: 3, damage: 65,
+        defense: 24, armor: 0, weapon: 0, dexterity: 14,
+        speed: 2, capacity: 0,
+        summonersNeeded: 1550, cost: { esencia: 5500 }, time: 50400,
+        desc: 'Can tricéfalo guardián del inframundo. Triple ataque. Tier 13.'
+      },
+      // ── TIER 14 — 1.850 invocadores ──────────────────────────────
+      behemot: {
+        name: 'Behemot', icon: '🦏', tier: 14,
+        attackChance: 11, hp: 760, attacksPerTurn: 1, damage: 98,
+        defense: 33, armor: 0, weapon: 0, dexterity: 7,
+        speed: 1, capacity: 0,
+        summonersNeeded: 1850, cost: { esencia: 7000 }, time: 72000, // 1200 min
+        desc: 'Coloso indestructible de fuerza primordial. Tier 14.'
+      },
+      quetzal: {
+        name: 'Quetzal', icon: '🦜', tier: 14,
+        attackChance: 19, hp: 430, attacksPerTurn: 2, damage: 90,
+        defense: 18, armor: 0, weapon: 0, dexterity: 24,
+        speed: 4, capacity: 0,
+        summonersNeeded: 1850, cost: { esencia: 7000 }, time: 72000,
+        desc: 'Serpiente emplumada sagrada, veloz y poderosa. Tier 14.'
+      },
+      // ── TIER 15 — 2.150 invocadores ──────────────────────────────
+      leviatan: {
+        name: 'Leviatán', icon: '🌊', tier: 15,
+        attackChance: 12, hp: 920, attacksPerTurn: 1, damage: 105,
+        defense: 40, armor: 0, weapon: 0, dexterity: 6,
+        speed: 1, capacity: 0,
+        summonersNeeded: 2150, cost: { esencia: 8500 }, time: 86400, // 1440 min = 24h
+        desc: 'Serpiente marina primordial de tamaño colosal. Tier 15.'
+      },
+      serafin: {
+        name: 'Serafín', icon: '😇', tier: 15,
+        attackChance: 20, hp: 610, attacksPerTurn: 2, damage: 112,
+        defense: 28, armor: 0, weapon: 0, dexterity: 22,
+        speed: 2, capacity: 0,
+        summonersNeeded: 2150, cost: { esencia: 8500 }, time: 86400,
+        desc: 'Ángel de seis alas equilibrado en toda su magnificencia. Tier 15.'
+      },
+      // ── TIER 16 — 2.450 invocadores ──────────────────────────────
+      titan: {
+        name: 'Titán', icon: '⛰️', tier: 16,
+        attackChance: 11, hp: 1100, attacksPerTurn: 1, damage: 115,
+        defense: 45, armor: 0, weapon: 0, dexterity: 5,
+        speed: 1, capacity: 0,
+        summonersNeeded: 2450, cost: { esencia: 10500 }, time: 108000, // 30h
+        desc: 'Dios primordial de fuerza inconmensurable. Tier 16.'
+      },
+      lich: {
+        name: 'Lich', icon: '💀', tier: 16,
+        attackChance: 24, hp: 560, attacksPerTurn: 1, damage: 145,
+        defense: 16, armor: 0, weapon: 0, dexterity: 24,
+        speed: 2, capacity: 0,
+        summonersNeeded: 2450, cost: { esencia: 10500 }, time: 108000,
+        desc: 'Archimago no-muerto de precisión y daño extremos. Tier 16.'
+      },
+      // ── TIER 17 — 2.750 invocadores ──────────────────────────────
+      pegaso: {
+        name: 'Pegaso', icon: '🐎', tier: 17,
+        attackChance: 18, hp: 660, attacksPerTurn: 2, damage: 102,
+        defense: 22, armor: 0, weapon: 0, dexterity: 28,
+        speed: 5, capacity: 0,
+        summonersNeeded: 2750, cost: { esencia: 13000 }, time: 129600, // 36h
+        desc: 'Caballo alado divino, el más veloz de los cielos. Tier 17.'
+      },
+      naga: {
+        name: 'Naga', icon: '🐍', tier: 17,
+        attackChance: 16, hp: 760, attacksPerTurn: 3, damage: 92,
+        defense: 26, armor: 0, weapon: 0, dexterity: 18,
+        speed: 2, capacity: 0,
+        summonersNeeded: 2750, cost: { esencia: 13000 }, time: 129600,
+        desc: 'Serpiente divina de triple ataque y enorme resistencia. Tier 17.'
+      },
+      // ── TIER 18 — 3.000 invocadores ──────────────────────────────
+      yeti: {
+        name: 'Yeti', icon: '❄️', tier: 18,
+        attackChance: 10, hp: 1320, attacksPerTurn: 1, damage: 125,
+        defense: 48, armor: 0, weapon: 0, dexterity: 5,
+        speed: 1, capacity: 0,
+        summonersNeeded: 3000, cost: { esencia: 16000 }, time: 151200, // 42h
+        desc: 'Bestia de las nieves eternas, tanque glacial supremo. Tier 18.'
+      },
+      satiro: {
+        name: 'Sátiro', icon: '🎭', tier: 18,
+        attackChance: 20, hp: 720, attacksPerTurn: 2, damage: 132,
+        defense: 20, armor: 0, weapon: 0, dexterity: 28,
+        speed: 4, capacity: 0,
+        summonersNeeded: 3000, cost: { esencia: 16000 }, time: 151200,
+        desc: 'Ser salvaje de gran agilidad y doble ataque certero. Tier 18.'
+      },
+      // ── TIER 19 — 3.250 invocadores ──────────────────────────────
+      simurgh: {
+        name: 'Simurgh', icon: '🦅', tier: 19,
+        attackChance: 18, hp: 860, attacksPerTurn: 3, damage: 118,
+        defense: 24, armor: 0, weapon: 0, dexterity: 26,
+        speed: 4, capacity: 0,
+        summonersNeeded: 3250, cost: { esencia: 19000 }, time: 172800, // 48h
+        desc: 'Ave divina persa de triple ataque y gran sabiduría. Tier 19.'
+      },
+      gorgona: {
+        name: 'Gorgona', icon: '🌑', tier: 19,
+        attackChance: 25, hp: 720, attacksPerTurn: 1, damage: 168,
+        defense: 18, armor: 0, weapon: 0, dexterity: 24,
+        speed: 2, capacity: 0,
+        summonersNeeded: 3250, cost: { esencia: 19000 }, time: 172800,
+        desc: 'Hermana mayor de Medusa, precisión y daño legendarios. Tier 19.'
+      },
+      // ── TIER 20 — 3.500 invocadores ──────────────────────────────
+      kraken: {
+        name: 'Kraken', icon: '🦑', tier: 20,
+        attackChance: 14, hp: 1240, attacksPerTurn: 4, damage: 135,
+        defense: 35, armor: 0, weapon: 0, dexterity: 12,
+        speed: 1, capacity: 0,
+        summonersNeeded: 3500, cost: { esencia: 23000 }, time: 201600, // 56h
+        desc: 'Bestia marina colosal con cuádruple ataque demoledor. Tier 20.'
+      },
+      angelcaido: {
+        name: 'Ángel Caído', icon: '😈', tier: 20,
+        attackChance: 22, hp: 920, attacksPerTurn: 2, damage: 188,
+        defense: 22, armor: 0, weapon: 0, dexterity: 22,
+        speed: 3, capacity: 0,
+        summonersNeeded: 3500, cost: { esencia: 23000 }, time: 201600,
+        desc: 'Ángel corrompido de poder oscuro equilibrado. Tier 20.'
+      },
+      // ── TIER 21 — 3.750 invocadores ──────────────────────────────
+      ammit: {
+        name: 'Ammit', icon: '⚖️', tier: 21,
+        attackChance: 13, hp: 1520, attacksPerTurn: 1, damage: 158,
+        defense: 42, armor: 0, weapon: 0, dexterity: 8,
+        speed: 1, capacity: 0,
+        summonersNeeded: 3750, cost: { esencia: 28000 }, time: 230400, // 64h
+        desc: 'Devorador de almas egipcio, tanque del inframundo. Tier 21.'
+      },
+      roc: {
+        name: 'Roc', icon: '🦅', tier: 21,
+        attackChance: 19, hp: 970, attacksPerTurn: 2, damage: 148,
+        defense: 24, armor: 0, weapon: 0, dexterity: 26,
+        speed: 5, capacity: 0,
+        summonersNeeded: 3750, cost: { esencia: 28000 }, time: 230400,
+        desc: 'Ave colosal de los mares, la más veloz del mundo. Tier 21.'
+      },
+      // ── TIER 22 — 3.950 invocadores ──────────────────────────────
+      dragon: {
+        name: 'Dragón', icon: '🐲', tier: 22,
+        attackChance: 20, hp: 1420, attacksPerTurn: 3, damage: 128,
+        defense: 26, armor: 0, weapon: 0, dexterity: 16,
+        speed: 3, capacity: 0,
+        summonersNeeded: 3950, cost: { esencia: 35000 }, time: 259200, // 72h
+        desc: 'Dragón antiguo de poder legendario. Tier 22.'
       },
       arconte: {
-        name: 'Arconte', icon: '👼', tier: 5,
-        attackChance: 20, hp: 400, attacksPerTurn: 2, damage: 70,
-        defense: 25, armor: 0, weapon: 0, dexterity: 18,
+        name: 'Arconte', icon: '👼', tier: 22,
+        attackChance: 22, hp: 1200, attacksPerTurn: 2, damage: 108,
+        defense: 38, armor: 0, weapon: 0, dexterity: 20,
         speed: 2, capacity: 0,
-        summonersNeeded: 1000, cost: { esencia: 2500 }, time: 14400,
-        desc: 'Ser celestial supremo. Tier 5. Requiere 1000 invocadores.'
+        summonersNeeded: 3950, cost: { esencia: 35000 }, time: 259200,
+        desc: 'Ser celestial supremo de poder equilibrado. Tier 22.'
+      },
+      // ── TIER 23 — 4.150 invocadores ──────────────────────────────
+      coloso: {
+        name: 'Coloso', icon: '⚙️', tier: 23,
+        attackChance: 11, hp: 2050, attacksPerTurn: 1, damage: 175,
+        defense: 55, armor: 0, weapon: 0, dexterity: 4,
+        speed: 1, capacity: 0,
+        summonersNeeded: 4150, cost: { esencia: 42000 }, time: 288000, // 80h
+        desc: 'Gigante de metal y piedra, el mayor tanque conocido. Tier 23.'
+      },
+      sleipnir: {
+        name: 'Sleipnir', icon: '🐴', tier: 23,
+        attackChance: 21, hp: 1130, attacksPerTurn: 2, damage: 188,
+        defense: 22, armor: 0, weapon: 0, dexterity: 30,
+        speed: 5, capacity: 0,
+        summonersNeeded: 4150, cost: { esencia: 42000 }, time: 288000,
+        desc: 'Corcel de ocho patas de Odín, velocidad sobrenatural. Tier 23.'
+      },
+      // ── TIER 24 — 4.350 invocadores ──────────────────────────────
+      abismo: {
+        name: 'Abismo', icon: '🌑', tier: 24,
+        attackChance: 12, hp: 2450, attacksPerTurn: 2, damage: 185,
+        defense: 52, armor: 0, weapon: 0, dexterity: 5,
+        speed: 1, capacity: 0,
+        summonersNeeded: 4350, cost: { esencia: 50000 }, time: 316800, // 88h
+        desc: 'Entidad del vacío eterno de resistencia absoluta. Tier 24.'
+      },
+      nemea: {
+        name: 'Nemea', icon: '🦁', tier: 24,
+        attackChance: 22, hp: 1340, attacksPerTurn: 2, damage: 235,
+        defense: 24, armor: 0, weapon: 0, dexterity: 22,
+        speed: 3, capacity: 0,
+        summonersNeeded: 4350, cost: { esencia: 50000 }, time: 316800,
+        desc: 'León de Nemea de piel invulnerable y zarpa mortal. Tier 24.'
+      },
+      // ── TIER 25 — 4.500 invocadores ──────────────────────────────
+      tifon: {
+        name: 'Tifón', icon: '🌪️', tier: 25,
+        attackChance: 18, hp: 1850, attacksPerTurn: 4, damage: 215,
+        defense: 32, armor: 0, weapon: 0, dexterity: 16,
+        speed: 2, capacity: 0,
+        summonersNeeded: 4500, cost: { esencia: 60000 }, time: 345600, // 96h
+        desc: 'Padre de todos los monstruos, cuádruple ataque titánico. Tier 25.'
+      },
+      equidna: {
+        name: 'Equidna', icon: '🐍', tier: 25,
+        attackChance: 20, hp: 1650, attacksPerTurn: 2, damage: 225,
+        defense: 36, armor: 0, weapon: 0, dexterity: 20,
+        speed: 2, capacity: 0,
+        summonersNeeded: 4500, cost: { esencia: 60000 }, time: 345600,
+        desc: 'Madre de todos los monstruos, equilibrio supremo. Tier 25.'
+      },
+      // ── TIER 26 — 4.650 invocadores ──────────────────────────────
+      tarasca: {
+        name: 'Tarasca', icon: '🐊', tier: 26,
+        attackChance: 12, hp: 2850, attacksPerTurn: 1, damage: 228,
+        defense: 60, armor: 0, weapon: 0, dexterity: 4,
+        speed: 1, capacity: 0,
+        summonersNeeded: 4650, cost: { esencia: 72000 }, time: 374400, // 104h
+        desc: 'Bestia medieval de coraza impenetrable. Tanque absoluto. Tier 26.'
+      },
+      garuda: {
+        name: 'Garuda', icon: '🦅', tier: 26,
+        attackChance: 21, hp: 1750, attacksPerTurn: 2, damage: 285,
+        defense: 26, armor: 0, weapon: 0, dexterity: 26,
+        speed: 5, capacity: 0,
+        summonersNeeded: 4650, cost: { esencia: 72000 }, time: 374400,
+        desc: 'Ave divina hinduista, señora de los cielos y la velocidad. Tier 26.'
+      },
+      // ── TIER 27 — 4.800 invocadores ──────────────────────────────
+      jormungandr: {
+        name: 'Jörmungandr', icon: '🐍', tier: 27,
+        attackChance: 15, hp: 3050, attacksPerTurn: 3, damage: 248,
+        defense: 44, armor: 0, weapon: 0, dexterity: 10,
+        speed: 1, capacity: 0,
+        summonersNeeded: 4800, cost: { esencia: 88000 }, time: 403200, // 112h
+        desc: 'Serpiente del mundo nórdica que rodea los mares. Tier 27.'
+      },
+      valquiriaoscura: {
+        name: 'Valquiria Oscura', icon: '🖤', tier: 27,
+        attackChance: 25, hp: 1850, attacksPerTurn: 2, damage: 325,
+        defense: 28, armor: 0, weapon: 0, dexterity: 24,
+        speed: 3, capacity: 0,
+        summonersNeeded: 4800, cost: { esencia: 88000 }, time: 403200,
+        desc: 'Guerrera caída de precisión y daño legendarios. Tier 27.'
+      },
+      // ── TIER 28 — 4.900 invocadores ──────────────────────────────
+      primordio: {
+        name: 'Primordio', icon: '🪨', tier: 28,
+        attackChance: 11, hp: 3550, attacksPerTurn: 1, damage: 268,
+        defense: 65, armor: 0, weapon: 0, dexterity: 4,
+        speed: 1, capacity: 0,
+        summonersNeeded: 4900, cost: { esencia: 105000 }, time: 432000, // 120h
+        desc: 'Entidad de la creación, resistencia más allá de lo comprensible. Tier 28.'
+      },
+      azrael: {
+        name: 'Azrael', icon: '⚰️', tier: 28,
+        attackChance: 26, hp: 2050, attacksPerTurn: 2, damage: 385,
+        defense: 24, armor: 0, weapon: 0, dexterity: 26,
+        speed: 3, capacity: 0,
+        summonersNeeded: 4900, cost: { esencia: 105000 }, time: 432000,
+        desc: 'Ángel de la muerte, precisión y daño absolutos. Tier 28.'
+      },
+      // ── TIER 29 — 4.950 invocadores ──────────────────────────────
+      ignisrex: {
+        name: 'Ignis Rex', icon: '🔴', tier: 29,
+        attackChance: 20, hp: 2550, attacksPerTurn: 3, damage: 348,
+        defense: 35, armor: 0, weapon: 0, dexterity: 18,
+        speed: 2, capacity: 0,
+        summonersNeeded: 4950, cost: { esencia: 125000 }, time: 460800, // 128h
+        desc: 'Rey del fuego primordial, triple ataque devastador. Tier 29.'
+      },
+      fenrir: {
+        name: 'Fenrir', icon: '🐺', tier: 29,
+        attackChance: 22, hp: 2250, attacksPerTurn: 3, damage: 365,
+        defense: 28, armor: 0, weapon: 0, dexterity: 28,
+        speed: 4, capacity: 0,
+        summonersNeeded: 4950, cost: { esencia: 125000 }, time: 460800,
+        desc: 'Lobo apocalíptico nórdico que destrozará el mundo. Tier 29.'
+      },
+      // ── TIER 30 — 5.000 invocadores ──────────────────────────────
+      moloch: {
+        name: 'Moloch', icon: '🔱', tier: 30,
+        attackChance: 18, hp: 4050, attacksPerTurn: 2, damage: 510,
+        defense: 50, armor: 0, weapon: 0, dexterity: 12,
+        speed: 2, capacity: 0,
+        summonersNeeded: 5000, cost: { esencia: 155000 }, time: 518400, // 144h
+        desc: 'Dios devorador del fuego eterno, destrucción encarnada. Tier 30.'
+      },
+      metatron: {
+        name: 'Metatrón', icon: '✨', tier: 30,
+        attackChance: 24, hp: 3100, attacksPerTurn: 3, damage: 462,
+        defense: 44, armor: 0, weapon: 0, dexterity: 24,
+        speed: 3, capacity: 0,
+        summonersNeeded: 5000, cost: { esencia: 155000 }, time: 518400,
+        desc: 'Arcángel supremo, equilibrio perfecto entre poder y divinidad. Tier 30.'
       }
     };
 
@@ -2203,88 +2651,90 @@
       }
     }
 
-    function executeTurn(army1, army2, log) {
-      let allGroups = [
-        ...army1.map(g => ({ ...g, army: army1, enemyArmy: army2 })),
-        ...army2.map(g => ({ ...g, army: army2, enemyArmy: army1 }))
-      ];
+    // v1.37: executeTurn — referencias directas (sin spread), muralla táctica
+    // army1=atacantes, army2=defensores, wallObj={hp} (opcional)
+    // Atacantes: si muralla aguanta → golpean muralla (ese ataque se consume).
+    //            Si muralla cae a mitad de turno → ataques siguientes van a tropas.
+    // Defensores: siempre atacan tropas enemigas (no esperan a que caiga la muralla).
+    function executeTurn(army1, army2, log, wallObj) {
+      // Referencias DIRECTAS — sin { ...g } para que los cambios de count sean visibles
+      const all = [];
+      army1.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: true  }); });
+      army2.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: false }); });
 
-      allGroups.sort((a, b) => {
-        if (b.stats.dexterity !== a.stats.dexterity) return b.stats.dexterity - a.stats.dexterity;
-        if (a.count !== b.count) return a.count - b.count;
+      all.sort((a, b) => {
+        if (b.group.stats.dexterity !== a.group.stats.dexterity) return b.group.stats.dexterity - a.group.stats.dexterity;
+        if (a.group.count !== b.group.count) return a.group.count - b.group.count;
         return Math.random() - 0.5;
       });
 
-      allGroups.forEach(group => {
-        if (group.count <= 0 || group.enemyArmy.length === 0) return;
+      all.forEach(item => {
+        const group = item.group;
+        // Si count===0 el grupo fue eliminado este mismo turno: no actua
+        if (group.count <= 0) return;
+
+        const enemies = item.isAtk ? army2 : army1;
 
         for (let i = 0; i < (group.stats.attacksPerTurn || 1); i++) {
-          if (group.enemyArmy.length === 0) break;
-          let targetIndex = Math.floor(Math.random() * group.enemyArmy.length);
-          let target = group.enemyArmy[targetIndex];
+          if (group.count <= 0) break;
 
-          let totalDamage = group.count * group.stats.damage;
-          let attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
+          // ATACANTE con muralla en pie: golpea la muralla (consume el ataque)
+          if (item.isAtk && wallObj && wallObj.hp > 0) {
+            const dmg = group.count * (group.stats.damage || 0);
+            wallObj.hp = Math.max(0, wallObj.hp - dmg);
+            if (log) log.push(group.stats.icon + ' G' + group.groupId + ' golpea la muralla: ' + dmg + ' danio -> ' + wallObj.hp + ' HP');
+            if (wallObj.hp <= 0 && log) log.push('💥 ¡Muralla destruida! Atacantes mas lentos avanzaran sobre las tropas.');
+            continue; // si cayo, el siguiente ataque (i++) va a tropas
+          }
+
+          // DEFENSOR o ATACANTE con muralla ya caida: atacar tropas
+          const aliveEnemies = enemies.filter(e => e.count > 0);
+          if (aliveEnemies.length === 0) break;
+
+          const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+          const attackRoll = (group.stats.attackChance || 10) + Math.floor(Math.random() * 20) + 1;
 
           if (attackRoll > target.stats.defense) {
-            target.totalHP -= totalDamage;
-            let survivorsFloat = target.totalHP / target.stats.hp;
-            let newCount = Math.max(0, Math.floor(survivorsFloat + 0.0001));
-            let killed = target.count - newCount;
+            const dmg = group.count * group.stats.damage;
+            target.totalHP -= dmg;
+            const newCount = Math.max(0, Math.floor(target.totalHP / target.stats.hp + 0.0001));
+            const killed = target.count - newCount;
             target.count = newCount;
 
-            if (log) log.push(`${group.stats.icon} G${group.groupId} atacó a ${target.stats.icon} G${target.groupId}: ${totalDamage} daño, ${killed} bajas.`);
+            if (log) log.push(group.stats.icon + ' G' + group.groupId + ' ataco a ' + target.stats.icon + ' G' + target.groupId + ': ' + dmg + ' danio, ' + killed + ' bajas.');
 
             if (target.count <= 0) {
-              let idx = group.enemyArmy.indexOf(target);
-              if (idx !== -1) group.enemyArmy.splice(idx, 1);
+              const idx = enemies.indexOf(target);
+              if (idx !== -1) enemies.splice(idx, 1);
+              if (log) log.push('💀 ' + target.stats.icon + ' G' + target.groupId + ' eliminado.');
             }
           } else {
-            if (log) log.push(`${group.stats.icon} G${group.groupId} falló ataque contra ${target.stats.icon} G${target.groupId}.`);
+            if (log) log.push(group.stats.icon + ' G' + group.groupId + ' fallo vs ' + target.stats.icon + ' G' + target.groupId + ': ' + Math.floor(attackRoll) + ' vs DEF ' + Math.floor(target.stats.defense) + '.');
           }
         }
       });
     }
-
     function simulateBattle(army1Troops, army2Troops, defenderWallLevel) {
       let army1 = createArmy(1, army1Troops);
       let army2 = createArmy(2, army2Troops);
       let log = [];
       let turn = 1;
 
-      // MURALLA: escudo con HP propio. El atacante debe destruirla antes de llegar a las tropas.
-      // Nivel 1 = 500 HP, +500 por nivel. Nivel 10 = 5000 HP.
-      var wallHP = (defenderWallLevel && defenderWallLevel > 0) ? defenderWallLevel * 500 : 0;
-      if (wallHP > 0) {
-        log.push('🏰 Muralla nivel ' + defenderWallLevel + ': ' + wallHP + ' HP de escudo. El atacante debe destruirla primero.');
+      // MURALLA: objeto compartido con executeTurn para logica tactica v1.37
+      var wallObj = { hp: (defenderWallLevel && defenderWallLevel > 0) ? defenderWallLevel * 500 : 0 };
+      if (wallObj.hp > 0) {
+        log.push('🏰 Muralla nivel ' + defenderWallLevel + ': ' + wallObj.hp + ' HP. Los atacantes la golpean primero; los defensores contraatacan desde el turno 1.');
       }
 
-      while ((army1.length > 0 || wallHP > 0) && army2.length > 0 && turn <= 100) {
+      while (army1.length > 0 && army2.length > 0 && turn <= 100) {
         log.push('--- Ronda ' + turn + ' ---');
-        if (wallHP > 0) {
-          // Atacantes golpean muralla — defensores aguardan protegidos
-          var totalAttackerDmg = 0;
-          army1.forEach(function (group) {
-            if (group.count <= 0) return;
-            var attacks = group.stats.attacksPerTurn || 1;
-            totalAttackerDmg += group.count * group.stats.damage * attacks;
-          });
-          wallHP = Math.max(0, wallHP - totalAttackerDmg);
-          log.push('⚔️ Atacantes golpean la muralla: -' + totalAttackerDmg + ' daño → ' + wallHP + ' HP restantes');
-          if (wallHP <= 0) log.push('💥 ¡Muralla destruida! El combate continúa.');
-          // Defensores NO atacan mientras la muralla aguanta
-        } else {
-          // Muralla caída: combate normal
-          executeTurn(army1, army2, log, null);
-        }
+        executeTurn(army1, army2, log, wallObj);
         turn++;
       }
 
-      // Si muralla sigue en pie al final → defensores ganan (atacantes no llegaron a las tropas)
-      var wallResisted = wallHP > 0;
+      var wallResisted = wallObj.hp > 0;
       let winner = wallResisted ? 2 : (army1.length > 0) ? 1 : (army2.length > 0) ? 2 : 0;
 
-      // Calculate survivors
       let survivors1 = {};
       army1.forEach(g => survivors1[g.type] = (survivors1[g.type] || 0) + g.count);
       let survivors2 = {};
@@ -2293,14 +2743,12 @@
       return { winner, wallResisted, log, survivors1, survivors2, rounds: turn - 1 };
     }
 
-
-    // ============================================================
     // SIMULADOR PvP — múltiples contingentes por bando
     // ============================================================
     function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel) {
-      var wallHP = (wallLevel && wallLevel > 0) ? wallLevel * 500 : 0;
+      var wallObj = { hp: (wallLevel && wallLevel > 0) ? wallLevel * 500 : 0 };
       var log = [];
-      if (wallHP > 0) log.push('🏰 Muralla nivel ' + wallLevel + ': ' + wallHP + ' HP. Los atacantes deben destruirla primero.');
+      if (wallObj.hp > 0) log.push('🏰 Muralla nivel ' + wallLevel + ': ' + wallObj.hp + ' HP. Los atacantes la golpean primero; defensores contraatacan desde el turno 1.');
 
       function buildArmyPvP(contingents, armyId) {
         var army = [];
@@ -2327,21 +2775,13 @@
       var army2 = buildArmyPvP(defenderContingents, 2);
       var turn = 1;
 
-      while ((army1.length > 0 || wallHP > 0) && army2.length > 0 && turn <= 100) {
+      while (army1.length > 0 && army2.length > 0 && turn <= 100) {
         log.push('--- Ronda ' + turn + ' ---');
-        if (wallHP > 0) {
-          var dmg = 0;
-          army1.forEach(function (g) { dmg += g.count * (g.stats.damage || 0) * (g.stats.attacksPerTurn || 1); });
-          wallHP = Math.max(0, wallHP - dmg);
-          log.push('⚔️ Atacantes golpean muralla: -' + dmg + ' → ' + wallHP + ' HP');
-          if (wallHP <= 0) log.push('💥 ¡Muralla destruida!');
-        } else {
-          executeTurn(army1, army2, log, null);
-        }
+        executeTurn(army1, army2, log, wallObj);
         turn++;
       }
 
-      var wallResisted = wallHP > 0;
+      var wallResisted = wallObj.hp > 0;
       var winner = wallResisted ? 2 : (army1.length > 0 ? 1 : (army2.length > 0 ? 2 : 0));
 
       function collectResults(contingents, army) {
@@ -2560,14 +3000,46 @@
     // TODO: Implementar sistema completo de XP y niveles
     // ============================================================
     function getTroopLevel(troopType) {
-      // Para invocadores: nivel basado en cantidad entrenada
-      // tier 1: siempre; tier 2: 100+; tier 3: 400+; tier 4: 1000+
+      // Para invocadores: nivel basado en cantidad entrenada (30 niveles)
+      // El nivel del invocador desbloquea criaturas del tier correspondiente
       if (troopType === 'invocador') {
         var count = (activeVillage && activeVillage.state && activeVillage.state.troops && activeVillage.state.troops.invocador) || 0;
-        if (count >= 1000) return 4;
-        if (count >= 400) return 3;
-        if (count >= 100) return 2;
-        return 1;
+        var thresholds = [
+               1,  // nivel 1  ← Orco / Hada
+               8,  // nivel 2  ← Gólem / Espectro
+              20,  // nivel 3  ← Kobold / Sílfide
+              45,  // nivel 4  ← Troll / Banshee
+              90,  // nivel 5  ← Grifo / Quimera
+             150,  // nivel 6  ← Hidra / Cíclope
+             230,  // nivel 7  ← Basilisco / Valquiria
+             320,  // nivel 8  ← Minotauro / Salamandra
+             410,  // nivel 9  ← Manticora / Ondina
+             500,  // nivel 10 ← Centauro / Medusa
+             850,  // nivel 11 ← Wyvern / Nereida
+            1200,  // nivel 12 ← Gigante / Harpía
+            1550,  // nivel 13 ← Fénix / Cerbero
+            1850,  // nivel 14 ← Behemot / Quetzal
+            2150,  // nivel 15 ← Leviatán / Serafín
+            2450,  // nivel 16 ← Titán / Lich
+            2750,  // nivel 17 ← Pegaso / Naga
+            3000,  // nivel 18 ← Yeti / Sátiro
+            3250,  // nivel 19 ← Simurgh / Gorgona
+            3500,  // nivel 20 ← Kraken / Ángel Caído
+            3750,  // nivel 21 ← Ammit / Roc
+            3950,  // nivel 22 ← Dragón / Arconte
+            4150,  // nivel 23 ← Coloso / Sleipnir
+            4350,  // nivel 24 ← Abismo / Nemea
+            4500,  // nivel 25 ← Tifón / Equidna
+            4650,  // nivel 26 ← Tarasca / Garuda
+            4800,  // nivel 27 ← Jörmungandr / Valquiria Oscura
+            4900,  // nivel 28 ← Primordio / Azrael
+            4950,  // nivel 29 ← Ignis Rex / Fenrir
+            5000   // nivel 30 ← Moloch / Metatrón
+        ];
+        for (var i = thresholds.length - 1; i >= 0; i--) {
+          if (count >= thresholds[i]) return i + 1;
+        }
+        return 0; // sin invocadores = no puede invocar nada
       }
       return 1;
     }
@@ -3333,25 +3805,33 @@
         }
       });
 
-      // Calcular XP basada en bajas causadas (matar al enemigo da XP)
+      // Calcular XP por bajas — v1.36: factor × nivel_tropa_matada × cantidad
+      // Aldeano: 2 × nivel; otras tropas: 10 × nivel; criaturas: 10 (sin nivel)
       var attackerXP = 0;
       var defenderXP = 0;
+      var atkTroopLvls = (_researchData && _researchData.troop_levels) || {};
 
-      // Atacante gana XP por matar tropas del defensor
+      // Atacante gana XP por matar tropas del defensor NPC (nivel 1 siempre)
       Object.keys(defenderCasualties).forEach(function (type) {
         var killed = defenderCasualties[type];
         if (type === '_knight') {
-          attackerXP += target.rewards.experience; // XP del caballero
+          attackerXP += target.rewards.experience;
+        } else if (TROOP_TYPES[type]) {
+          var lvl = 1; // NPC siempre nivel 1
+          attackerXP += killed * (type === 'aldeano' ? 2 : 10) * lvl;
+        } else if (CREATURE_TYPES[type]) {
+          attackerXP += killed * 10;
         }
       });
 
-      // Defensor gana XP por matar tropas del atacante
+      // Defensor gana XP por matar tropas del atacante (nivel del atacante)
       Object.keys(attackerCasualties).forEach(function (type) {
         var killed = attackerCasualties[type];
-        var troopData = TROOP_TYPES[type] || CREATURE_TYPES[type];
-        if (troopData) {
-          // XP = HP de la tropa * cantidad matada (aproximación)
-          defenderXP += killed * troopData.hp;
+        if (TROOP_TYPES[type]) {
+          var lvl = atkTroopLvls[type] || 1;
+          defenderXP += killed * (type === 'aldeano' ? 2 : 10) * lvl;
+        } else if (CREATURE_TYPES[type]) {
+          defenderXP += killed * 10;
         }
       });
 
@@ -3582,6 +4062,25 @@
 
         // 9. Limpiar active_missions
         await _clearActiveMission(m.mid);
+
+        // 9b. XP por bajas causadas — v1.36: factor × nivel_tropa_matada × cantidad
+        var pvpXP = 0;
+        var pvpAtkLvls = (_researchData && _researchData.troop_levels) || {};
+        bResult.defenderResults.forEach(function(dr) {
+          Object.keys(dr.casualties || {}).forEach(function(type) {
+            var killed = dr.casualties[type] || 0;
+            if (TROOP_TYPES[type]) {
+              // Nivel de tropas del defensor — usamos 1 si no disponible
+              var lvl = 1;
+              pvpXP += killed * (type === 'aldeano' ? 2 : 10) * lvl;
+            } else if (CREATURE_TYPES[type]) {
+              pvpXP += killed * 10;
+            }
+          });
+        });
+        if (pvpXP > 0) {
+          sbClient.rpc('add_experience', { amount: pvpXP }).then(function(){}).catch(function(e){ console.warn('PvP XP error:', e); });
+        }
 
         // 10. Informe y notificaciones
         var reportHtml = generateBattlePvPReport(bResult, wallLvl, loot, { x: m.tx, y: m.ty });
@@ -3953,7 +4452,7 @@
         // Try full select first (requires migration columns to exist)
         const { data, error } = await sbClient
           .from('profiles')
-          .select('id, username, experience, role, military_score, alliance_tag, battles_won_pvp, battles_lost_pvp, battles_won_npc')
+          .select('id, username, experience, role, military_score, alliance_tag, battles_won_pvp, battles_lost_pvp, battles_won_npc, troop_levels, weapon_levels, armor_levels')
           .eq('id', currentUser.id)
           .single();
         if (!error) return data;
@@ -5037,6 +5536,114 @@
 
     // ============================================================
     // ============================================================
+    // ============================================================
+    // VER TROPAS EN MOVIMIENTO — modal informativo
+    // ============================================================
+    function showMissionTroops(missionRef) {
+      var vs = activeVillage && activeVillage.state;
+      if (!vs) return;
+      var m = (vs.mission_queue || []).find(function (q) { return q.mid === missionRef || q.finish_at === missionRef; });
+      if (!m) { showNotif('Misión no encontrada', 'err'); return; }
+
+      var troops = m.troops || {};
+      var hasTroops = Object.keys(troops).some(function (k) { return (troops[k] || 0) > 0; });
+      if (!hasTroops) { showNotif('Esta misión no lleva unidades', 'info'); return; }
+
+      // Determinar nombre e icono de la misión
+      var missionName, missionIcon;
+      if (m.type === 'spy')              { missionIcon = '🏹'; missionName = 'Espionaje → [' + m.tx + ',' + m.ty + ']'; }
+      else if (m.type === 'return')      { missionIcon = '🏠'; missionName = 'Tropas regresando a casa'; }
+      else if (m.type === 'return_reinforce') { missionIcon = '↩️'; missionName = 'Tropas volviendo a casa'; }
+      else if (m.type === 'reinforce')   { missionIcon = '🛡️'; missionName = 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; }
+      else if (m.type === 'transport')   { missionIcon = '📦'; missionName = 'Caravana → [' + m.tx + ',' + m.ty + ']'; }
+      else if (m.type === 'move')        { missionIcon = '⚔️'; missionName = 'Tropas → [' + m.tx + ',' + m.ty + ']'; }
+      else                               { missionIcon = '⚔️'; missionName = 'Ataque → [' + m.tx + ',' + m.ty + ']'; }
+
+      // Tiempo restante
+      var tl = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
+      var timeStr = tl > 3600 ? Math.floor(tl/3600) + 'h ' + Math.floor((tl%3600)/60) + 'm ' + (tl%60) + 's'
+                  : tl > 60  ? Math.floor(tl/60) + 'm ' + (tl%60) + 's'
+                  : tl + 's';
+
+      // Separar tropas y criaturas
+      var troopRows = '', creatureRows = '', totalUnits = 0;
+      Object.keys(troops).forEach(function (k) {
+        var qty = troops[k] || 0;
+        if (qty <= 0) return;
+        totalUnits += qty;
+        var td = TROOP_TYPES[k];
+        var cd = CREATURE_TYPES[k];
+        if (td) {
+          troopRows += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">'
+            + '<span style="font-size:1.3rem;">' + td.icon + '</span>'
+            + '<span style="flex:1;color:var(--text);font-size:.88rem;">' + td.name + '</span>'
+            + '<span style="color:var(--accent);font-size:.95rem;font-weight:bold;">×' + fmt(qty) + '</span>'
+            + '</div>';
+        } else if (cd) {
+          creatureRows += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">'
+            + '<span style="font-size:1.3rem;">' + cd.icon + '</span>'
+            + '<span style="flex:1;color:var(--text);font-size:.88rem;">' + cd.name + '</span>'
+            + '<span style="color:var(--accent2);font-size:.95rem;font-weight:bold;">×' + fmt(qty) + '</span>'
+            + '</div>';
+        }
+      });
+
+      // Secciones de contenido
+      var sectTroops = troopRows
+        ? '<div style="font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px;">⚔️ Tropas</div>' + troopRows
+        : '';
+      var sectCreatures = creatureRows
+        ? '<div style="font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px;">🐉 Criaturas</div>' + creatureRows
+        : '';
+
+      // Contingentes aliados (si los hay)
+      var guestHTML = '';
+      if (m.guest_contingents && m.guest_contingents.length > 0) {
+        m.guest_contingents.forEach(function (gc) {
+          if (!gc.troops || !Object.values(gc.troops).some(function(n){return n>0;})) return;
+          var gName = (profileCache[gc.owner_id] && profileCache[gc.owner_id].username) || gc.owner_id.slice(0,8);
+          var gRows = '';
+          Object.keys(gc.troops).forEach(function(k){
+            var qty2 = gc.troops[k]||0; if(!qty2) return;
+            var td2 = TROOP_TYPES[k]; var cd2 = CREATURE_TYPES[k];
+            var info = td2||cd2; if(!info) return;
+            gRows += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">'
+              + '<span style="font-size:1.1rem;">' + info.icon + '</span>'
+              + '<span style="flex:1;color:var(--dim);font-size:.82rem;">' + info.name + '</span>'
+              + '<span style="color:var(--text);font-size:.88rem;">×' + fmt(qty2) + '</span>'
+              + '</div>';
+          });
+          if (gRows) {
+            guestHTML += '<div style="background:var(--panel2);border-radius:6px;padding:8px;margin-top:8px;">'
+              + '<div style="font-size:.72rem;color:#e87030;margin-bottom:4px;">🤝 ' + escapeHtml(gName) + ' (aliado)</div>'
+              + gRows + '</div>';
+          }
+        });
+      }
+
+      // Construir y mostrar el modal
+      var existing = document.getElementById('missionTroopsModal');
+      if (existing) existing.remove();
+      var overlay = document.createElement('div');
+      overlay.id = 'missionTroopsModal';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;';
+      overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:360px;width:92%;font-family:VT323,monospace;max-height:80vh;overflow-y:auto;">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;">'
+        + '<span style="font-size:1.8rem;">' + missionIcon + '</span>'
+        + '<div style="flex:1;">'
+        + '<div style="font-size:1rem;color:var(--accent);">' + missionName + '</div>'
+        + '<div style="font-size:.72rem;color:var(--dim);">⏱ ' + timeStr + ' · ' + fmt(totalUnits) + ' unidades en total</div>'
+        + '</div>'
+        + '<button onclick="document.getElementById(\'missionTroopsModal\').remove()" style="background:none;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;padding:0 4px;">✕</button>'
+        + '</div>'
+        + sectTroops
+        + sectCreatures
+        + guestHTML
+        + '</div>';
+      document.body.appendChild(overlay);
+    }
+
     function renderQueue(vs) {
       var ids = ['qItems', 'qItemsOv'];
       ids.forEach(function (elId) {
@@ -5099,11 +5706,16 @@
           var cancelBtn = (m.type !== 'return' && m.type !== 'found' && m.type !== 'move' && m.type !== 'reinforce' && m.type !== 'transport' && m.type !== 'return_reinforce')
             ? '<button onclick="cancelMission(\'' + (m.mid || m.finish_at) + '\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar</button>'
             : '';
+          var hasTroopsInMission = m.troops && Object.keys(m.troops).some(function(k){return (m.troops[k]||0)>0;});
+          var viewBtn = hasTroopsInMission
+            ? '<button onclick="showMissionTroops(\'' + escapeJs(m.mid || m.finish_at) + '\')" style="background:rgba(100,180,255,.08);border:1px solid rgba(100,180,255,.25);color:var(--accent);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;margin-right:4px;">👁 Ver tropas</button>'
+            : '';
           div.innerHTML = '<div class="queue-icon">' + icon + '</div>'
             + '<div class="queue-info"><div class="queue-name">' + name + '</div>'
             + '<div class="queue-time">' + timeStr + '</div>'
             + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%; background:' + color + '"></div></div>'
-            + cancelBtn + '</div>';
+            + '<div style="display:flex;flex-wrap:wrap;gap:2px;">' + viewBtn + cancelBtn + '</div>'
+            + '</div>';
           el.appendChild(div);
         });
 
@@ -6874,6 +7486,7 @@
       setTimeout(function () { if (name === 'buildings') renderBuildings(); if (name === 'map') renderMap(); }, 50);
       if (name === 'ranking') renderRanking();
       if (name === 'alliances') renderAlliances();
+      if (name === 'research') renderResearch(); // v1.35: Centro de Investigación
       if (name === 'messages') { renderThreads(); renderMessagesHeader(); }
       if (name === 'recursos') renderRecursos();
       if (name === 'fleet') renderTroops();
@@ -7754,6 +8367,193 @@
     function forceRefreshRanking() {
       rankingCache = null;
       renderRanking();
+    }
+
+    // ================================================================
+    // CENTRO DE INVESTIGACIÓN — sistema de niveles de tropa (v1.35)
+    // ================================================================
+
+    // Tabla de coste XP por nivel (nivel 1→2 cuesta 10000, lineal hasta 30M)
+    // Fórmula: coste(n) = round(10000 + (n-1) * (30000000-10000)/28, -3) aprox
+    function xpCostForLevel(currentLvl) {
+      if (currentLvl < 1 || currentLvl >= 30) return Infinity;
+      var base = 10000;
+      var step = Math.round((30000000 - 10000) / 28);
+      var raw = base + (currentLvl - 1) * step;
+      // Redondear a cifra limpia
+      if (raw >= 1000000) return Math.round(raw / 100000) * 100000;
+      if (raw >= 100000) return Math.round(raw / 10000) * 10000;
+      return Math.round(raw / 1000) * 1000;
+    }
+
+    // Stats por nivel para una tropa (interpolación lineal entre nivel 1 y nivel 30)
+    // Usamos multiplicadores sobre stats base. Los spikes cada 5 niveles añaden +10% extra.
+    function getTroopStatsAtLevel(troopKey, lvl) {
+      var base = TROOP_TYPES[troopKey];
+      if (!base) return null;
+      // Multiplicador base: +8% por nivel sobre stats base (lvl 1 = ×1.0)
+      var mult = 1 + (lvl - 1) * 0.08;
+      // Spike en múltiplos de 5: +10% adicional acumulado
+      var spikes = Math.floor(lvl / 5);
+      mult += spikes * 0.10;
+      return {
+        hp:      Math.round(base.hp * mult),
+        damage:  Math.round(base.damage * mult),
+        defense: Math.round(base.defense * mult),
+        attackChance: Math.min(95, base.attackChance + Math.floor((lvl-1)*0.5))
+      };
+    }
+
+    // Cache de datos de investigación del jugador
+    var _researchData = null; // { experience, troop_levels, ... }
+
+    async function loadResearchData(forceReload) {
+      if (_researchData && !forceReload) return _researchData;
+      try {
+        var { data, error } = await sbClient
+          .from('profiles')
+          .select('experience, troop_levels, weapon_levels, armor_levels')
+          .eq('id', currentUser.id)
+          .single();
+        if (error) throw error;
+        _researchData = {
+          experience:   data.experience || 0,
+          troop_levels: data.troop_levels || {},
+          weapon_levels: data.weapon_levels || {},
+          armor_levels:  data.armor_levels || {}
+        };
+      } catch(e) {
+        console.warn('loadResearchData error:', e);
+        _researchData = { experience: 0, troop_levels: {}, weapon_levels: {}, armor_levels: {} };
+      }
+      return _researchData;
+    }
+
+    async function renderResearch() {
+      var rd = await loadResearchData(true);
+      // Actualizar display XP
+      var xpEl = document.getElementById('researchXPDisplay');
+      if (xpEl) xpEl.textContent = formatNumber(rd.experience) + ' XP';
+
+      var grid = document.getElementById('researchTroopGrid');
+      if (!grid) return;
+
+      // Tropas que tienen sistema de niveles (excluye invocador)
+      var troopKeys = ['aldeano','soldado','mago','druida','explorador','asesino','paladin','chaman'];
+      var html = '';
+
+      troopKeys.forEach(function(key) {
+        var tDef = TROOP_TYPES[key];
+        if (!tDef) return;
+        var curLvl = rd.troop_levels[key] || 1;
+        var isMax = curLvl >= 30;
+        var cost = xpCostForLevel(curLvl);
+        var canAfford = !isMax && rd.experience >= cost;
+        var stats = getTroopStatsAtLevel(key, curLvl);
+        var statsNext = isMax ? null : getTroopStatsAtLevel(key, curLvl + 1);
+
+        html += '<div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg2);border-radius:8px;flex-wrap:wrap;">';
+
+        // Icono + nombre
+        html += '<div style="min-width:80px;text-align:center;">';
+        html += '<div style="font-size:1.8rem;">' + tDef.icon + '</div>';
+        html += '<div style="font-size:.7rem;font-weight:700;color:var(--text);">' + tDef.name + '</div>';
+        html += '</div>';
+
+        // Nivel actual
+        html += '<div style="min-width:70px;">';
+        html += '<div class="muted" style="font-size:.65rem;">NIVEL</div>';
+        html += '<div style="font-size:1.5rem;font-weight:700;color:' + (isMax ? 'var(--gold)' : 'var(--accent)') + ';">' + curLvl + '</div>';
+        if (isMax) html += '<div style="font-size:.6rem;color:var(--gold);">MÁXIMO</div>';
+        html += '</div>';
+
+        // Stats actuales
+        html += '<div style="flex:1;min-width:130px;">';
+        html += '<div class="muted" style="font-size:.65rem;margin-bottom:4px;">STATS (nv.' + curLvl + ')</div>';
+        html += '<div style="font-size:.72rem;line-height:1.7;">';
+        html += '❤️ HP: <strong>' + stats.hp + '</strong>';
+        if (statsNext) html += ' → <span style="color:var(--green)">' + statsNext.hp + '</span>';
+        html += '<br>';
+        html += '⚔️ Daño: <strong>' + stats.damage + '</strong>';
+        if (statsNext) html += ' → <span style="color:var(--green)">' + statsNext.damage + '</span>';
+        html += '<br>';
+        html += '🛡️ Def: <strong>' + stats.defense + '</strong>';
+        if (statsNext) html += ' → <span style="color:var(--green)">' + statsNext.defense + '</span>';
+        html += '</div>';
+        html += '</div>';
+
+        // Coste y botón
+        html += '<div style="text-align:right;min-width:110px;">';
+        if (!isMax) {
+          html += '<div class="muted" style="font-size:.65rem;">COSTE SUBIDA</div>';
+          html += '<div style="font-size:.85rem;color:' + (canAfford ? 'var(--gold)' : 'var(--dim)') + ';margin-bottom:6px;">' + formatNumber(cost) + ' XP</div>';
+          html += '<button class="btn btn-sm" style="' + (!canAfford ? 'opacity:.45;cursor:not-allowed;' : '') + '"'
+                + (canAfford ? ' onclick="upgradeTroopLevel(\'' + key + '\')"' : '')
+                + '>' + (canAfford ? '⬆ Subir nivel' : '❌ XP insuf.') + '</button>';
+        } else {
+          html += '<div style="font-size:.8rem;color:var(--gold);margin-top:8px;">✨ Maestría</div>';
+        }
+        html += '</div>';
+
+        html += '</div>';
+      });
+
+      grid.innerHTML = html;
+    }
+
+    async function upgradeTroopLevel(troopKey) {
+      if (!currentUser) return;
+      var rd = await loadResearchData(false);
+      var curLvl = rd.troop_levels[troopKey] || 1;
+      if (curLvl >= 30) return;
+      var cost = xpCostForLevel(curLvl);
+      if (rd.experience < cost) {
+        alert('No tienes suficiente XP.');
+        return;
+      }
+
+      var newLvl = curLvl + 1;
+      var newXP = rd.experience - cost;
+      var newTroopLevels = Object.assign({}, rd.troop_levels);
+      newTroopLevels[troopKey] = newLvl;
+
+      try {
+        var { error } = await sbClient
+          .from('profiles')
+          .update({ experience: newXP, troop_levels: newTroopLevels })
+          .eq('id', currentUser.id);
+        if (error) throw error;
+
+        // Actualizar cache local
+        _researchData.experience = newXP;
+        _researchData.troop_levels = newTroopLevels;
+
+        // Actualizar display XP global si existe
+        var xpEl = document.getElementById('ovExperience');
+        if (xpEl) xpEl.textContent = formatNumber(newXP);
+
+        // Re-renderizar
+        await renderResearch();
+
+        // Feedback visual
+        var tDef = TROOP_TYPES[troopKey];
+        var msg = '✅ ' + (tDef ? tDef.icon + ' ' + tDef.name : troopKey) + ' subido a nivel ' + newLvl + '!';
+        console.log(msg);
+        // Pequeño toast
+        _showToast(msg);
+      } catch(e) {
+        console.error('upgradeTroopLevel error:', e);
+        alert('Error al subir nivel: ' + e.message);
+      }
+    }
+
+    // Toast simple (reutilizable)
+    function _showToast(msg) {
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:.85rem;box-shadow:0 2px 12px #0008;pointer-events:none;';
+      document.body.appendChild(t);
+      setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity .5s'; setTimeout(function(){ t.remove(); }, 500); }, 2500);
     }
 
     // ================================================================
@@ -9433,7 +10233,7 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.33</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.38</div>
 </body>
 
 </html>

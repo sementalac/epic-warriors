@@ -1,6 +1,35 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.6 — Última actualización: v1.33
+> Versión del documento: 1.7 — Última actualización: v1.38
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
+
+---
+
+## 📋 PROTOCOLO DE MANTENIMIENTO DE ESTE DOCUMENTO
+
+Este documento debe actualizarse **en la misma entrega** que introduce el cambio. No actualizarlo después.
+
+### Cuándo actualizar
+- Nueva tabla o columna en Supabase
+- Nueva función que entra en la lista de "no tocar sin revisión"
+- Nueva regla de arquitectura o restricción
+- Eliminación de un comportamiento o componente
+- Cambio en el modelo de red, guardado o tick
+
+### Cómo añadir una versión nueva
+
+1. Actualizar la cabecera: `Última actualización: vX.XX`
+2. Añadir entrada al final de `## HISTORIAL DE VERSIONES` con esta plantilla:
+
+```markdown
+### vX.XX — [Título]
+- descripción del cambio principal
+- [Supabase] nuevas tablas/columnas/triggers/RPCs si aplica
+- [Regla nueva] restricción añadida
+- [Eliminado] comportamiento anterior que ya no existe
+```
+
+3. Actualizar las secciones afectadas (tablas, reglas, componentes).
+4. No eliminar entradas antiguas del historial.
 
 ---
 
@@ -89,6 +118,8 @@ flushVillage()
 | `guest_troops` | Tropas de refuerzo en aldeas ajenas | `processRecalls` al login |
 | `objectives` | Estado de objetivos NPC por jugador | Al completar batalla NPC |
 | `messages` | Informes de batalla, espionaje, sistema | Al completar misiones |
+
+> Si añades una tabla nueva, añádela a esta tabla con su contenido y momento de escritura.
 
 ### Columnas de `profiles` relevantes
 ```
@@ -215,8 +246,10 @@ function almacenCapForLevel(l) {
 Escudo con HP propio (500 HP nv.1, +500 por nivel). El atacante destruye la muralla antes de poder dañar tropas. No reimplementar como bonus a tropas.
 
 ### Criaturas
-- **Visibilidad**: `torreLevel >= tier` (Torre de Invocación)
-- **Invocación**: requiere además `invocadorLevel >= tier`
+- **60 criaturas** en **30 tiers** — 2 por tier, una de cada arquetipo
+- **Visibilidad**: `torreLevel >= tier` (Torre de Invocación, niveles 1-30)
+- **Invocación**: requiere `invocadorLevel >= tier`; `invocadorLevel` calculado en `getTroopLevel('invocador')` con 30 umbrales (1 inv → nv1, 5000 inv → nv30)
+- La Torre de Invocación **solo reduce tiempos** (-5%/nivel), **no desbloquea** criaturas
 - Nunca filtrar visibilidad por `invocadorLevel`
 
 ### Mensajes del sistema
@@ -252,6 +285,8 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 14. **Aldeas fantasma y aldeas sin `state`: cargar datos desde tablas separadas antes de combate/espionaje.**
 15. **`battles_won_pvp/npc` se persisten en `profiles` inmediatamente**, no solo en `state`.
 
+> Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
+
 ---
 
 ## COMPONENTES QUE NO SE MODIFICAN SIN REVISIÓN
@@ -270,9 +305,31 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 | `game-data.js` | game-data.js | Datos NPC inmutables |
 | `simJS_template` (en game-simulator.js) | game-simulator.js | Backticks internos deben estar escapados |
 
+> Si añades un componente crítico nuevo, añádelo a esta tabla.
+
 ---
 
 ## HISTORIAL DE VERSIONES
+
+> Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.38 — Bestiario completo: 60 criaturas en 30 tiers
+- `CREATURE_TYPES` expandido de 10 a 60 criaturas (2 por tier, tiers 1-30)
+- Criaturas existentes mantenidas con sus claves JS — jugadores no pierden nada; stats buffed en T5-T22
+- Bug corregido: Dragón y Arconte pasaban a tier 22 (antes tier 5 era inalcanzable)
+- `getTroopLevel('invocador')` rediseñado: 4 niveles → 30 niveles con umbrales (1 inv → nv1, 5000 inv → nv30)
+- Torre de Invocación: rol cambiado de gate a reductor de tiempos exclusivamente
+- Tiempos de invocación reescalados: T1=5min, T5=50min, T10=5h, T15=24h, T22=72h, T30=144h (sin torre)
+- 50 nuevas criaturas añadidas (mitología clásica y medieval): Kobold, Sílfide, Troll, Banshee, Quimera, Cíclope, Basilisco, Valquiria, Minotauro, Salamandra, Manticora, Ondina, Centauro, Medusa, Wyvern, Nereida, Gigante, Harpía, Cerbero, Quetzal, Leviatán, Serafín, Titán, Lich, Pegaso, Naga, Yeti, Sátiro, Simurgh, Gorgona, Kraken, Ángel Caído, Ammit, Roc, Coloso, Sleipnir, Abismo, Nemea, Tifón, Equidna, Tarasca, Garuda, Jörmungandr, Valquiria Oscura, Primordio, Azrael, Ignis Rex, Fenrir, Moloch, Metatrón
+- [Supabase] Tabla `creatures` necesita 50 columnas nuevas (ALTER TABLE — ver propuesta_criaturas.html)
+
+### vX.XX — [Plantilla para nuevas versiones]
+- descripción del cambio principal
+- [Supabase] nuevas tablas/columnas/triggers/RPCs si aplica
+- [Regla nueva] restricción añadida
+- [Eliminado] comportamiento anterior que ya no existe
+
+---
 
 ### v1.33 — Aldeas fantasma funcionales + persistencia de batallas
 - `executeAttackPvP` carga datos desde tablas separadas si `state === null`
