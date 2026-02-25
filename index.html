@@ -6,7 +6,7 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.32</title>
+  <title>Epic Warriors Online v1.33</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
@@ -240,6 +240,14 @@
                   <span style="color:var(--dim);font-size:.9rem;"> D</span>
                 </div>
                 <div style="font-size:.58rem;color:var(--dim);margin-top:2px;">Solo contra jugadores</div>
+              </div>
+              <div
+                style="background:var(--panel2);border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(80,208,144,.12);grid-column:1/-1;">
+                <div style="font-size:.62rem;color:var(--dim);letter-spacing:.12em;margin-bottom:6px;">🏰 VICTORIAS NPC
+                </div>
+                <div style="font-size:1.6rem;color:var(--ok);font-weight:bold;font-family:VT323,monospace;"
+                  id="ovBattlesNPC">0</div>
+                <div style="font-size:.58rem;color:var(--dim);margin-top:2px;">Castillos + Aldeas fantasma</div>
               </div>
             </div>
           </div>
@@ -2972,6 +2980,14 @@
           p_body: payload
         });
         if (r.error) console.warn('sendSystemReport RPC error:', r.error);
+        // Refrescar mensajes automáticamente si el usuario está en la página de mensajes
+        if (userId === (currentUser && currentUser.id)) {
+          var msgPage = document.getElementById('page-messages');
+          if (msgPage && msgPage.style.display !== 'none') {
+            renderThreads();
+            if (currentThreadId) loadSystemReports();
+          }
+        }
       } catch (e) {
         console.warn('sendSystemReport error:', e);
       }
@@ -3128,9 +3144,6 @@
                 .map(function (k) { return accepted[k] + ' ' + (TROOP_TYPES[k] ? TROOP_TYPES[k].name : k); }).join(', ') || 'ninguna';
               var rejectedStr = anyRejected ? '\n⚠️ Sin espacio en barracas: algunas tropas se perdieron.' : '';
 
-              await sendSystemReport(currentUser.id, '🏠 TROPAS REGRESAN',
-                'Tus tropas han vuelto a la aldea.\n' +
-                '✅ Aceptadas: ' + acceptedStr + rejectedStr + lootReport);
               showNotif('¡Tropas han regresado!', 'ok');
               continue; // La misión de retorno se descarta tras procesar
             }
@@ -3217,8 +3230,45 @@
         await sendSystemReport(currentUser.id, '🔍 ESPIONAJE: ' + target.name, report);
         showNotif('Espionaje completado. Revisa tus mensajes.', 'ok');
       } else {
-        await sendSystemReport(currentUser.id, 'ESPIONAJE', 'Coordenada [' + m.tx + ', ' + m.ty + '] sin objetivo.');
-        showNotif('Sin objetivo en esa coordenada.', 'err');
+        // Puede ser aldea PvP o fantasma — buscar en villages
+        var spyR = await sbClient.from('villages').select('id,name,owner_id,cx,cy').eq('id', m.targetId).maybeSingle();
+        if (spyR.data) {
+          var sv = spyR.data;
+          var isGhost = sv.owner_id === GHOST_OWNER_ID;
+          var ownerName = isGhost ? 'Aldea Fantasma' : ((profileCache[sv.owner_id] && profileCache[sv.owner_id].username) || 'Jugador desconocido');
+          // Cargar tropas
+          var spyTrpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
+          var spyCrtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
+          var spyBldR = await sbClient.from('buildings').select('muralla').eq('village_id', m.targetId).maybeSingle();
+          var troopLines = '';
+          if (spyTrpR.data) {
+            Object.keys(spyTrpR.data).forEach(function(k) {
+              if (k === 'village_id') return;
+              var n = spyTrpR.data[k] || 0;
+              var td = TROOP_TYPES[k];
+              if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
+            });
+          }
+          if (spyCrtR.data) {
+            Object.keys(spyCrtR.data).forEach(function(k) {
+              if (k === 'village_id' || k === 'created_at' || k === 'updated_at') return;
+              var n = spyCrtR.data[k] || 0;
+              var cd = CREATURE_TYPES[k];
+              if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
+            });
+          }
+          var wallLvlSpy = (spyBldR.data && spyBldR.data.muralla) || 0;
+          var report = '🔍 INFORME DE ESPIONAJE\n══════════════════════\n' +
+            sv.name + ' [' + sv.cx + ', ' + sv.cy + ']\n' +
+            'Propietario: ' + ownerName + '\n' +
+            (wallLvlSpy > 0 ? '🏰 Muralla: Nivel ' + wallLvlSpy + '\n' : '') +
+            '\n⚔️ Tropas detectadas:' + (troopLines || '\n  Sin tropas visibles');
+          await sendSystemReport(currentUser.id, '🔍 ESPIONAJE: ' + sv.name, report);
+          showNotif('Espionaje completado. Revisa tus mensajes.', 'ok');
+        } else {
+          await sendSystemReport(currentUser.id, 'ESPIONAJE', 'Coordenada [' + m.tx + ', ' + m.ty + '] sin objetivo.');
+          showNotif('Sin objetivo en esa coordenada.', 'err');
+        }
       }
     }
 
@@ -3334,6 +3384,11 @@
       if (victoria) {
         await sbClient.rpc('add_experience', { amount: attackerXP });
         await updateObjective(target.id, 'cleared');
+        if (activeVillage && activeVillage.state) {
+          activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
+          scheduleSave();
+          sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+        }
         showNotif('¡' + target.name + ' derrotado! +' + fmt(attackerXP) + ' XP', 'ok');
       } else {
         await updateObjective(target.id, 'attacked');
@@ -3542,8 +3597,33 @@
         await notifyParticipant(targetVillage.owner_id, titleDef);
         for (var di2 = 1; di2 < bResult.defenderResults.length; di2++) await notifyParticipant(bResult.defenderResults[di2].owner_id, titleDef);
 
-        if (victoria) showNotif('⚔️ ¡Victoria PvP contra ' + (targetVillage.name || 'aldea') + '!', 'ok');
-        else showNotif('💀 Derrota PvP. Revisa el informe.', 'err');
+        if (victoria) {
+          if (targetVillage.owner_id === GHOST_OWNER_ID) {
+            // Victoria contra aldea fantasma cuenta como NPC
+            if (activeVillage && activeVillage.state) {
+              activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
+              scheduleSave();
+              sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+            }
+            showNotif('⚔️ ¡Aldea fantasma derrotada!', 'ok');
+          } else {
+            if (activeVillage && activeVillage.state) {
+              activeVillage.state.battles_won_pvp = (activeVillage.state.battles_won_pvp || 0) + 1;
+              scheduleSave();
+              sbClient.from('profiles').update({ battles_won_pvp: activeVillage.state.battles_won_pvp }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+            }
+            showNotif('⚔️ ¡Victoria PvP contra ' + (targetVillage.name || 'aldea') + '!', 'ok');
+          }
+        } else {
+          if (targetVillage.owner_id !== GHOST_OWNER_ID) {
+            if (activeVillage && activeVillage.state) {
+              activeVillage.state.battles_lost_pvp = (activeVillage.state.battles_lost_pvp || 0) + 1;
+              scheduleSave();
+              sbClient.from('profiles').update({ battles_lost_pvp: activeVillage.state.battles_lost_pvp }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+            }
+          }
+          showNotif('💀 Derrota PvP. Revisa el informe.', 'err');
+        }
 
       } catch (e) {
         console.error('executeAttackPvP error:', e);
@@ -3873,7 +3953,7 @@
         // Try full select first (requires migration columns to exist)
         const { data, error } = await sbClient
           .from('profiles')
-          .select('id, username, experience, role, military_score, alliance_tag')
+          .select('id, username, experience, role, military_score, alliance_tag, battles_won_pvp, battles_lost_pvp, battles_won_npc')
           .eq('id', currentUser.id)
           .single();
         if (!error) return data;
@@ -3923,6 +4003,12 @@
       const profile = await getMyPlayerData();
       myName = profile?.username || myName;
       const myXP = profile?.experience || 0;
+      // Guardar stats de batallas en variable global para inyectar en state tras loadMyVillages
+      window._profileBattles = {
+        battles_won_pvp:  profile?.battles_won_pvp  || 0,
+        battles_lost_pvp: profile?.battles_lost_pvp || 0,
+        battles_won_npc:  profile?.battles_won_npc  || 0
+      };
 
       const elUser = document.getElementById('ovUser');
       if (elUser) elUser.textContent = myName;
@@ -3948,6 +4034,13 @@
 
         // Select first village by default
         activeVillage = myVillages[0]; // Object ref
+
+        // Inyectar contadores de batallas desde profiles en el state
+        if (window._profileBattles && activeVillage && activeVillage.state) {
+          activeVillage.state.battles_won_pvp  = window._profileBattles.battles_won_pvp;
+          activeVillage.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp;
+          activeVillage.state.battles_won_npc  = window._profileBattles.battles_won_npc;
+        }
 
         // Refresh UI
         populateVillageSel();
@@ -4643,6 +4736,7 @@
       }
       if (_el('ovBattlesWon')) _el('ovBattlesWon').textContent = (vs.battles_won_pvp || 0);
       if (_el('ovBattlesLost')) _el('ovBattlesLost').textContent = (vs.battles_lost_pvp || 0);
+      if (_el('ovBattlesNPC')) _el('ovBattlesNPC').textContent = (vs.battles_won_npc || 0);
       // Troop movement alerts in overview
       if (_el('ovAlertsBox')) {
         var alerts = _incomingAttacks || [];
@@ -9339,7 +9433,7 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.32</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.33</div>
 </body>
 
 </html>

@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.5 — Última actualización: v1.31
+> Versión del documento: 1.6 — Última actualización: v1.33
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -8,12 +8,12 @@
 
 | Capa | Tecnología | Rol |
 |---|---|---|
-| Frontend HTML | `epic-warriors-v1_XX.html` | Engine del juego + UI + estructura |
+| Frontend HTML | `index.html` | Engine del juego + UI + estructura |
 | Estilos | `epic-warriors.css` | Todos los estilos separados del HTML |
 | Base de datos | Supabase (PostgreSQL) | Estado persistente de jugadores |
 | Hosting | GitHub Pages | Distribución del cliente |
 | Assets estáticos | `game-data.js` | NPCs, datos inmutables (250 castillos) |
-| Simulador | `game-simulator.js` | Simulador de batalla (ventana emergente) |
+| Simulador | `game-simulator.js` | Simulador de batalla (iframe embebido) |
 | Admin | `game-admin.js` | Panel de administración |
 
 El juego es **100% serverless**. No hay servidor de aplicación. Toda la lógica reside en el cliente, y Supabase actúa como base de datos remota accesible directamente desde el navegador.
@@ -80,17 +80,55 @@ flushVillage()
 
 | Tabla | Contenido | Cuándo se escribe |
 |---|---|---|
-| `villages` | Estado completo de cada aldea | En cada `saveVillage` |
-| `profiles` | Datos del jugador (username, XP, score, last_seen) | En acciones que cambian XP/score y al login |
-| `buildings` | Niveles de edificios por aldea | Dentro de `saveVillage` |
-| `troops` | Tropas por aldea | Dentro de `saveVillage` |
-| `creatures` | Criaturas por aldea | Dentro de `saveVillage` |
+| `villages` | Colas (build, mission, summoning, training), nombre, coords | En cada `saveVillage` |
+| `profiles` | username, XP, military_score, last_seen, victorias PvP/NPC | Al login, al ganar/perder batallas, al cambiar XP |
+| `buildings` | Niveles de edificios por aldea (una fila por aldea) | Dentro de `saveVillage` |
+| `troops` | Tropas por aldea (una fila por aldea) | Dentro de `saveVillage` |
+| `creatures` | Criaturas por aldea (una fila por aldea) | Dentro de `saveVillage` |
+| `resources` | Recursos + aldeanos asignados por aldea | Dentro de `saveVillage` |
 | `guest_troops` | Tropas de refuerzo en aldeas ajenas | `processRecalls` al login |
 | `objectives` | Estado de objetivos NPC por jugador | Al completar batalla NPC |
 | `messages` | Informes de batalla, espionaje, sistema | Al completar misiones |
 
+### Columnas de `profiles` relevantes
+```
+battles_won_pvp   — victorias contra jugadores reales
+battles_lost_pvp  — derrotas contra jugadores reales
+battles_won_npc   — victorias contra castillos NPC + aldeas fantasma
+```
+Estas se persisten inmediatamente al ganar/perder (`.from('profiles').update()`), no esperan a `saveVillage`.
+
 ### RLS (Row Level Security)
 Los usuarios solo pueden leer/escribir sus propias filas. Para que el admin pueda acceder a datos de otros usuarios, todas las operaciones admin usan **funciones RPC con SECURITY DEFINER** que bypasean RLS tras verificar el UUID del admin.
+
+---
+
+## ALDEAS FANTASMA — ARQUITECTURA
+
+Las aldeas fantasma son aldeas NPC controladas por el admin para poblar el mapa sin jugadores reales.
+
+- **owner_id:** `'00000000-0000-0000-0000-000000000000'` (constante `GHOST_OWNER_ID`)
+- **Datos:** guardados en las 5 tablas separadas igual que cualquier aldea (NO tienen columna `state`)
+- **Trigger:** al crear en `villages`, el trigger `trigger_create_creatures` inserta automáticamente en `creatures` — nunca hacer INSERT manual en `creatures`
+
+### Al atacar o espiar una aldea fantasma (o cualquier aldea sin `state`)
+```javascript
+// executeAttackPvP / executeSpyMission detectan ts === null
+// y cargan desde tablas separadas:
+var bldR = await sbClient.from('buildings').select('*').eq('village_id', targetId).maybeSingle();
+var trpR = await sbClient.from('troops').select('*').eq('village_id', targetId).maybeSingle();
+var crtR = await sbClient.from('creatures').select('*').eq('village_id', targetId).maybeSingle();
+var resR = await sbClient.from('resources').select('*').eq('village_id', targetId).maybeSingle();
+```
+
+### Al guardar resultado de combate en aldea fantasma
+```javascript
+// NO usar villages.update({ state: ... })
+// Usar UPDATE directo en tablas:
+await sbClient.from('troops').update(trpUpdate).eq('village_id', targetId);
+await sbClient.from('creatures').update(crtUpdate).eq('village_id', targetId);
+await sbClient.from('resources').update(resUpdate).eq('village_id', targetId);
+```
 
 ---
 
@@ -108,13 +146,17 @@ Admin hace acción
 
 **Nunca usar `.from('tabla').update()` para modificar datos de otro usuario desde el cliente.**
 
+El archivo define su propia función `escapeAttr(s)` al inicio — no depende del HTML principal para esto.
+
 ---
 
 ## MÓDULO game-simulator.js — ARQUITECTURA
 
-`renderSimulator()` abre una ventana nueva con un HTML/CSS/JS autónomo generado dinámicamente via `doc.write()`. El simulador es completamente independiente — se pasan los datos de tropas como JSON al inicializarlo.
+`renderSimulator()` genera un iframe con un HTML/CSS/JS autónomo via `doc.write()`. El simulador es completamente independiente — se pasan los datos de tropas como JSON al inicializarlo.
 
-**Dependencias externas:** solo `TROOP_TYPES` y `CREATURE_TYPES` del HTML principal. Si se modifican los tipos de tropa, revisar que el simulador sigue siendo compatible.
+**Dependencias externas:** solo `TROOP_TYPES` y `CREATURE_TYPES` del HTML principal.
+
+**Trampa crítica:** el código del simulador vive dentro de `var simJS_template = \`...\`` — un template literal gigante. Los backticks y `${}` internos deben escaparse como `\`` y `\${`, si no el parser de JS cierra el string prematuramente y genera `Unexpected token '<'` en el navegador.
 
 ---
 
@@ -177,13 +219,18 @@ Escudo con HP propio (500 HP nv.1, +500 por nivel). El atacante destruye la mura
 - **Invocación**: requiere además `invocadorLevel >= tier`
 - Nunca filtrar visibilidad por `invocadorLevel`
 
+### Mensajes del sistema
+- `sendSystemReport(userId, title, body)` escribe via RPC `send_system_message`
+- Si el destinatario es el usuario activo y está en la página de mensajes, refresca automáticamente `renderThreads()` y `loadSystemReports()`
+- **NO hay mensaje de "tropas han regresado"** — solo notificación emergente
+
 ---
 
 ## VARIABLES GLOBALES — BLOQUE CANÓNICO
 
 Toda variable usada en `tick()` debe declararse en el bloque canónico (~línea 3340 del HTML). Variables sin declarar producen `ReferenceError` en el primer frame.
 
-Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`, `autoSaveTimer`
+Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`, `autoSaveTimer`, `GHOST_OWNER_ID`
 
 ---
 
@@ -197,10 +244,13 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 6. **Todos los archivos deben estar en el mismo directorio.**
 7. **Supabase es la única fuente de verdad persistente.**
 8. **Toda variable usada en `tick()` debe declararse en el bloque canónico.**
-9. **`escapeHtml()` para HTML renderizado, `escapeJs()` para atributos onclick.**
+9. **`escapeHtml()` para HTML renderizado, `escapeJs()` para atributos onclick, `escapeAttr()` definida en game-admin.js.**
 10. **Costes de edificios siempre con `phasedVal`.** Nunca `Math.pow(X, l)` directo.
 11. **Capacidad almacén siempre con `almacenCapForLevel`.**
 12. **Admin nunca escribe en tablas ajenas con `.from().update()`.** Siempre RPCs.
+13. **Al crear una aldea, NO insertar en `creatures` manualmente.** El trigger lo hace.
+14. **Aldeas fantasma y aldeas sin `state`: cargar datos desde tablas separadas antes de combate/espionaje.**
+15. **`battles_won_pvp/npc` se persisten en `profiles` inmediatamente**, no solo en `state`.
 
 ---
 
@@ -218,29 +268,39 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 | `phasedVal` | HTML | Del que dependen todos los costes |
 | `almacenCapForLevel` | HTML | Del que depende la capacidad del almacén |
 | `game-data.js` | game-data.js | Datos NPC inmutables |
+| `simJS_template` (en game-simulator.js) | game-simulator.js | Backticks internos deben estar escapados |
 
 ---
 
 ## HISTORIAL DE VERSIONES
 
+### v1.33 — Aldeas fantasma funcionales + persistencia de batallas
+- `executeAttackPvP` carga datos desde tablas separadas si `state === null`
+- `executeSpyMission` lee tropas/criaturas/muralla de cualquier aldea PvP o fantasma
+- Resultado de combate en aldea fantasma guarda en `troops`/`creatures`/`resources` directamente
+- Mensajes del sistema se refrescan automáticamente en la UI
+- Victorias NPC visibles en visión general (nueva caja)
+- `battles_won_pvp`, `battles_lost_pvp`, `battles_won_npc` persistidos en `profiles`
+- RPCs ghost en game-admin.js: `admin_ghost_create` (ignora INSERT creatures, usa UPDATE), `admin_ghost_list`, `admin_ghost_delete`
+- `trigger_create_creatures` en `villages` documentado
+
+### v1.32 — Correcciones críticas post-separación
+- game-simulator.js: `simJS_template` con backticks escapados (`\``)
+- game-admin.js: guard `_ghostCreating`, `escapeAttr` local
+- RPC `admin_ghost_create` reescrito
+
 ### v1.31 — Separación en módulos + limpieza
-- CSS extraído a `epic-warriors.css`
-- `renderSimulator()` extraído a `game-simulator.js`
-- Funciones admin extraídas a `game-admin.js`
-- 303 líneas CSS sin uso eliminadas
+- CSS, simulador y admin extraídos a archivos separados
 - HTML principal reducido de 13.628 a ~9.300 líneas (−32%)
 
 ### v1.30 — RPCs admin para bypass RLS
 - 5 funciones admin migradas a RPCs SECURITY DEFINER
-- Escaneo de reparación: de N queries en bucle a 1 sola llamada RPC
 
 ### v1.29 — Sistema de costes unificado
-- `phasedVal`: curva ×2/×1.30/×1.05 para todos los edificios
-- `almacenCapForLevel`: tres fases (nv.30 ≈ 195M)
+- `phasedVal` y `almacenCapForLevel`
 
 ### v0.98 — Modelo evento-reactivo
 - Eliminados todos los `setInterval` de red
-- `tick()` 100% local
 
 ### v0.95 — Correcciones de mecánicas
 - Muralla reimplementada como escudo HP
