@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.8 — Última actualización: v1.39
+> Versión del documento: 1.9 — Última actualización: v1.44
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -37,13 +37,15 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 
 | Capa | Tecnología | Rol |
 |---|---|---|
-| Frontend HTML | `index.html` | HTML + globals + config + initGame + tick + saveVillage |
+| Frontend HTML | `index.html` | HTML + config + initGame + tick + saveVillage |
+| Globals | `game-globals.js` | sbClient, SUPABASE_URL/KEY, globals compartidos — cargado primero |
 | Constantes | `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, cálculos puros |
 | Tropas UI | `game-troops.js` | UI de tropas/criaturas, entrenamiento, invocación |
 | Combate | `game-combat.js` | Motor de batalla, loot, informes, getTroopLevel |
 | Motor red | `game-engine.js` | calcRes, misiones, resolveMissions, executeXxx |
 | UI | `game-ui.js` | Mapa, edificios, modales, recursos UI, utils |
 | Social | `game-social.js` | Ranking, investigación, alianzas, mensajes |
+| Herrería | `game-smithy.js` | Mejoras de armas/armaduras por tropa, SMITHY_DATA |
 | Auth | `game-auth.js` | Login, registro, perfil, cuenta |
 | Estilos | `epic-warriors.css` | Todos los estilos separados del HTML |
 | Base de datos | Supabase (PostgreSQL) | Estado persistente de jugadores |
@@ -268,9 +270,9 @@ Escudo con HP propio (500 HP nv.1, +500 por nivel). El atacante destruye la mura
 
 ## VARIABLES GLOBALES — BLOQUE CANÓNICO
 
-Toda variable usada en `tick()` debe declararse en el bloque canónico (~línea 3340 del HTML). Variables sin declarar producen `ReferenceError` en el primer frame.
+Desde v1.44, todas las variables globales compartidas están en `game-globals.js` (cargado primero). El bloque canónico del HTML ya no las define — solo las usa.
 
-Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`, `autoSaveTimer`, `GHOST_OWNER_ID`
+Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, `SUPABASE_KEY`, `GAME_VERSION`, `MAP_SIZE`, `GHOST_OWNER_ID`, `currentUser`, `myVillages`, `activeVillage`, `activeVillageId`, `isFlushing`, `pendingFlush`, `_stateDirty`, `_missionWatchScheduled`, `uiTimer`, `autoSaveTimer`, `playerObjectives`
 
 ---
 
@@ -293,7 +295,8 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 15. **`battles_won_pvp/npc` se persisten en `profiles` inmediatamente**, no solo en `state`.
 
 16. **`game-constants.js` solo datos puros.** Ninguna función en él puede referenciar `document`, `sbClient` o cualquier global del juego a nivel de módulo.
-17. **El orden de carga de scripts en `<head>` es fijo.** Ver sección STACK TÉCNICO. No reordenar.
+17. **El orden de carga de scripts en `<head>` es fijo:** game-globals → game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-smithy → game-auth → game-simulator → game-admin → css. No reordenar.
+18. **`game-globals.js` debe cargarse PRIMERO.** Contiene `sbClient` y los globals del juego. Cualquier módulo que los use antes fallará con ReferenceError.
 
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
@@ -343,7 +346,7 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 - Nuevos archivos: game-constants.js, game-troops.js, game-combat.js, game-engine.js, game-ui.js, game-social.js, game-auth.js
 - Orden de carga obligatorio: game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-auth → game-simulator → game-admin → css
 - [Regla nueva] Nunca poner código que referencie DOM o sbClient a nivel de módulo en game-constants.js (debe ser datos puros)
-- [Regla nueva] El orden de carga de scripts en `<head>` es fijo y no se puede reordenar arbitrariamente
+- [Regla nueva] El orden de carga de scripts en `<head>` es fijo y no se puede reordenar arbitrariamente: **game-globals → game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-smithy → game-auth → game-simulator → game-admin → css**
 
 ### v1.38 — Bestiario completo: 60 criaturas en 30 tiers
 - `CREATURE_TYPES` expandido de 10 a 60 criaturas (2 por tier, tiers 1-30)
@@ -360,6 +363,16 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 - [Supabase] nuevas tablas/columnas/triggers/RPCs si aplica
 - [Regla nueva] restricción añadida
 - [Eliminado] comportamiento anterior que ya no existe
+
+---
+
+### v1.44 — Nuevos módulos documentados + correcciones
+- `game-globals.js` nuevo: sbClient, SUPABASE_URL/KEY, GAME_VERSION, MAP_SIZE, GHOST_OWNER_ID, y todos los globals (`currentUser`, `myVillages`, `activeVillage`, flags de guardado). Cargado PRIMERO en `<head>`.
+- `game-smithy.js` nuevo: Herrería completa (SMITHY_DATA, costes, upgrade, render). Niveles en `profiles.weapon_levels`/`armor_levels`. Máx nivel = nivel de Herrería (cap 15).
+- `divideIntoGroups` (game-combat.js) y `divGroups` (game-simulator.js) corregidas: algoritmo de cubos (bucket 1=10, bucket 2=100, bucket 3=1000…). Ejemplo: 50→[10,40]; 1001→[10,90,900,1].
+- [Supabase] RPC `add_experience(amount integer)` creado — faltaba, daba 404.
+- [Supabase] FK `thread_members.user_id` → `profiles(id)` (antes apuntaba a `auth.users`, rompía joins en PostgREST).
+- [Regla nueva] `game-globals.js` debe ser el PRIMER script cargado en `<head>`. Si se carga después de otro módulo que usa `sbClient`, habrá ReferenceError.
 
 ---
 

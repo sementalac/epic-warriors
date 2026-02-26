@@ -18,15 +18,17 @@ Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 
 | Archivo | Qué contiene | Cambia cuando... |
 |---|---|---|
-| `index.html` | HTML + globals + config + initGame + loadMyVillages + saveVillage + tick | Cambios en lógica central, login, save |
+| `index.html` | HTML + config + initGame + loadMyVillages + saveVillage + tick | Cambios en lógica central, login, save |
 | `epic-warriors.css` | Todos los estilos | Cambios visuales |
 | `game-data.js` | NPC_CASTLES — 250 castillos NPC | Casi nunca |
+| `game-globals.js` | sbClient, SUPABASE_URL/KEY, globals compartidos (currentUser, myVillages, flags de guardado) | Cambios en config de Supabase o globals |
 | `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, phasedVal, almacenCapForLevel, barracas helpers | Cambios en stats de tropas/edificios |
 | `game-troops.js` | UI de tropas/criaturas, entrenamiento, invocación | Cambios en la sección Tropas/Criaturas |
 | `game-combat.js` | Motor de combate, simulateBattle, loot, reports, getTroopLevel, summoning logic, defaults | Cambios en combate/botín/criaturas |
 | `game-engine.js` | calcRes, misiones, resolveMissions, executeAttack/Spy/Move/Reinforce/Transport, resolveQueue | Cambios en misiones/recursos/colas |
 | `game-ui.js` | Edificios UI, mapa, modales movimiento/transporte, recursos UI, buildingDetail, utils, refuerzos | Cambios en UI del juego |
 | `game-social.js` | Ranking, investigación, alianzas, mensajes, DMs, threads | Cambios en social/mensajes |
+| `game-smithy.js` | Herrería: SMITHY_DATA, upgradeSmithyItem, renderSmithy, smithyWeaponCost, smithyArmorCost | Cambios en mejoras de armas/armaduras |
 | `game-auth.js` | Auth (doLogin/doRegister/doLogout), perfil, cuenta, MOTD | Cambios en auth/perfil |
 | `game-simulator.js` | `renderSimulator()` — simulador de batalla | Cambios en el simulador |
 | `game-admin.js` | Todo el panel de administración | Cambios en funciones admin |
@@ -45,7 +47,9 @@ Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 | Cambiar misiones, recursos, resolveMissions | `game-engine.js` |
 | Cambiar mapa, modales, recursos UI, edificios UI | `game-ui.js` |
 | Cambiar alianzas, mensajes, ranking, investigación | `game-social.js` |
+| Cambiar mejoras de armas/armaduras (Herrería) | `game-smithy.js` |
 | Cambiar login, registro, perfil, cuenta | `game-auth.js` |
+| Cambiar globals, sbClient, config Supabase | `game-globals.js` |
 | Cambiar initGame, loadMyVillages, tick, saveVillage | `index.html` |
 | No está claro qué toca | Pregunta antes de pedir archivos |
 
@@ -116,25 +120,28 @@ Copiar esta plantilla y rellenarla al final de `📊 HISTORIAL DE CAMBIOS RELEVA
 
 ---
 
-## 📁 ESTRUCTURA DE ARCHIVOS (desde v1.39)
+## 📁 ESTRUCTURA DE ARCHIVOS (desde v1.44)
 
 | Archivo | Contenido | Líneas aprox |
 |---|---|---|
-| `index.html` | HTML + globals + config + initGame + loadMyVillages + saveVillage + tick | ~1.945 |
+| `index.html` | HTML + config + initGame + loadMyVillages + saveVillage + tick | ~1.945 |
 | `epic-warriors.css` | Todos los estilos | ~2.300 |
 | `game-data.js` | NPC_CASTLES — datos estáticos (250 castillos) | inmutable |
+| `game-globals.js` | sbClient, SUPABASE_URL/KEY, GAME_VERSION, MAP_SIZE, globals compartidos | ~50 |
 | `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, phasedVal, almacenCapForLevel | ~986 |
 | `game-troops.js` | UI tropas/criaturas, entrenamiento, invocación UI | ~622 |
-| `game-combat.js` | Motor de combate, army, loot, reports, getTroopLevel, summoning | ~812 |
+| `game-combat.js` | Motor de combate, army, loot, reports, getTroopLevel, summoning | ~860 |
 | `game-engine.js` | calcRes, misiones, resolveMissions, executeXxx, resolveQueue | ~1.108 |
 | `game-ui.js` | Edificios UI, mapa, modales, recursos UI, utils, refuerzos | ~2.835 |
 | `game-social.js` | Ranking, investigación, alianzas, mensajes | ~1.539 |
+| `game-smithy.js` | Herrería: SMITHY_DATA, mejoras arma/armadura por tropa, renderSmithy | ~290 |
 | `game-auth.js` | Auth, perfil, cuenta, MOTD, updateTransportUI | ~465 |
 | `game-simulator.js` | `renderSimulator()` — simulador de batalla en iframe | ~840 |
 | `game-admin.js` | Todo el panel admin (funciones + RPCs Supabase) | ~900 |
 
 **Regla de carga** (orden en `<head>`):
 ```html
+<script src="game-globals.js?v=1.XX"></script>
 <script src="game-data.js"></script>
 <script src="game-constants.js?v=1.XX"></script>
 <script src="game-troops.js?v=1.XX"></script>
@@ -142,6 +149,7 @@ Copiar esta plantilla y rellenarla al final de `📊 HISTORIAL DE CAMBIOS RELEVA
 <script src="game-engine.js?v=1.XX"></script>
 <script src="game-ui.js?v=1.XX"></script>
 <script src="game-social.js?v=1.XX"></script>
+<script src="game-smithy.js?v=1.XX"></script>
 <script src="game-auth.js?v=1.XX"></script>
 <script src="game-simulator.js?v=1.XX"></script>
 <script src="game-admin.js?v=1.XX"></script>
@@ -564,7 +572,14 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ---
 
-### v1.43 — Correcciones XP y stats de tropa
+### v1.44 — Nuevos módulos documentados + fix grupos de combate + fix Supabase
+- **[game-globals.js]:** nuevo archivo cargado en `<head>` antes que todo. Define `sbClient`, `SUPABASE_URL/KEY`, `GAME_VERSION`, `MAP_SIZE`, `GHOST_OWNER_ID` y todos los globals compartidos (`currentUser`, `myVillages`, `activeVillage`, flags de guardado).
+- **[game-smithy.js]:** nuevo archivo. Contiene `SMITHY_DATA`, `smithyWeaponCost`, `smithyArmorCost`, `upgradeSmithyItem`, `renderSmithy`. Gestiona las mejoras de armas/armaduras individuales por tropa. Niveles guardados en `profiles.weapon_levels` / `armor_levels`. Límite máx: nivel Herrería (máx 15).
+- **[game-combat.js]:** corregida `divideIntoGroups` — ahora usa sistema de cubos (bucket 1 hasta 10, bucket 2 hasta 100, bucket 3 hasta 1000…). Ejemplo: 50 → [10, 40]; 1001 → [10, 90, 900, 1].
+- **[game-simulator.js]:** corregida `divGroups` con el mismo algoritmo de cubos que `divideIntoGroups`.
+- **[Supabase]:** creado RPC `add_experience(amount integer)` — suma XP al jugador actual via `auth.uid()`. Era 404 antes de esta versión.
+- **[Supabase]:** FK `thread_members.user_id` redirigida de `auth.users` a `profiles(id)` para que el embedded select `profiles(username)` funcione en PostgREST.
+- **[Regla nueva]:** `game-globals.js` debe cargarse PRIMERO en `<head>`, antes de `game-data.js` y cualquier otro módulo.
 - **`weapon`/`armor` en `TROOP_TYPES` puestos a 0** en todas las tropas. Los stats de arma y armadura solo existen como mejoras de Herrería (`weapon_levels`, `armor_levels` en `_researchData`).
 - **Modal `showTroopStats`:** eliminadas filas "Arma base" / "Armadura base". Ahora muestra "Arma (Herrería): +N" y "Armadura (Herrería): +N" con el nivel real de `_researchData`.
 - **XP visible en tiempo real:** tras `add_experience` RPC (tanto NPC como PvP), se actualiza `_researchData.experience` en memoria y los elementos `ovExperience` y `researchXPDisplay` sin recargar página.
@@ -636,5 +651,5 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ---
 
-**Última actualización:** v1.39
-**Archivos del proyecto:** index.html · epic-warriors.css · game-data.js · game-constants.js · game-troops.js · game-combat.js · game-engine.js · game-ui.js · game-social.js · game-auth.js · game-simulator.js · game-admin.js
+**Última actualización:** v1.44
+**Archivos del proyecto:** index.html · epic-warriors.css · game-data.js · game-globals.js · game-constants.js · game-troops.js · game-combat.js · game-engine.js · game-ui.js · game-social.js · game-smithy.js · game-auth.js · game-simulator.js · game-admin.js
