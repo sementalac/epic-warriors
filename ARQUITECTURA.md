@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.7 — Última actualización: v1.38
+> Versión del documento: 1.8 — Última actualización: v1.39
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -37,7 +37,14 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 
 | Capa | Tecnología | Rol |
 |---|---|---|
-| Frontend HTML | `index.html` | Engine del juego + UI + estructura |
+| Frontend HTML | `index.html` | HTML + globals + config + initGame + tick + saveVillage |
+| Constantes | `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, cálculos puros |
+| Tropas UI | `game-troops.js` | UI de tropas/criaturas, entrenamiento, invocación |
+| Combate | `game-combat.js` | Motor de batalla, loot, informes, getTroopLevel |
+| Motor red | `game-engine.js` | calcRes, misiones, resolveMissions, executeXxx |
+| UI | `game-ui.js` | Mapa, edificios, modales, recursos UI, utils |
+| Social | `game-social.js` | Ranking, investigación, alianzas, mensajes |
+| Auth | `game-auth.js` | Login, registro, perfil, cuenta |
 | Estilos | `epic-warriors.css` | Todos los estilos separados del HTML |
 | Base de datos | Supabase (PostgreSQL) | Estado persistente de jugadores |
 | Hosting | GitHub Pages | Distribución del cliente |
@@ -248,9 +255,9 @@ Escudo con HP propio (500 HP nv.1, +500 por nivel). El atacante destruye la mura
 ### Criaturas
 - **60 criaturas** en **30 tiers** — 2 por tier, una de cada arquetipo
 - **Visibilidad**: `torreLevel >= tier` (Torre de Invocación, niveles 1-30)
-- **Invocación**: requiere `invocadorLevel >= tier`; `invocadorLevel` calculado en `getTroopLevel('invocador')` con 30 umbrales (1 inv → nv1, 5000 inv → nv30)
+- **Invocación**: requiere dos condiciones: (1) nivel individual del invocador en `_researchData.troop_levels['invocador'] >= tier` (subido en el Centro de Investigación, igual que cualquier tropa); (2) `invocadoresActuales >= summonersNeeded` invocadores presentes en la aldea. Ambas son necesarias (AND).
 - La Torre de Invocación **solo reduce tiempos** (-5%/nivel), **no desbloquea** criaturas
-- Nunca filtrar visibilidad por `invocadorLevel`
+- Nunca filtrar visibilidad por nivel de invocador.
 
 ### Mensajes del sistema
 - `sendSystemReport(userId, title, body)` escribe via RPC `send_system_message`
@@ -273,7 +280,7 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 2. **`calcRes()` nunca escribe en `state.resources`.** Solo lee.
 3. **`snapshotResources()` es la única función que congela recursos.**
 4. **La muralla es un escudo con HP, no un bonus a tropas.**
-5. **La visibilidad de criaturas depende de `torreLevel`, no de `invocadorLevel`.**
+5. **La visibilidad de criaturas depende de `torreLevel`, no del nivel del invocador.**
 6. **Todos los archivos deben estar en el mismo directorio.**
 7. **Supabase es la única fuente de verdad persistente.**
 8. **Toda variable usada en `tick()` debe declararse en el bloque canónico.**
@@ -284,6 +291,9 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 13. **Al crear una aldea, NO insertar en `creatures` manualmente.** El trigger lo hace.
 14. **Aldeas fantasma y aldeas sin `state`: cargar datos desde tablas separadas antes de combate/espionaje.**
 15. **`battles_won_pvp/npc` se persisten en `profiles` inmediatamente**, no solo en `state`.
+
+16. **`game-constants.js` solo datos puros.** Ninguna función en él puede referenciar `document`, `sbClient` o cualquier global del juego a nivel de módulo.
+17. **El orden de carga de scripts en `<head>` es fijo.** Ver sección STACK TÉCNICO. No reordenar.
 
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
@@ -313,11 +323,26 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
 
+### v1.40 — Invocadores y colas
+- **`getTroopLevel`** corregido: eliminado el sistema de umbrales ficticio basado en cantidad. Ahora lee `_researchData.troop_levels['invocador']` igual que cualquier otra tropa.
+- **`canSummon`**: requiere (1) `troop_levels['invocador'] >= cData.tier` y (2) `invocadoresActuales >= summonersNeeded`. Ambas AND.
+- **`resolveSummoningQueue`**: el sistema de PAUSA eliminado. Si los invocadores bajan (muertos/movidos) o el nivel de invocador es insuficiente → **cancelación automática sin devolución** de esencia. Se guarda `tierRequired` en cada entrada de cola al encolar.
+- **`cancelSummoningQueue()`** nueva en `game-combat.js`: cancela toda la cola manualmente con devolución completa de esencia.
+- **`cancelTrainingQueue()`** nueva en `game-troops.js`: cancela toda la cola de entrenamiento con devolución de recursos y aldeanos.
+- **UI**: botón 🗑 "Cancelar todo" añadido en `renderTrainingQueue` y `renderSummoningQueue`. Solo visible si hay cola.
+
+### v1.39 — Separación completa en módulos JS
+- index.html reducido de ~9.300 a ~1.945 líneas (−79%); ahora solo HTML + config + initGame + tick + save
+- Nuevos archivos: game-constants.js, game-troops.js, game-combat.js, game-engine.js, game-ui.js, game-social.js, game-auth.js
+- Orden de carga obligatorio: game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-auth → game-simulator → game-admin → css
+- [Regla nueva] Nunca poner código que referencie DOM o sbClient a nivel de módulo en game-constants.js (debe ser datos puros)
+- [Regla nueva] El orden de carga de scripts en `<head>` es fijo y no se puede reordenar arbitrariamente
+
 ### v1.38 — Bestiario completo: 60 criaturas en 30 tiers
 - `CREATURE_TYPES` expandido de 10 a 60 criaturas (2 por tier, tiers 1-30)
 - Criaturas existentes mantenidas con sus claves JS — jugadores no pierden nada; stats buffed en T5-T22
 - Bug corregido: Dragón y Arconte pasaban a tier 22 (antes tier 5 era inalcanzable)
-- `getTroopLevel('invocador')` rediseñado: 4 niveles → 30 niveles con umbrales (1 inv → nv1, 5000 inv → nv30)
+- `getTroopLevel('invocador')` rediseñado: eliminado sistema de umbrales por cantidad → ahora lee `_researchData.troop_levels['invocador']` (igual que cualquier tropa)
 - Torre de Invocación: rol cambiado de gate a reductor de tiempos exclusivamente
 - Tiempos de invocación reescalados: T1=5min, T5=50min, T10=5h, T15=24h, T22=72h, T30=144h (sin torre)
 - 50 nuevas criaturas añadidas (mitología clásica y medieval): Kobold, Sílfide, Troll, Banshee, Quimera, Cíclope, Basilisco, Valquiria, Minotauro, Salamandra, Manticora, Ondina, Centauro, Medusa, Wyvern, Nereida, Gigante, Harpía, Cerbero, Quetzal, Leviatán, Serafín, Titán, Lich, Pegaso, Naga, Yeti, Sátiro, Simurgh, Gorgona, Kraken, Ángel Caído, Ammit, Roc, Coloso, Sleipnir, Abismo, Nemea, Tifón, Equidna, Tarasca, Garuda, Jörmungandr, Valquiria Oscura, Primordio, Azrael, Ignis Rex, Fenrir, Moloch, Metatrón

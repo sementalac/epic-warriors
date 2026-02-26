@@ -470,7 +470,6 @@ function openAdminUsersPage() {
 // ALDEAS FANTASMA — Test PvP sin jugadores reales
 // owner_id = '00000000-0000-0000-0000-000000000000' (UUID centinela ghost)
 // ============================================================
-const GHOST_OWNER_ID = '00000000-0000-0000-0000-000000000000';
 
 function ghostToggleForm() {
   var f = document.getElementById('ghostForm');

@@ -18,9 +18,16 @@ Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 
 | Archivo | Qué contiene | Cambia cuando... |
 |---|---|---|
-| `index.html` | Engine + UI + globals + HTML | Cambios en lógica, UI, edificios, combate |
+| `index.html` | HTML + globals + config + initGame + loadMyVillages + saveVillage + tick | Cambios en lógica central, login, save |
 | `epic-warriors.css` | Todos los estilos | Cambios visuales |
 | `game-data.js` | NPC_CASTLES — 250 castillos NPC | Casi nunca |
+| `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, phasedVal, almacenCapForLevel, barracas helpers | Cambios en stats de tropas/edificios |
+| `game-troops.js` | UI de tropas/criaturas, entrenamiento, invocación | Cambios en la sección Tropas/Criaturas |
+| `game-combat.js` | Motor de combate, simulateBattle, loot, reports, getTroopLevel, summoning logic, defaults | Cambios en combate/botín/criaturas |
+| `game-engine.js` | calcRes, misiones, resolveMissions, executeAttack/Spy/Move/Reinforce/Transport, resolveQueue | Cambios en misiones/recursos/colas |
+| `game-ui.js` | Edificios UI, mapa, modales movimiento/transporte, recursos UI, buildingDetail, utils, refuerzos | Cambios en UI del juego |
+| `game-social.js` | Ranking, investigación, alianzas, mensajes, DMs, threads | Cambios en social/mensajes |
+| `game-auth.js` | Auth (doLogin/doRegister/doLogout), perfil, cuenta, MOTD | Cambios en auth/perfil |
 | `game-simulator.js` | `renderSimulator()` — simulador de batalla | Cambios en el simulador |
 | `game-admin.js` | Todo el panel de administración | Cambios en funciones admin |
 | `REFERENCIA_PARA_IA.md` | Este documento | Al introducir nueva arquitectura o reglas |
@@ -32,7 +39,14 @@ Todos en el mismo directorio — mover a otra carpeta rompe el juego:
 | Cambiar estilos, colores, layout | `epic-warriors.css` |
 | Cambiar algo del panel admin | `game-admin.js` |
 | Cambiar el simulador de batalla | `game-simulator.js` |
-| Cambiar edificios, costes, lógica de juego, UI | `index.html` |
+| Cambiar stats de tropas/criaturas/edificios | `game-constants.js` |
+| Cambiar UI tropas, entrenamiento, invocación | `game-troops.js` |
+| Cambiar combate, loot, informes de batalla | `game-combat.js` |
+| Cambiar misiones, recursos, resolveMissions | `game-engine.js` |
+| Cambiar mapa, modales, recursos UI, edificios UI | `game-ui.js` |
+| Cambiar alianzas, mensajes, ranking, investigación | `game-social.js` |
+| Cambiar login, registro, perfil, cuenta | `game-auth.js` |
+| Cambiar initGame, loadMyVillages, tick, saveVillage | `index.html` |
 | No está claro qué toca | Pregunta antes de pedir archivos |
 
 ### Regla de versionado — SIEMPRE al entregar el HTML
@@ -102,19 +116,33 @@ Copiar esta plantilla y rellenarla al final de `📊 HISTORIAL DE CAMBIOS RELEVA
 
 ---
 
-## 📁 ESTRUCTURA DE ARCHIVOS (desde v1.31)
+## 📁 ESTRUCTURA DE ARCHIVOS (desde v1.39)
 
 | Archivo | Contenido | Líneas aprox |
 |---|---|---|
-| `index.html` | HTML + JS principal (engine, UI, globals) | ~9.500 |
+| `index.html` | HTML + globals + config + initGame + loadMyVillages + saveVillage + tick | ~1.945 |
 | `epic-warriors.css` | Todos los estilos | ~2.300 |
 | `game-data.js` | NPC_CASTLES — datos estáticos (250 castillos) | inmutable |
+| `game-constants.js` | TROOP_TYPES, CREATURE_TYPES, BUILDINGS, phasedVal, almacenCapForLevel | ~986 |
+| `game-troops.js` | UI tropas/criaturas, entrenamiento, invocación UI | ~622 |
+| `game-combat.js` | Motor de combate, army, loot, reports, getTroopLevel, summoning | ~812 |
+| `game-engine.js` | calcRes, misiones, resolveMissions, executeXxx, resolveQueue | ~1.108 |
+| `game-ui.js` | Edificios UI, mapa, modales, recursos UI, utils, refuerzos | ~2.835 |
+| `game-social.js` | Ranking, investigación, alianzas, mensajes | ~1.539 |
+| `game-auth.js` | Auth, perfil, cuenta, MOTD, updateTransportUI | ~465 |
 | `game-simulator.js` | `renderSimulator()` — simulador de batalla en iframe | ~840 |
 | `game-admin.js` | Todo el panel admin (funciones + RPCs Supabase) | ~900 |
 
 **Regla de carga** (orden en `<head>`):
 ```html
 <script src="game-data.js"></script>
+<script src="game-constants.js?v=1.XX"></script>
+<script src="game-troops.js?v=1.XX"></script>
+<script src="game-combat.js?v=1.XX"></script>
+<script src="game-engine.js?v=1.XX"></script>
+<script src="game-ui.js?v=1.XX"></script>
+<script src="game-social.js?v=1.XX"></script>
+<script src="game-auth.js?v=1.XX"></script>
 <script src="game-simulator.js?v=1.XX"></script>
 <script src="game-admin.js?v=1.XX"></script>
 <link rel="stylesheet" href="epic-warriors.css?v=1.XX">
@@ -129,6 +157,13 @@ Copiar esta plantilla y rellenarla al final de `📊 HISTORIAL DE CAMBIOS RELEVA
 El número de versión vive en **2 sitios del HTML principal**. Los módulos externos NO llevan versión en el nombre — la versión se controla desde el HTML con query string en los imports:
 
 ```html
+<script src="game-constants.js?v=1.XX"></script>
+<script src="game-troops.js?v=1.XX"></script>
+<script src="game-combat.js?v=1.XX"></script>
+<script src="game-engine.js?v=1.XX"></script>
+<script src="game-ui.js?v=1.XX"></script>
+<script src="game-social.js?v=1.XX"></script>
+<script src="game-auth.js?v=1.XX"></script>
 <script src="game-simulator.js?v=1.XX"></script>
 <script src="game-admin.js?v=1.XX"></script>
 <link rel="stylesheet" href="epic-warriors.css?v=1.XX">
@@ -145,27 +180,29 @@ Los 2 sitios en el HTML:
 ## 🔍 ESTRUCTURA DEL HTML — MAPEO RÁPIDO
 
 ```
-Línea ~7:       <title>
-Línea ~16:      imports JS + CSS con query strings
-Línea ~191:     page-overview (Visión General)
-Línea ~3305:    <script> — inicio JS principal
-Línea ~3310:    CONFIG (Supabase keys)
-Línea ~3340:    Bloque canónico de variables globales
-Línea ~3379:    const TROOP_TYPES
-Línea ~3463:    const CREATURE_TYPES
-Línea ~3587:    const BUILDINGS
-Línea ~3783:    function phasedVal + almacenCapForLevel + getCapacity
-Línea ~3800:    getBarracksCapacity, getBarracksUsed
-Línea ~3900:    tick(), calcRes(), snapshotResources()
-Línea ~4200:    saveVillage(), flushVillage(), scheduleSave()
-Línea ~4500:    resolveMissions(), resolveQueue(), etc.
-Línea ~6500:    loadMyVillages(), loadWorld(), login/logout
-Línea ~7400:    renderBuildings(), renderMap(), renderRanking()
-Línea ~8500:    Modales de ataque, movimiento, transporte
-Línea ~9300:    Fin del JS principal — </script>
-Línea ~9310:    HTML visible (header, sidebar, pages)
-Línea ~9475:    Admin overlay HTML (inline, no en game-admin.js)
-Línea ~9610:    motdModal, versionFooter
+index.html (v1.39 — solo HTML + globals + core):
+  Línea ~9:       <title>
+  Línea ~14:      imports JS + CSS con query strings (10 archivos)
+  Línea ~191:     page-overview (Visión General)
+  Línea ~734:     <script> — inicio JS inline
+  Línea ~735:     CONFIG (Supabase keys) + sbClient + globals
+  Línea ~800:     initGame()
+  Línea ~938:     loadMyVillages(), loadAllVillages()
+  Línea ~1090:    saveVillage(), flushVillage(), scheduleSave()
+  Línea ~1180:    tick() + uiAnim
+  Línea ~1490:    checkIncomingAttacks(), toggleAlertsPanel()
+  Línea ~1537:    </script>
+  Línea ~1548:    HTML modales (bldModal, profileOverlay, adminOverlay, motdModal)
+  Línea ~1942:    versionFooter
+
+Módulos externos (ver cada archivo para mapeo de funciones):
+  game-constants.js  — TROOP_TYPES, CREATURE_TYPES, BUILDINGS, phasedVal
+  game-troops.js     — renderTroops, renderCreatures, startRecruitment, renderTrainOptions
+  game-combat.js     — simulateBattle, executeTurn, generateBattleReport, getTroopLevel
+  game-engine.js     — calcRes, resolveMissions, executeAttackPvP, executeMove, resolveQueue
+  game-ui.js         — renderBuildings, renderMap, renderRecursos, openBuildingDetail
+  game-social.js     — renderRanking, renderResearch, renderAlliances, renderThreads
+  game-auth.js       — doLogin, doRegister, doLogout, openProfile, doChangeUsername
 ```
 
 > ⚠️ Estas líneas son aproximadas. Si añades o eliminas bloques grandes, actualiza este mapa.
@@ -175,12 +212,76 @@ Línea ~9610:    motdModal, versionFooter
 ## 📦 QUÉ TOCA CADA ARCHIVO
 
 ### `index.html`
-Todo lo que no está en los módulos. Contiene:
-- Globals, config, TROOP_TYPES, CREATURE_TYPES, BUILDINGS
-- Motor del juego: tick, calcRes, saveVillage, resolveMissions, simulateBattle
-- UI: renderBuildings, renderMap, renderRanking, renderRecursos, modales
-- Login/logout, loadMyVillages, loadWorld
-- HTML visible: sidebar, pages, header
+Solo el núcleo mínimo. Contiene:
+- HTML completo (auth screen, topbar, sidebar, todas las pages, modales)
+- Config Supabase, sbClient, bloque canónico de globals
+- `initGame`, `loadMyVillages`, `loadAllVillages`, `populateVillageSel`, `switchVillage`, `createFirstVillage`
+- `saveVillage`, `flushVillage`, `scheduleSave`, `setSave`
+- `tick`, `renderAnimatedUi`, `ensureUiAnim`, `_el`, `_elCache`
+- `checkIncomingAttacks`, `toggleAlertsPanel`, `updateLastSeen`, `updateOnlineCount`, `updateAlertsButton`
+
+### `game-constants.js`
+Solo datos puros y cálculos sin DOM/Supabase:
+- `TROOP_TYPES`, `CREATURE_TYPES`, `getTroopStatsWithLevel`, `getTorreRange`
+- `phasedVal`, `BUILDINGS`
+- `getCuartelesReduction`, `getBarracksCapacity`, `getBarracksUsed`
+- `getAldeanosProd`, `getAldeanosIntervalMs`, `calcAndApplyAldeanos`
+- `almacenCapForLevel`, `getCapacity`, `getStoredTotal`
+
+### `game-troops.js`
+UI de la sección Tropas y Criaturas:
+- `renderTroops`, `renderCreatures`, `renderSummoningQueue`, `renderCreaturesList`
+- `showCreatureStats`, `renderSummonOptions`, `showBarracasModal`, `showTroopStats`
+- `startRecruitmentFromInput`, `startRecruitment`, `cancelTrainingQueue`
+- `renderTrainOptions`, `resolveTrainingQueue`, `renderTrainingQueue`
+
+### `game-combat.js`
+Motor de combate y lógica de misiones:
+- `divideIntoGroups`, `createArmy`, `calculateRecovery`, `calculateLootCapacity`, `calculateLoot`
+- `generateBattleReport`, `generateTroopTable`, `toggleBattleLog`
+- `executeTurn`, `simulateBattle`, `simulateBattlePvP`, `generateBattlePvPReport`
+- `isInTorreRange`, `defaultTroops`, `defaultCreatures`, `consumeAldeanos`, `defaultAssignments`
+- `MISSION_FACTOR`, `getTroopLevel`, `getCreatureLevel`, `canSummon`, `startSummoning`, `startSummoningFromInput`, `cancelSummoningQueue`
+- `resolveSummoningQueue`, `defaultState`
+
+### `game-engine.js`
+Motor de recursos y misiones en red:
+- `getBaseProd`, `getBonusPerWorker`, `getProd`, `calcRes`
+- `cancelMission`, `startMission`, `sendSystemReport`
+- `resolveMissions`, `executeSpyMission`, `executeAttackMission`, `executeAttackPvP`
+- `_insertActiveMission`, `_clearActiveMission`, `cancelAlliedMission`, `_returnTroopsHome`
+- `executeMove`, `executeReinforce`, `executeTransport`
+- `resolveQueue`
+
+### `game-ui.js`
+Todo el UI renderizado del juego:
+- `startBuild`, `canAfford`, `renderBuildings`, `showMissionTroops`, `renderQueue`
+- `panMap`, `renderMinimap`, `renderMap`, `selectNPC`, `selectCell`
+- `openMissionModal`, `calcMissionETA`, `executeMissionClick`
+- `openMoveModal`, `moveStep2`, `executeMoveClick`
+- `openTransportModal`, `transportStep2`, `executeTransportClick`
+- `renderReinforcementsPanel`, `processRecalls`, `recallReinforcement`
+- `showPage`, `syncResourcesFromDB`, `updateGranjaPanel`, `renderRecursos`
+- `snapshotResources`, `assignWorker`, `unassignWorker`, `applyAllWorkers`
+- `startRename`, `confirmRename`, `openBuildingDetail`, `closeBldOverlay`
+- `showNotif`, `fmt`, `fmtTime`, `escapeHtml`, `escapeJs`, `formatNumber`, `createStars`
+
+### `game-social.js`
+Sistema social completo:
+- `renderRanking`, `forceRefreshRanking`, `rankingCache`
+- `xpCostForLevel`, `loadResearchData`, `renderResearch`, `upgradeTroopLevel`
+- `refreshMyAlliance`, `createAlliance`, `leaveAlliance`, `dissolveAlliance`, `renderAlliances`
+- `renderThreads`, `openThread`, `openSystemThread`, `sendChatMsg`, `startDM`, `openAllianceChat`
+- `loadSystemReports`, `openReport`, `deleteReport`, `markAllSystemAsRead`, `updateUnreadCount`
+- `subscribeToThread`
+
+### `game-auth.js`
+Autenticación y gestión de cuenta:
+- `normUsername`, `isUsernameShapeValid`, `setUserMsg`, `fetchBannedTerms`, `isUsernameBanned`, `isUsernameAvailable`
+- `switchTab`, `setMsg`, `onUserInput`, `doLogin`, `doRegister`, `ensureProfile`, `getMyPlayerData`, `doLogout`
+- `loadUserRole`, `saveMOTD`, `clearMOTD`
+- `openProfile`, `closeProfile`, `doChangeUsername`, `doDeleteVillage`, `doDeleteAccount`
+- `updateTransportUI`, `validateTransportRes`
 
 ### `epic-warriors.css`
 Solo estilos. No tiene lógica. Si añades un elemento nuevo con clase nueva, añade su estilo aquí.
@@ -373,21 +474,28 @@ Ver sección **📋 PROTOCOLO DE ACTUALIZACIÓN DE DOCUMENTOS**.
 
 | Qué buscar | Dónde | Cómo buscar |
 |---|---|---|
-| Config Supabase | HTML ~3310 | `grep -n "SUPABASE_URL\|supabaseUrl"` |
-| Globals del juego | HTML ~3340 | `grep -n "^    let "` |
-| TROOP_TYPES | HTML ~3379 | `grep -n "const TROOP_TYPES"` |
-| BUILDINGS | HTML ~3587 | `grep -n "const BUILDINGS"` |
-| phasedVal | HTML ~3783 | `grep -n "function phasedVal"` |
-| almacenCapForLevel | HTML ~3783 | `grep -n "function almacenCapForLevel"` |
-| tick() | HTML ~3900 | `grep -n "function tick()"` |
-| saveVillage | HTML ~4200 | `grep -n "function saveVillage"` |
-| simulateBattle | HTML ~4800 | `grep -n "function simulateBattle"` |
-| executeAttackPvP | HTML ~3350 | `grep -n "function executeAttackPvP"` |
-| executeSpyMission | HTML ~3199 | `grep -n "function executeSpyMission"` |
-| getMyPlayerData | HTML ~3938 | `grep -n "function getMyPlayerData"` |
+| Config Supabase | index.html ~735 | `grep -n "SUPABASE_URL"` |
+| Globals del juego | index.html ~740 | `grep -n "^    let "` |
+| TROOP_TYPES | game-constants.js | `grep -n "const TROOP_TYPES"` |
+| CREATURE_TYPES | game-constants.js | `grep -n "const CREATURE_TYPES"` |
+| BUILDINGS | game-constants.js | `grep -n "const BUILDINGS"` |
+| phasedVal | game-constants.js | `grep -n "function phasedVal"` |
+| almacenCapForLevel | game-constants.js | `grep -n "function almacenCapForLevel"` |
+| tick() | index.html | `grep -n "function tick()"` |
+| saveVillage | index.html | `grep -n "function saveVillage"` |
+| calcRes | game-engine.js | `grep -n "function calcRes"` |
+| simulateBattle | game-combat.js | `grep -n "function simulateBattle"` |
+| executeAttackPvP | game-engine.js | `grep -n "function executeAttackPvP"` |
+| executeSpyMission | game-engine.js | `grep -n "function executeSpyMission"` |
+| getMyPlayerData | game-auth.js | `grep -n "function getMyPlayerData"` |
 | renderSimulator | game-simulator.js | línea 4 |
 | Panel admin JS | game-admin.js | línea 8 |
 | Estilos globales | epic-warriors.css | `:root {` |
+| snapshotResources | game-ui.js | `grep -n "function snapshotResources"` |
+| renderMap | game-ui.js | `grep -n "function renderMap"` |
+| renderAlliances | game-social.js | `grep -n "function renderAlliances"` |
+| renderRanking | game-social.js | `grep -n "function renderRanking"` |
+| doLogin | game-auth.js | `grep -n "function doLogin"` |
 
 ---
 
@@ -453,10 +561,19 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ---
 
+### v1.39 — Separación completa en módulos JS
+- **[Arquitectura]:** index.html reducido de ~9.300 a ~1.945 líneas (−79%)
+- **[Nuevos archivos]:** game-constants.js (~986L), game-troops.js (~622L), game-combat.js (~812L), game-engine.js (~1.108L), game-ui.js (~2.835L), game-social.js (~1.539L), game-auth.js (~465L)
+- **[index.html]:** ahora solo contiene HTML + config/globals + initGame + loadMyVillages + saveVillage + tick + checkIncomingAttacks
+- **[Regla nueva]:** los imports en `<head>` deben seguir el orden: game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-auth → game-simulator → game-admin → epic-warriors.css
+- **[Nota]:** updateTransportUI y validateTransportRes quedaron en game-auth.js (al final del script original); funcionalmente correcto aunque semánticamente mejor serían en game-ui.js
+
+---
+
 ### v1.38 — Bestiario completo: 60 criaturas en 30 tiers
 - **CREATURE_TYPES:** 10 → 60 criaturas; 2 por tier; tiers 1-30; claves JS existentes conservadas
 - **Bug corregido:** Dragón/Arconte eran tier 5 inalcanzable → ahora tier 22
-- **getTroopLevel:** 4 niveles → 30 umbrales (1 invocador=nv1, 5000=nv30)
+- **getTroopLevel:** eliminado sistema de umbrales por cantidad → ahora lee `_researchData.troop_levels['invocador']` (igual que cualquier tropa)
 - **Torre de Invocación:** ya no bloquea criaturas, solo reduce tiempos (-5%/nivel)
 - **Supabase:** tabla `creatures` necesita 50 columnas nuevas con DEFAULT 0 (ver SQL en propuesta_criaturas.html)
 
@@ -511,5 +628,5 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 
 ---
 
-**Última actualización:** v1.38
-**Archivos del proyecto:** index.html · epic-warriors.css · game-data.js · game-simulator.js · game-admin.js
+**Última actualización:** v1.39
+**Archivos del proyecto:** index.html · epic-warriors.css · game-data.js · game-constants.js · game-troops.js · game-combat.js · game-engine.js · game-ui.js · game-social.js · game-auth.js · game-simulator.js · game-admin.js
