@@ -323,6 +323,13 @@ Variables críticas: `activeVillageId`, `_stateDirty`, `_missionWatchScheduled`,
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
 
+### v1.43 — Correcciones XP y stats de tropa
+- `weapon` y `armor` en `TROOP_TYPES` = 0 para todas las tropas. Son stats de Herrería, no base.
+- Modal `showTroopStats`: muestra nivel de Herrería real, no base hardcodeado.
+- `add_experience` RPC: ahora actualiza `_researchData.experience`, `ovExperience` y `researchXPDisplay` inmediatamente.
+- [REGLA] `weapon`/`armor` en `TROOP_TYPES` siempre 0. Solo se suman en combate los niveles de Herrería.
+- [REGLA] Edificios nunca bajan de nivel.
+
 ### v1.40 — Invocadores y colas
 - **`getTroopLevel`** corregido: eliminado el sistema de umbrales ficticio basado en cantidad. Ahora lee `_researchData.troop_levels['invocador']` igual que cualquier otra tropa.
 - **`canSummon`**: requiere (1) `troop_levels['invocador'] >= cData.tier` y (2) `invocadoresActuales >= summonersNeeded`. Ambas AND.

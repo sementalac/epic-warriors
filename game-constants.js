@@ -25,7 +25,7 @@ const TROOP_TYPES = {
   soldado: {
     name: 'Guerrero', icon: '⚔️', type: 'normal',
     attackChance: 12, hp: 25, attacksPerTurn: 1, damage: 8,
-    defense: 14, armor: 2, weapon: 2, dexterity: 8,
+    defense: 14, armor: 0, weapon: 0, dexterity: 8,
     speed: 2, capacity: 20,
     cost: { madera: 0, hierro: 10, prov: 2 },
     time: 180, barracasSlots: 1,
@@ -34,7 +34,7 @@ const TROOP_TYPES = {
   mago: {
     name: 'Mago', icon: '🧙', type: 'normal',
     attackChance: 15, hp: 15, attacksPerTurn: 2, damage: 12,
-    defense: 10, armor: 0, weapon: 4, dexterity: 12,
+    defense: 10, armor: 0, weapon: 0, dexterity: 12,
     speed: 1, capacity: 5,
     cost: { madera: 0, hierro: 0, prov: 3, esencia: 20 },
     time: 300, barracasSlots: 1,
@@ -43,7 +43,7 @@ const TROOP_TYPES = {
   druida: {
     name: 'Druida', icon: '🌿', type: 'normal',
     attackChance: 14, hp: 20, attacksPerTurn: 1, damage: 6,
-    defense: 12, armor: 1, weapon: 1, dexterity: 10,
+    defense: 12, armor: 0, weapon: 0, dexterity: 10,
     speed: 1, capacity: 15,
     cost: { madera: 5, hierro: 0, prov: 2, esencia: 10 },
     time: 240, barracasSlots: 1,
@@ -52,7 +52,7 @@ const TROOP_TYPES = {
   explorador: {
     name: 'Explorador', icon: '🏹', type: 'normal',
     attackChance: 16, hp: 12, attacksPerTurn: 2, damage: 5,
-    defense: 11, armor: 0, weapon: 1, dexterity: 15,
+    defense: 11, armor: 0, weapon: 0, dexterity: 15,
     speed: 4, capacity: 8,
     cost: { madera: 5, hierro: 5, prov: 1 },
     time: 120, barracasSlots: 1,
@@ -61,7 +61,7 @@ const TROOP_TYPES = {
   asesino: {
     name: 'Asesino', icon: '🎯', type: 'normal',
     attackChance: 18, hp: 8, attacksPerTurn: 1, damage: 14,
-    defense: 9, armor: 0, weapon: 6, dexterity: 20,
+    defense: 9, armor: 0, weapon: 0, dexterity: 20,
     speed: 3, capacity: 5,
     cost: { madera: 10, hierro: 30, esencia: 15, prov: 3 },
     time: 400, barracasSlots: 1,
@@ -70,7 +70,7 @@ const TROOP_TYPES = {
   paladin: {
     name: 'Paladín', icon: '🛡️', type: 'normal',
     attackChance: 10, hp: 35, attacksPerTurn: 1, damage: 5,
-    defense: 18, armor: 8, weapon: 2, dexterity: 6,
+    defense: 18, armor: 0, weapon: 0, dexterity: 6,
     speed: 1, capacity: 10,
     cost: { madera: 0, piedra: 20, hierro: 40, prov: 4 },
     time: 450, barracasSlots: 1,
@@ -79,7 +79,7 @@ const TROOP_TYPES = {
   chaman: {
     name: 'Chamán', icon: '🔮', type: 'normal',
     attackChance: 14, hp: 18, attacksPerTurn: 1, damage: 10,
-    defense: 11, armor: 1, weapon: 3, dexterity: 11,
+    defense: 11, armor: 0, weapon: 0, dexterity: 11,
     speed: 1, capacity: 8,
     cost: { madera: 15, piedra: 10, esencia: 25, prov: 3 },
     time: 350, barracasSlots: 1,
@@ -849,7 +849,7 @@ const BUILDINGS = [
   // ── REFUGIO ──────────────────────────────────────────────
   {
     id: 'refugio', name: 'Refugio', icon: '🕵️',
-    desc: 'Esconde tropas propias (no criaturas, no aliados). Las tropas dentro son invisibles a espionajes y no participan en defensa. Capacidad = 10% de la capacidad de Barracas por nivel. Las tropas dentro siguen ocupando plazas de barracas. Coste nv.10: ~358k piedra / 143k hierro. Coste nv.30: ~70M piedra / 28M hierro.',
+    desc: 'Esconde tropas propias (no criaturas, no aliados). Las tropas dentro son invisibles a espionajes y no participan en defensa. Capacidad = 10% de la capacidad de Barracas al mismo nivel (nv.1=5, nv.5=19, nv.10=103, nv.20=2.988). Las tropas dentro siguen ocupando plazas de barracas. Coste nv.10: ~358k piedra / 143k hierro. Coste nv.30: ~70M piedra / 28M hierro.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { piedra: 0, hierro: 0 };
@@ -945,10 +945,17 @@ function getBarracksUsed(vs) {
 // REFUGIO — capacidad y uso
 // Capacidad = 10% de barracas (en slots), mínimo 0 si no construido
 // ============================================================
+// ============================================================
+// REFUGIO — capacidad y uso
+// Capacidad = 10% de la capacidad de barracas AL MISMO NIVEL que el refugio.
+// Ej: refugio nv.10 → barracas nv.10 = 1.033 → capacidad refugio = 103
+// ============================================================
 function getRefugioCapacity(blds) {
   var lvl = (blds && blds['refugio'] && blds['refugio'].level) || 0;
   if (lvl === 0) return 0;
-  return Math.max(1, Math.floor(getBarracksCapacity(blds) * 0.10 * lvl));
+  // Capacidad de barracas al nivel del refugio (fórmula independiente del nivel actual de barracas)
+  var barrAtLevel = Math.round(50 * Math.pow(1.40, lvl - 1));
+  return Math.max(1, Math.floor(barrAtLevel * 0.10));
 }
 
 function getRefugioUsed(vs) {

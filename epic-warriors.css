@@ -588,28 +588,22 @@
     }
 
     .msg-badge {
-      background: var(--danger);
-      color: white;
-      font-size: .6rem;
+      background: var(--gold, #f4c430);
+      color: #1a1a1a;
+      font-size: .82rem;
       font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 10px;
-      min-width: 18px;
+      font-family: VT323, monospace;
+      padding: 1px 8px;
+      border-radius: 4px;
+      min-width: 22px;
       text-align: center;
-      box-shadow: 0 0 8px rgba(224, 64, 64, .6);
-      animation: pulse-badge 2s ease-in-out infinite;
+      box-shadow: 0 0 10px rgba(244, 196, 48, .7);
+      animation: pulse-badge 1.4s ease-in-out infinite;
     }
 
     @keyframes pulse-badge {
-
-      0%,
-      100% {
-        transform: scale(1);
-      }
-
-      50% {
-        transform: scale(1.1);
-      }
+      0%, 100% { transform: scale(1);   box-shadow: 0 0 8px  rgba(244,196,48,.6); }
+      50%       { transform: scale(1.15); box-shadow: 0 0 16px rgba(244,196,48,.95); }
     }
 
     .content {

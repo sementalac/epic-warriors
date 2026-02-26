@@ -531,6 +531,9 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 - Multiplicadores individuales por edificio (×1.5, ×1.8, etc.) — eliminados en v1.29
 - Admin escribir directo con `.from().update()` en tablas de otros usuarios — usar RPCs
 - Hacer INSERT en `creatures` manualmente al crear aldeas — el trigger lo hace solo
+- **`weapon` y `armor` en `TROOP_TYPES` deben ser siempre 0** — son stats de Herrería, no bases de tropa. Solo se añaden en combate sumando `weapon_levels[key]` y `armor_levels[key]` de `_researchData`.
+- **Edificios no pueden bajar de nivel** — no existe downgrade. No preguntar ni implementar.
+- **Tras llamar `add_experience` RPC**, actualizar SIEMPRE `_researchData.experience` en memoria y los elementos DOM `ovExperience` y `researchXPDisplay`. El RPC solo escribe en Supabase, no actualiza la UI.
 
 ### 🟡 CUIDADO
 - `resolveMissions()` — Lógica de timestamps, errores corrompen estado
@@ -560,6 +563,11 @@ grep -n "function phasedVal\|function almacenCapForLevel\|function tick\|functio
 - **[Eliminado]:** qué comportamiento anterior ya no existe
 
 ---
+
+### v1.43 — Correcciones XP y stats de tropa
+- **`weapon`/`armor` en `TROOP_TYPES` puestos a 0** en todas las tropas. Los stats de arma y armadura solo existen como mejoras de Herrería (`weapon_levels`, `armor_levels` en `_researchData`).
+- **Modal `showTroopStats`:** eliminadas filas "Arma base" / "Armadura base". Ahora muestra "Arma (Herrería): +N" y "Armadura (Herrería): +N" con el nivel real de `_researchData`.
+- **XP visible en tiempo real:** tras `add_experience` RPC (tanto NPC como PvP), se actualiza `_researchData.experience` en memoria y los elementos `ovExperience` y `researchXPDisplay` sin recargar página.
 
 ### v1.39 — Separación completa en módulos JS
 - **[Arquitectura]:** index.html reducido de ~9.300 a ~1.945 líneas (−79%)

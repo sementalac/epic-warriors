@@ -8,22 +8,21 @@
 // ============================================================
 
 function divideIntoGroups(total) {
+  // Grupos por cubos: bucket1 hasta 10 (cap 10), bucket2 hasta 100 (cap 90),
+  // bucket3 hasta 1000 (cap 900), etc.
+  // Ej: 50 → [10, 40] | 1001 → [10, 90, 900, 1]
   if (total <= 0) return [];
-  let groups = [];
+  const groups = [];
   let remaining = total;
-  let power = Math.floor(Math.log10(total));
+  let bucketMax = 10;
+  let prevMax = 0;
   while (remaining > 0) {
-    let size = Math.pow(10, power);
-    if (remaining >= size) {
-      groups.push(size);
-      remaining -= size;
-    } else {
-      power--;
-      if (power < 0) {
-        if (remaining > 0) groups.push(remaining);
-        break;
-      }
-    }
+    const capacity = bucketMax - prevMax;
+    const fill = Math.min(remaining, capacity);
+    groups.push(fill);
+    remaining -= fill;
+    prevMax = bucketMax;
+    bucketMax *= 10;
   }
   return groups;
 }

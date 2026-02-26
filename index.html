@@ -12,8 +12,8 @@
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- ⚠️ game-globals.js PRIMERO — define sbClient y globals antes que cualquier módulo -->
-  <script src="game-globals.js?v=1.41"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.41">
+  <script src="game-globals.js?v=1.42"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.42">
 </head>
 
 <body>
@@ -165,7 +165,7 @@
           <div class="nav-label">Militar</div>
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
-          <div class="nav-item" onclick="showPage('defense',this);renderRefugio()"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
+          <div class="nav-item" onclick="showPage('defense',this)"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
           <div class="nav-item" onclick="window.open('battle-simulator.html','_blank')"><span
               class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
@@ -181,7 +181,7 @@
           <div class="nav-item" onclick="showPage('alliances',this)"><span class="nav-icon">&#x1F6E1;</span> Alianzas
           </div>
           <div class="nav-item" id="navMessages" onclick="showPage('messages',this)"><span
-              class="nav-icon">&#x1F4E8;</span> Mensajes<span id="msgBadge" class="msg-badge"
+              class="nav-icon">📨</span> Mensajes<span id="msgBadge" class="msg-badge"
               style="display:none;">0</span>
           </div>
         </div>
@@ -431,13 +431,10 @@
           </div>
         </div>
         <div class="page" id="page-defense">
-          <div class="page-title">🛡️ DEFENSA</div>
-          <div class="page-sub">Gestiona el Refugio — esconde tropas de espías y atacantes</div>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
-            <button class="btn btn-sm" onclick="renderRefugio()">↻ Actualizar</button>
-          </div>
-          <div id="refugioContent">
-            <div class="muted" style="padding:20px;text-align:center;">Cargando…</div>
+          <div class="coming-soon">
+            <div class="cs-icon">&#x1F6E1;</div>
+            <div class="cs-title">MODULO DE DEFENSA</div>
+            <div>Proximamente</div>
           </div>
         </div>
 
@@ -937,17 +934,17 @@
   <!-- Datos estáticos primero (NPC_CASTLES) -->
   <script src="game-data.js"></script>
   <!-- Módulos del juego — v1.39 -->
-  <script src="game-constants.js?v=1.41"></script>
-  <script src="game-troops.js?v=1.41"></script>
-  <script src="game-combat.js?v=1.41"></script>
-  <script src="game-engine.js?v=1.41"></script>
-  <script src="game-ui.js?v=1.41"></script>
-  <script src="game-social.js?v=1.41"></script>
-  <script src="game-smithy.js?v=1.41"></script>
-  <script src="game-auth.js?v=1.41"></script>
+  <script src="game-constants.js?v=1.42"></script>
+  <script src="game-troops.js?v=1.42"></script>
+  <script src="game-combat.js?v=1.42"></script>
+  <script src="game-engine.js?v=1.42"></script>
+  <script src="game-ui.js?v=1.42"></script>
+  <script src="game-social.js?v=1.42"></script>
+  <script src="game-smithy.js?v=1.42"></script>
+  <script src="game-auth.js?v=1.42"></script>
   <!-- Módulos originales -->
-  <script src="game-simulator.js?v=1.41"></script>
-  <script src="game-admin.js?v=1.41"></script>
+  <script src="game-simulator.js?v=1.42"></script>
+  <script src="game-admin.js?v=1.42"></script>
   <script>
     // ============================================================
     // CONFIG
@@ -1154,7 +1151,7 @@
 
         // SELF-HEALING: If buildings missing
         if (!blds) {
-          const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, refugio: 0 };
+          const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0 };
           const { data: newBlds, error: insErr } = await sbClient.from('buildings').insert(defBlds).select().single();
           if (!insErr) blds = newBlds;
           else {
@@ -1200,7 +1197,7 @@
 
         // If data is missing (maybe insert failed too), try to recover using defaults so the game doesn't break
         const safeRes = res || { madera: 500, piedra: 300, hierro: 100, prov: 0, esencia: 0 };
-        const safeBlds = blds || { aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, torreinvocacion: 0, refugio: 0 };
+        const safeBlds = blds || { aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, torreinvocacion: 0 };
         const safeTrp = trp || {}; // Si no hay fila de troops, empezar en 0 — no hardcodear 50
 
         // MAPPING: SQL -> Game State JSON
@@ -1234,7 +1231,6 @@
             var ft = t.finish_at ? new Date(t.finish_at).getTime() : 0;
             return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
           }),
-          refugio: v.refugio || {},
           last_updated: safeRes.last_update || new Date().toISOString(),
           last_aldeano_at: v.last_aldeano_at || null, // timer discreto de aldeanos
           // Legacy/Compat flags
@@ -1340,7 +1336,6 @@
           if (pid === 'page-creatures') { renderCreatures && renderCreatures(); renderSummoningQueue && renderSummoningQueue(); }
           if (pid === 'page-map') { renderMap && renderMap(); }
           if (pid === 'page-overview') { renderReinforcementsPanel && renderReinforcementsPanel(); }
-          if (pid === 'page-defense') { renderRefugio && renderRefugio(); }
         }
       }
     }
@@ -1470,7 +1465,6 @@
         mission_queue: s.mission_queue || [],
         summoning_queue: s.summoning_queue || [],
         training_queue: s.training_queue || [],
-        refugio: s.refugio || {},
         name: v.name,
         last_aldeano_at: s.last_aldeano_at || null
       }).eq('id', v.id);
@@ -1645,6 +1639,8 @@
           activeVillage.state = updated;
           _missionWatchScheduled = false;
           scheduleSave();
+          // Misión resuelta → hay un informe nuevo en mensajes, actualizar badge
+          updateUnreadCount && updateUnreadCount();
         }).catch(function () { _missionWatchScheduled = false; });
       }
 
@@ -1773,6 +1769,7 @@
     // ============================================================
     var _incomingAttacks = []; // cache updated periodically
     var _lastAlertsCheck = 0;
+    var _lastMsgPoll = 0;
 
     var _lastSeenUpdate = 0;
     var _lastOnlineCheck = 0;
@@ -1820,6 +1817,11 @@
       if (now - _lastAlertsCheck > 30000) {
         _lastAlertsCheck = now;
         checkIncomingAttacks();
+      }
+      // Poll mensajes cada 60s — query ligera (solo count)
+      if (now - _lastMsgPoll > 60000) {
+        _lastMsgPoll = now;
+        updateUnreadCount && updateUnreadCount();
       }
     }
 

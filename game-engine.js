@@ -678,6 +678,14 @@ async function executeAttackMission(m) {
 
   if (victoria) {
     await sbClient.rpc('add_experience', { amount: attackerXP });
+    // Actualizar caché local y DOM sin recargar desde Supabase
+    if (typeof _researchData !== 'undefined' && _researchData) {
+      _researchData.experience = (_researchData.experience || 0) + attackerXP;
+      var xpEl = document.getElementById('ovExperience');
+      if (xpEl) xpEl.textContent = formatNumber(_researchData.experience);
+      var xpEl2 = document.getElementById('researchXPDisplay');
+      if (xpEl2) xpEl2.textContent = formatNumber(_researchData.experience) + ' XP';
+    }
     await updateObjective(target.id, 'cleared');
     if (activeVillage && activeVillage.state) {
       activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
@@ -891,7 +899,15 @@ async function executeAttackPvP(m) {
     // 9b. XP — calculado en simulateBattlePvP (distribuido proporcional a tropas aportadas)
     var pvpXP = (bResult.attackerResults[0] && bResult.attackerResults[0].xp) || 0;
     if (pvpXP > 0) {
-      sbClient.rpc('add_experience', { amount: pvpXP }).then(function(){}).catch(function(e){ console.warn('PvP XP error:', e); });
+      sbClient.rpc('add_experience', { amount: pvpXP }).then(function() {
+        if (typeof _researchData !== 'undefined' && _researchData) {
+          _researchData.experience = (_researchData.experience || 0) + pvpXP;
+          var xpEl = document.getElementById('ovExperience');
+          if (xpEl) xpEl.textContent = formatNumber(_researchData.experience);
+          var xpEl2 = document.getElementById('researchXPDisplay');
+          if (xpEl2) xpEl2.textContent = formatNumber(_researchData.experience) + ' XP';
+        }
+      }).catch(function(e){ console.warn('PvP XP error:', e); });
     }
 
     // 10. Informe y notificaciones

@@ -441,6 +441,11 @@ function showTroopStats(key) {
   var existing = document.getElementById('troopStatsModal');
   if (existing) existing.remove();
   window._closeTroopStats = function () { var m = document.getElementById('troopStatsModal'); if (m) m.remove(); };
+
+  // Nivel de herrería actual para esta tropa
+  var wLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.weapon_levels && _researchData.weapon_levels[key]) || 0;
+  var aLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.armor_levels  && _researchData.armor_levels[key])  || 0;
+
   var overlay = document.createElement('div');
   overlay.id = 'troopStatsModal';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;';
@@ -459,8 +464,8 @@ function showTroopStats(key) {
     + '<div style="color:var(--dim);">⚡ Ataques/turno</div><div style="color:var(--text);">' + t.attacksPerTurn + '</div>'
     + '<div style="color:var(--dim);">🎯 % Acierto</div><div style="color:var(--text);">' + t.attackChance + '/20</div>'
     + '<div style="color:var(--dim);">🏃 Velocidad</div><div style="color:var(--text);">' + t.speed + '</div>'
-    + '<div style="color:var(--dim);">🗡️ Arma base</div><div style="color:var(--text);">' + t.weapon + '</div>'
-    + '<div style="color:var(--dim);">🛡 Armadura base</div><div style="color:var(--text);">' + t.armor + '</div>'
+    + '<div style="color:var(--dim);">🗡️ Arma (Herrería)</div><div style="color:' + (wLvl > 0 ? 'var(--ok)' : 'var(--dim)') + ';">+' + wLvl + (wLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
+    + '<div style="color:var(--dim);">🛡 Armadura (Herrería)</div><div style="color:' + (aLvl > 0 ? 'var(--accent)' : 'var(--dim)') + ';">+' + aLvl + (aLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
     + '<div style="color:var(--dim);">📦 Capacidad carga</div><div style="color:var(--text);">' + t.capacity + '</div>'
     + '</div>'
     + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;margin-bottom:14px;">' + escapeHtml(t.desc) + '</div>'
@@ -684,13 +689,21 @@ function renderRefugio() {
   var pct = cap > 0 ? Math.min(100, Math.round(used / cap * 100)) : 0;
   var pctColor = pct >= 90 ? 'var(--danger)' : pct >= 60 ? 'var(--gold)' : 'var(--ok)';
 
+  // Calcular capacidad siguiente nivel para mostrar al jugador
+  var nextLvl = lvl + 1;
+  var nextCap = Math.floor(Math.round(50 * Math.pow(1.40, nextLvl - 1)) * 0.10);
+
   var html = '';
 
   // Cabecera estado refugio
   html += '<div class="card" style="margin-bottom:14px;">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-  html += '<div><div class="muted" style="font-size:.68rem;letter-spacing:.08em;">REFUGIO — NIVEL ' + lvl + '</div>';
-  html += '<div style="font-size:1.4rem;color:var(--accent);font-family:VT323,monospace;">' + used + ' / ' + cap + ' plazas</div></div>';
+  html += '<div>';
+  html += '<div class="muted" style="font-size:.68rem;letter-spacing:.08em;">REFUGIO — NIVEL ' + lvl + '</div>';
+  html += '<div style="font-size:1.4rem;color:var(--accent);font-family:VT323,monospace;">';
+  html += used + ' / <span style="color:var(--ok);">' + cap + '</span> plazas ocupadas</div>';
+  html += '<div style="font-size:.62rem;color:var(--dim);margin-top:2px;">Nv.' + nextLvl + ' → ' + nextCap + ' plazas · Sube el Refugio para ampliar</div>';
+  html += '</div>';
   html += '<div style="font-size:.68rem;color:var(--dim);text-align:right;line-height:1.8;">🕵️ Invisibles a espías<br>⚔️ No participan en defensa</div>';
   html += '</div>';
   html += '<div style="background:rgba(255,255,255,.07);height:6px;border-radius:3px;overflow:hidden;">';

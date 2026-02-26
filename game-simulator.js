@@ -357,8 +357,14 @@ function updateWallInfo() {
 }
 
 function divGroups(qty) {
-  const g = []; let r = qty, gs = 10;
-  while (r > 0) { g.push(Math.min(r, gs)); r -= Math.min(r, gs); gs *= 10; }
+  // Grupos por cubos: bucket1 hasta 10 (cap 10), bucket2 hasta 100 (cap 90),
+  // bucket3 hasta 1000 (cap 900), etc.
+  // Ej: 50 → [10, 40] | 1001 → [10, 90, 900, 1]
+  const g = []; let r = qty, bucketMax = 10, prevMax = 0;
+  while (r > 0) {
+    const fill = Math.min(r, bucketMax - prevMax);
+    g.push(fill); r -= fill; prevMax = bucketMax; bucketMax *= 10;
+  }
   return g;
 }
 
