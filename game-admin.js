@@ -642,13 +642,13 @@ async function adminDeleteUserFromPage(userId, username) {
   if (!confirm('¿Borrar la cuenta de "' + username + '"?\nEsto eliminará todas sus aldeas y datos.\nEsta acción no se puede deshacer.')) return;
   try {
     const r = await sbClient.rpc('admin_delete_user', { target_user_id: userId });
-    if (r.error) {
-      console.error('adminDeleteUserFromPage RPC error:', r.error);
-      showNotif('Error: ' + r.error.message, 'err');
+    if (!r.error) {
+      showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
+      loadAdminUsersPage();
       return;
     }
-    showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
-    loadAdminUsersPage();
+    console.warn('RPC admin_delete_user falló, usando borrado directo:', r.error.message);
+    await _adminDeleteUserData(userId, username);
   } catch (e) {
     console.error('adminDeleteUserFromPage error:', e);
     showNotif('Error al eliminar: ' + e.message, 'err');
@@ -777,7 +777,7 @@ async function viewAdminUserDetails(userId, username) {
   // Obtener datos del usuario
   const profile = await sbClient.from('profiles').select('*').eq('id', userId).single();
   const villages = await sbClient.from('villages').select('id,name,cx,cy,resources,last_updated').eq('owner_id', userId);
-  const objectives = await sbClient.from('objectives').select('*').eq('user_id', userId);
+  const objectives = await sbClient.from('player_objectives').select('*').eq('user_id', userId);
 
   if (profile.error) {
     showNotif('Error cargando perfil: ' + profile.error.message, 'err');
@@ -828,17 +828,293 @@ async function adminDeleteUser(userId, username) {
   if (!isAdmin()) return;
   if (!confirm('¿Borrar la cuenta de "' + username + '"?\nEsto eliminará todas sus aldeas y datos.\nEsta acción no se puede deshacer.')) return;
   try {
+    // Intentar RPC primero (si está definido con service_role en Supabase)
     const r = await sbClient.rpc('admin_delete_user', { target_user_id: userId });
-    if (r.error) {
-      console.error('adminDeleteUser RPC error:', r.error);
-      showNotif('Error: ' + r.error.message, 'err');
+    if (!r.error) {
+      showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
+      await loadAdminUsers();
       return;
     }
-    showNotif('✓ Usuario "' + username + '" eliminado completamente', 'ok');
-    await loadAdminUsers();
+    // Fallback: borrar datos directamente tabla a tabla (no borra auth.users)
+    console.warn('RPC admin_delete_user falló (' + r.error.message + '), usando borrado directo de tablas...');
+    await _adminDeleteUserData(userId, username);
   } catch (e) {
     console.error('adminDeleteUser error:', e);
     showNotif('Error al eliminar: ' + e.message, 'err');
   }
 }
 
+// Borra todos los datos de juego de un usuario (sin tocar auth.users)
+async function _adminDeleteUserData(userId, username) {
+  var steps = [];
+  var errors = [];
+
+  async function tryDelete(label, promise) {
+    try { var r = await promise; if (r.error) errors.push(label + ': ' + r.error.message); else steps.push('✓ ' + label); }
+    catch(e) { errors.push(label + ': ' + e.message); }
+  }
+
+  // 1. Sacar de alianzas
+  await tryDelete('alliance_members', sbClient.from('alliance_members').delete().eq('user_id', userId));
+
+  // 2. Mensajes y hilos
+  await tryDelete('messages (sender)', sbClient.from('messages').delete().eq('sender_id', userId));
+  await tryDelete('thread_members', sbClient.from('thread_members').delete().eq('user_id', userId));
+
+  // 3. Objetivos (tabla real: player_objectives)
+  await tryDelete('player_objectives', sbClient.from('player_objectives').delete().eq('user_id', userId));
+
+  // 4. Aldeas y sus dependencias (ORDEN CRÍTICO: primero hijos, luego aldeas)
+  const vills = await sbClient.from('villages').select('id').eq('owner_id', userId);
+  if (!vills.error && vills.data && vills.data.length > 0) {
+    var villIds = vills.data.map(function(v) { return v.id; });
+    // Primero borrar todas las tablas que tienen FK a villages
+    await tryDelete('troops', sbClient.from('troops').delete().in('village_id', villIds));
+    await tryDelete('resources', sbClient.from('resources').delete().in('village_id', villIds));
+    await tryDelete('creatures', sbClient.from('creatures').update({ guardiancueva: 0 }).in('village_id', villIds).then ? sbClient.from('creatures').delete().in('village_id', villIds) : Promise.resolve({ error: null }));
+    // Liberar cuevas capturadas por este usuario (marcarlas wild)
+    await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null })
+      .eq('owner_id', userId).then(function(){}).catch(function(){});
+    // Ahora sí borrar aldeas
+    await tryDelete('villages', sbClient.from('villages').delete().eq('owner_id', userId));
+  }
+
+  // 5. Perfil (último, es la fk raíz)
+  await tryDelete('profiles', sbClient.from('profiles').delete().eq('id', userId));
+
+  if (errors.length === 0) {
+    showNotif('✓ Datos de "' + username + '" eliminados.', 'ok');
+    console.info('Borrado completo. Si el usuario puede volver a loguearse (cuenta auth activa), crea el RPC admin_delete_user en Supabase con SECURITY DEFINER y llama a auth.users delete.');
+  } else {
+    showNotif('Borrado parcial de "' + username + '" — ' + errors.length + ' error(es). Ver consola.', 'err');
+    console.error('Errores en borrado:', errors);
+    console.info('Pasos completados:', steps);
+  }
+
+  if (typeof loadAdminUsers === 'function') await loadAdminUsers();
+  if (typeof loadAdminUsersPage === 'function') await loadAdminUsersPage();
+  // renderAdminUsersList solo si el elemento existe (evita el error null.innerHTML)
+  var adminUsersList = document.getElementById('adminUsersList');
+  if (typeof renderAdminUsersList === 'function' && adminUsersList) renderAdminUsersList();
+}
+
+
+// ============================================================
+// ADMIN — GESTIÓN DE ALIANZAS
+// ============================================================
+
+async function loadAdminAlliances() {
+  var box = document.getElementById('adminAlliancesBox');
+  if (!box) return;
+  box.innerHTML = '<div class="muted">Cargando...</div>';
+
+  var r = await sbClient.from('alliances')
+    .select('id,name,tag,created_at')
+    .order('name');
+
+  if (r.error) {
+    box.innerHTML = '<div class="muted" style="color:var(--danger)">Error: ' + escapeHtml(r.error.message) + '</div>';
+    return;
+  }
+  if (!r.data || r.data.length === 0) {
+    box.innerHTML = '<div class="muted">No hay alianzas registradas.</div>';
+    return;
+  }
+
+  // Cargar conteo de miembros activos de golpe
+  var mr = await sbClient.from('alliance_members')
+    .select('alliance_id')
+    .eq('status', 'active');
+  var memberCounts = {};
+  if (!mr.error && mr.data) {
+    mr.data.forEach(function(m) {
+      memberCounts[m.alliance_id] = (memberCounts[m.alliance_id] || 0) + 1;
+    });
+  }
+
+  // Cargar líderes
+  var lr = await sbClient.from('alliance_members')
+    .select('alliance_id,profiles(username)')
+    .eq('role', 'leader')
+    .eq('status', 'active');
+  var leaderMap = {};
+  if (!lr.error && lr.data) {
+    lr.data.forEach(function(m) {
+      leaderMap[m.alliance_id] = (m.profiles && m.profiles.username) ? m.profiles.username : '?';
+    });
+  }
+
+  var html = '<div class="table">'
+    + '<div class="trow thead"><div>TAG</div><div>Nombre</div><div>Líder</div><div style="text-align:center">Miembros</div><div></div></div>';
+
+  r.data.forEach(function(al) {
+    var count = memberCounts[al.id] || 0;
+    var leader = leaderMap[al.id] || '—';
+    html += '<div class="trow">'
+      + '<div><span style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);border-radius:3px;padding:1px 6px;color:var(--accent);font-family:VT323,monospace;font-size:.75rem;">' + escapeHtml(al.tag) + '</span></div>'
+      + '<div style="color:var(--text);">' + escapeHtml(al.name) + '</div>'
+      + '<div style="color:var(--dim);font-size:.78rem;">👑 ' + escapeHtml(leader) + '</div>'
+      + '<div style="text-align:center;color:var(--dim);font-size:.82rem;">' + count + '</div>'
+      + '<div style="display:flex;gap:4px;">'
+      + '<button class="btn btn-sm" onclick="adminInspectAlliance(\'' + al.id + '\',\'' + escapeAttr(al.tag) + '\')">👁 Ver</button>'
+      + '<button class="btn btn-sm" style="background:rgba(224,64,64,.1);border-color:var(--danger);color:var(--danger);" onclick="adminDeleteAlliance(\'' + al.id + '\',\'' + escapeAttr(al.name) + '\')">✕ Borrar</button>'
+      + '</div>'
+      + '</div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+async function adminInspectAlliance(allianceId, tag) {
+  if (!isAdmin()) return;
+  // Cargar miembros de la alianza
+  var r = await sbClient.from('alliance_members')
+    .select('user_id,role,status,profiles(username)')
+    .eq('alliance_id', allianceId)
+    .order('role');
+
+  if (r.error) { showNotif('Error: ' + r.error.message, 'err'); return; }
+
+  var members = r.data || [];
+  var prev = document.getElementById('adminAllianceInspectBox');
+  if (prev) prev.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'adminAllianceInspectBox';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+  var statuses = { active: 'Activo', pending: 'Solicitud', invited: 'Invitado' };
+  var statusColors = { active: 'var(--ok)', pending: 'var(--gold)', invited: 'var(--accent)' };
+
+  var rows = members.map(function(m) {
+    var uname = (m.profiles && m.profiles.username) ? escapeHtml(m.profiles.username) : m.user_id.slice(0, 8);
+    var roleBadge = m.role === 'leader'
+      ? '<span style="color:var(--gold);font-size:.7rem;">👑 Líder</span>'
+      : '<span style="color:var(--dim);font-size:.7rem;">Miembro</span>';
+    var statusBadge = '<span style="color:' + (statusColors[m.status] || 'var(--dim)') + ';font-size:.7rem;">' + (statuses[m.status] || m.status) + '</span>';
+    return '<div class="trow">'
+      + '<div>' + uname + '</div>'
+      + '<div>' + roleBadge + '</div>'
+      + '<div>' + statusBadge + '</div>'
+      + '<div><button class="btn btn-sm" style="background:rgba(224,64,64,.1);border-color:var(--danger);color:var(--danger);" '
+      + 'onclick="adminKickFromAlliance(\'' + allianceId + '\',\'' + m.user_id + '\',\'' + escapeAttr(uname) + '\')">✕ Expulsar</button></div>'
+      + '</div>';
+  }).join('');
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;width:min(520px,90vw);max-height:80vh;overflow-y:auto;';
+  box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+    + '<div style="font-family:VT323,monospace;font-size:1.2rem;color:var(--accent);">⚔️ Alianza [' + escapeHtml(tag) + '] — ' + members.length + ' miembro(s)</div>'
+    + '<button onclick="document.getElementById(\'adminAllianceInspectBox\').remove()" style="background:none;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;">✕</button>'
+    + '</div>'
+    + '<div class="table"><div class="trow thead"><div>Jugador</div><div>Rol</div><div>Estado</div><div></div></div>'
+    + rows
+    + '</div>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+async function adminKickFromAlliance(allianceId, userId, username) {
+  if (!confirm('¿Expulsar a ' + username + ' de esta alianza?')) return;
+  var r = await sbClient.from('alliance_members').delete()
+    .eq('alliance_id', allianceId).eq('user_id', userId);
+  if (r.error) { showNotif('Error: ' + r.error.message, 'err'); return; }
+  showNotif('✓ ' + username + ' expulsado de la alianza', 'ok');
+  // Recargar el overlay
+  var overlay = document.getElementById('adminAllianceInspectBox');
+  if (overlay) overlay.remove();
+  await loadAdminAlliances();
+}
+
+async function adminDeleteAlliance(id, name) {
+  if (!isAdmin()) return;
+  if (!confirm('¿Borrar la alianza "' + name + '"?\nTodos los miembros serán expulsados.\nEsta acción no se puede deshacer.')) return;
+
+  var r1 = await sbClient.from('alliance_members').delete().eq('alliance_id', id);
+  if (r1.error) { showNotif('Error al expulsar miembros: ' + r1.error.message, 'err'); return; }
+
+  var r2 = await sbClient.from('alliances').delete().eq('id', id);
+  if (r2.error) { showNotif('Error al borrar alianza: ' + r2.error.message, 'err'); return; }
+
+  showNotif('✓ Alianza "' + name + '" eliminada', 'ok');
+  loadAdminAlliances();
+}
+
+// Abre la sección de alianzas en el panel admin
+function openAdminAlliancesSection() {
+  if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
+  var box = document.getElementById('adminAlliancesSection');
+  if (!box) {
+    // Crear la sección dinámicamente si no existe en el HTML
+    _injectAdminAlliancesUI();
+    return;
+  }
+  var isVisible = box.style.display !== 'none';
+  box.style.display = isVisible ? 'none' : 'block';
+  if (!isVisible) loadAdminAlliances();
+}
+
+function _injectAdminAlliancesUI() {
+  // Inyectar sección de alianzas dentro del admin overlay si no existe
+  var target = document.getElementById('adminOverlay');
+  if (!target) return;
+
+  // Buscar un buen punto de inserción (después del ghostForm o al final del overlay)
+  var existing = document.getElementById('adminAlliancesSection');
+  if (existing) { existing.style.display = 'block'; loadAdminAlliances(); return; }
+
+  var section = document.createElement('div');
+  section.id = 'adminAlliancesSection';
+  section.style.cssText = 'margin-top:16px;';
+  section.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    + '<div style="font-family:VT323,monospace;font-size:1rem;color:var(--accent2);">⚔️ GESTIÓN DE ALIANZAS</div>'
+    + '<button class="btn btn-sm" onclick="loadAdminAlliances()">🔄 Recargar</button>'
+    + '</div>'
+    + '<div id="adminAlliancesBox"><div class="muted">Cargando...</div></div>';
+
+  // Insertar después del ghostList o al final del contenido admin
+  var ghostArea = document.getElementById('ghostList');
+  if (ghostArea && ghostArea.parentNode) {
+    ghostArea.parentNode.insertBefore(section, ghostArea.nextSibling);
+  } else {
+    var adminContent = target.querySelector('.admin-content') || target;
+    adminContent.appendChild(section);
+  }
+
+  loadAdminAlliances();
+}
+
+// ============================================================
+// ADMIN — SECCIÓN DE CUEVAS (integración con panel admin)
+// ============================================================
+
+function openAdminCavesSection() {
+  if (!isAdmin()) { showNotif('Acceso denegado.', 'err'); return; }
+
+  var existing = document.getElementById('adminCavesSection');
+  if (existing) {
+    var visible = existing.style.display !== 'none';
+    existing.style.display = visible ? 'none' : 'block';
+    if (!visible) loadAdminCaves();
+    return;
+  }
+
+  // Crear sección e inyectarla en el overlay de admin
+  var section = document.createElement('div');
+  section.id = 'adminCavesSection';
+  section.style.cssText = 'margin-top:16px;';
+  section.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+    + '<div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--gold);">⛏️ GESTIÓN DE CUEVAS</div>'
+    + '<button class="btn btn-sm" onclick="loadAdminCaves()">🔄 Recargar</button>'
+    + '</div>'
+    + '<div id="adminCavesBox"><div class="muted">Cargando…</div></div>';
+
+  // Insertar al final del contenido del admin overlay
+  var adminContent = document.querySelector('#adminOverlay .admin-content')
+    || document.getElementById('adminOverlay');
+  if (adminContent) adminContent.appendChild(section);
+
+  loadAdminCaves();
+}

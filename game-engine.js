@@ -11,7 +11,7 @@ function defaultState() {
   var b = {};
   BUILDINGS.forEach(function (d) { b[d.id] = { level: 1 }; });
   return {
-    resources: { madera: 800, piedra: 600, hierro: 400, provisiones: 200, esencia: 50, aldeanos: 50 },
+    resources: { madera: 800, piedra: 600, hierro: 400, provisiones: 200, esencia: 50 },
     aldeanos_granja: 0,
     aldeanos_assigned: defaultAssignments(),
     troops: defaultTroops(),
@@ -85,6 +85,11 @@ function getProd(blds, aldGranja, workers) {
   };
 }
 
+// ⚠️ OPT-E ADVERTENCIA DE SIDE-EFFECT:
+// calcRes() NO es una función pura. Internamente llama a calcAndApplyAldeanos(vs)
+// que MODIFICA vs.troops.aldeano y vs.last_aldeano_at.
+// Nunca llamar calcRes() en paths de solo lectura/render sin ser consciente de esto.
+// Para obtener producción sin modificar estado, usar getProd() directamente.
 function calcRes(vs) {
   // Aplicar aldeanos discretos antes de calcular (actualiza vs.resources.aldeanos)
   calcAndApplyAldeanos(vs);
@@ -176,8 +181,9 @@ async function cancelMission(missionRef) {
 
   var minSpeed = 999;
   Object.keys(m.troops).forEach(k => {
-    if ((m.troops[k] || 0) > 0 && TROOP_TYPES[k] && TROOP_TYPES[k].speed < minSpeed) {
-      minSpeed = TROOP_TYPES[k].speed;
+    var troopData = TROOP_TYPES[k] || CREATURE_TYPES[k];
+    if ((m.troops[k] || 0) > 0 && troopData && troopData.speed < minSpeed) {
+      minSpeed = troopData.speed;
     }
   });
   if (minSpeed === 999) minSpeed = 1;
@@ -286,7 +292,7 @@ async function resolveMissions(vs) {
   var remaining = [];
   var changed = false;
 
-  for (var m of vs.mission_queue) {
+  for (let m of vs.mission_queue) {
     var finish = new Date(m.finish_at).getTime();
     if (now >= finish) {
       changed = true;
@@ -294,6 +300,11 @@ async function resolveMissions(vs) {
       try {
         if (m.type === 'spy') {
           await executeSpyMission(m);
+        } else if (m.type === 'cave_attack') {
+          // ── Ataque a cueva NPC especial ──
+          if (typeof executeAttackCave === 'function') {
+            await executeAttackCave(m);
+          }
         } else if (m.type === 'attack') {
           await executeAttackMission(m);
         } else if (m.type === 'found') {
@@ -324,32 +335,43 @@ async function resolveMissions(vs) {
           var usedNow = getBarracksUsed(vs);
           var freeSlots = Math.max(0, barrCap - usedNow);
 
-          // Calcular cuántas plazas necesitan las tropas que regresan
+          // Calcular cuántas plazas necesitan las tropas que regresan.
+          // ⚠️ BUGFIX: Las CRIATURAS no ocupan barracas — se excluyen del cálculo
+          // de slotsNeeded. Solo TROOP_TYPES (tropas normales) consumen plazas.
           var slotsNeeded = 0;
           Object.keys(m.troops).forEach(function (k) {
             var count = m.troops[k] || 0;
             if (count <= 0) return;
-            var slots = k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+            if (!TROOP_TYPES[k]) return; // criatura → no ocupa barracas, saltar
+            var slots = k === 'aldeano' ? count : count * (TROOP_TYPES[k].barracasSlots || 1);
             slotsNeeded += slots;
           });
 
           var accepted = {}, anyRejected = false;
 
+          // Las criaturas siempre se aceptan íntegras (no necesitan barracas)
+          Object.keys(m.troops).forEach(function (k) {
+            if (CREATURE_TYPES[k]) accepted[k] = m.troops[k] || 0;
+          });
+
           if (slotsNeeded <= freeSlots) {
-            // Caben todas
-            Object.keys(m.troops).forEach(function (k) { accepted[k] = m.troops[k] || 0; });
+            // Caben todas las tropas normales
+            Object.keys(m.troops).forEach(function (k) {
+              if (TROOP_TYPES[k]) accepted[k] = m.troops[k] || 0;
+            });
           } else {
-            // No caben todas — eliminar porcentaje proporcional de cada tipo
-            var pctEliminar = freeSlots < slotsNeeded ? (slotsNeeded - freeSlots) / slotsNeeded : 0;
+            // No caben todas — eliminar porcentaje proporcional solo de tropas normales
+            var pctEliminar = (slotsNeeded - freeSlots) / slotsNeeded;
 
             Object.keys(m.troops).forEach(function (k) {
+              if (!TROOP_TYPES[k]) return; // criaturas ya aceptadas arriba
               var total = m.troops[k] || 0;
               if (total <= 0) { accepted[k] = 0; return; }
               var toEliminate = Math.ceil(total * pctEliminar);
               var toAccept = total - toEliminate;
               // Verificar que las plazas de los aceptados no superen freeSlots
               while (toAccept > 0) {
-                var testSlots = k === 'aldeano' ? toAccept : toAccept * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+                var testSlots = k === 'aldeano' ? toAccept : toAccept * (TROOP_TYPES[k].barracasSlots || 1);
                 if (testSlots <= freeSlots) break;
                 toAccept--;
               }
@@ -357,15 +379,17 @@ async function resolveMissions(vs) {
               if (toAccept < total) anyRejected = true;
             });
 
-            // Verificación final: la suma de slots aceptados no supera freeSlots
+            // Verificación final: la suma de slots de tropas aceptadas no supera freeSlots
             var totalAcceptedSlots = 0;
             Object.keys(accepted).forEach(function (k) {
+              if (!TROOP_TYPES[k]) return; // ignorar criaturas en el conteo
               var count = accepted[k] || 0;
-              totalAcceptedSlots += k === 'aldeano' ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+              totalAcceptedSlots += k === 'aldeano' ? count : count * (TROOP_TYPES[k].barracasSlots || 1);
             });
             if (totalAcceptedSlots > freeSlots) {
-              // Recorte de emergencia proporcional adicional
+              // Recorte de emergencia proporcional solo en tropas normales
               Object.keys(accepted).forEach(function (k) {
+                if (!TROOP_TYPES[k]) return; // no tocar criaturas
                 accepted[k] = Math.floor(accepted[k] * freeSlots / totalAcceptedSlots);
               });
               anyRejected = true;
@@ -385,11 +409,26 @@ async function resolveMissions(vs) {
                 vs.troops[k] = (vs.troops[k] || 0) + toAdd;
               }
             } else if (CREATURE_TYPES[k]) {
-              // Criatura - no ocupan barracas
+              // Criatura — nunca ocupa barracas
               if (!vs.creatures) vs.creatures = defaultCreatures();
               vs.creatures[k] = (vs.creatures[k] || 0) + toAdd;
             }
           });
+
+          // ── DEATH CHECK del Guardián de la Cueva ──────────────────────
+          // Si el jugador tenía un guardián (guardiancueva > 0) ANTES de
+          // esta batalla, pero ahora en los aceptados es 0, ha muerto.
+          var guardianWasSent = (m.troops && (m.troops.guardiancueva || 0) > 0);
+          var guardianReturned = (accepted.guardiancueva || 0) > 0;
+          if (guardianWasSent && !guardianReturned) {
+            // El guardián murió en batalla → reaparece cueva en el mapa
+            if (typeof onCaveGuardianDied === 'function') {
+              onCaveGuardianDied(activeVillage.id, currentUser.id).catch(function(e) {
+                console.warn('[Caves] onCaveGuardianDied error:', e);
+              });
+            }
+          }
+          // ──────────────────────────────────────────────────────────────
 
           // Aplicar botín con límites de capacidad
           var lootReport = '';
@@ -444,12 +483,14 @@ async function resolveMissions(vs) {
       var hasSurvivors = Object.values(survivors).some(function (n) { return n > 0; });
 
       if (hasSurvivors) {
-        // Calcular velocidad del más lento entre supervivientes
+        // Calcular velocidad del más lento entre supervivientes (tropas Y criaturas)
         var minSpeed = 999;
         Object.keys(survivors).forEach(function (k) {
-          if ((survivors[k] || 0) > 0 && TROOP_TYPES[k] && TROOP_TYPES[k].speed < minSpeed) {
-            minSpeed = TROOP_TYPES[k].speed;
-          }
+          if (k === 'guardiancueva') return; // no tiene speed de movimiento propio
+          var n = survivors[k] || 0;
+          if (n <= 0) return;
+          var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
+          if (td && td.speed < minSpeed) minSpeed = td.speed;
         });
         if (minSpeed === 999) minSpeed = 1;
 
@@ -523,28 +564,56 @@ async function executeSpyMission(m) {
       var spyRefugio = sv.refugio || {};
       var isGhost = sv.owner_id === GHOST_OWNER_ID;
       var ownerName = isGhost ? 'Aldea Fantasma' : ((profileCache[sv.owner_id] && profileCache[sv.owner_id].username) || 'Jugador desconocido');
-      // Cargar tropas
-      var spyTrpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
-      var spyCrtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
-      var spyBldR = await sbClient.from('buildings').select('muralla').eq('village_id', m.targetId).maybeSingle();
       var troopLines = '';
-      if (spyTrpR.data) {
-        Object.keys(spyTrpR.data).forEach(function(k) {
-          if (k === 'village_id') return;
-          var n = Math.max(0, (spyTrpR.data[k] || 0) - (spyRefugio[k] || 0));
-          var td = TROOP_TYPES[k];
-          if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
-        });
+      var wallLvlSpy = 0;
+
+      if (isGhost) {
+        // Aldea fantasma: tropas en tablas separadas (troops / creatures / buildings)
+        var spyTrpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
+        var spyCrtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
+        var spyBldR = await sbClient.from('buildings').select('muralla').eq('village_id', m.targetId).maybeSingle();
+        if (spyTrpR.data) {
+          Object.keys(spyTrpR.data).forEach(function(k) {
+            if (k === 'village_id') return;
+            var n = Math.max(0, (spyTrpR.data[k] || 0) - (spyRefugio[k] || 0));
+            var td = TROOP_TYPES[k];
+            if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
+          });
+        }
+        if (spyCrtR.data) {
+          Object.keys(spyCrtR.data).forEach(function(k) {
+            if (k === 'village_id' || k === 'created_at' || k === 'updated_at' || k === 'guardiancueva') return;
+            var n = spyCrtR.data[k] || 0;
+            var cd = CREATURE_TYPES[k];
+            if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
+          });
+        }
+        wallLvlSpy = (spyBldR.data && spyBldR.data.muralla) || 0;
+      } else {
+        // Aldea de jugador real: tropas en villages.state (JSON blob)
+        var spyVR = await sbClient.from('villages').select('state').eq('id', m.targetId).maybeSingle();
+        var spyState = null;
+        if (spyVR.data && spyVR.data.state) {
+          spyState = typeof spyVR.data.state === 'string' ? JSON.parse(spyVR.data.state) : spyVR.data.state;
+        }
+        if (spyState) {
+          var spyTroops = spyState.troops || {};
+          Object.keys(TROOP_TYPES).forEach(function(k) {
+            var n = Math.max(0, (spyTroops[k] || 0) - (spyRefugio[k] || 0));
+            var td = TROOP_TYPES[k];
+            if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
+          });
+          var spyCreatures = spyState.creatures || {};
+          Object.keys(CREATURE_TYPES).forEach(function(k) {
+            if (k === 'guardiancueva') return;
+            var n = spyCreatures[k] || 0;
+            var cd = CREATURE_TYPES[k];
+            if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
+          });
+          var spyBlds = spyState.buildings || {};
+          wallLvlSpy = (spyBlds.muralla && spyBlds.muralla.level) || 0;
+        }
       }
-      if (spyCrtR.data) {
-        Object.keys(spyCrtR.data).forEach(function(k) {
-          if (k === 'village_id' || k === 'created_at' || k === 'updated_at') return;
-          var n = spyCrtR.data[k] || 0;
-          var cd = CREATURE_TYPES[k];
-          if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
-        });
-      }
-      var wallLvlSpy = (spyBldR.data && spyBldR.data.muralla) || 0;
       var report = '🔍 INFORME DE ESPIONAJE\n══════════════════════\n' +
         sv.name + ' [' + sv.cx + ', ' + sv.cy + ']\n' +
         'Propietario: ' + ownerName + '\n' +
@@ -855,7 +924,7 @@ async function executeAttackPvP(m) {
       Object.keys(TROOP_TYPES).forEach(function(k) { trpUpdate[k] = ts.troops[k] || 0; });
       await sbClient.from('troops').update(trpUpdate).eq('village_id', m.targetId);
       var crtUpdate = {};
-      Object.keys(CREATURE_TYPES).forEach(function(k) { crtUpdate[k] = ts.creatures[k] || 0; });
+      Object.keys(CREATURE_TYPES).forEach(function(k) { if (k === 'guardiancueva') return; crtUpdate[k] = ts.creatures[k] || 0; });
       await sbClient.from('creatures').update(crtUpdate).eq('village_id', m.targetId);
       if (Object.keys(loot).length > 0) {
         var resUpdate = { madera: ts.resources.madera || 0, piedra: ts.resources.piedra || 0, hierro: ts.resources.hierro || 0, esencia: ts.resources.esencia || 0 };

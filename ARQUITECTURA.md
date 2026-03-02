@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 1.9 — Última actualización: v1.44
+> Versión del documento: 2.1 — Última actualización: v1.47
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -53,6 +53,7 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 | Assets estáticos | `game-data.js` | NPCs, datos inmutables (250 castillos) |
 | Simulador | `game-simulator.js` | Simulador de batalla (iframe embebido) |
 | Admin | `game-admin.js` | Panel de administración |
+| Cuevas | `game-caves.js` | Sistema de cuevas: spawn, ataque, captura, muerte del guardián, panel admin |
 
 El juego es **100% serverless**. No hay servidor de aplicación. Toda la lógica reside en el cliente, y Supabase actúa como base de datos remota accesible directamente desde el navegador.
 
@@ -125,7 +126,8 @@ flushVillage()
 | `creatures` | Criaturas por aldea (una fila por aldea) | Dentro de `saveVillage` |
 | `resources` | Recursos + aldeanos asignados por aldea | Dentro de `saveVillage` |
 | `guest_troops` | Tropas de refuerzo en aldeas ajenas | `processRecalls` al login |
-| `objectives` | Estado de objetivos NPC por jugador | Al completar batalla NPC |
+| `player_objectives` | Estado de objetivos NPC por jugador | Al completar batalla NPC |
+| `caves` | Cuevas del mapa: id, cx, cy, status (wild/captured), owner_id, village_id | Al capturar/liberar guardián, al morir el guardián |
 | `messages` | Informes de batalla, espionaje, sistema | Al completar misiones |
 
 > Si añades una tabla nueva, añádela a esta tabla con su contenido y momento de escritura.
@@ -189,6 +191,48 @@ Admin hace acción
 El archivo define su propia función `escapeAttr(s)` al inicio — no depende del HTML principal para esto.
 
 ---
+
+
+---
+
+## MÓDULO game-caves.js — ARQUITECTURA
+
+### Tabla `caves`
+```sql
+CREATE TABLE caves (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cx         INT NOT NULL,
+  cy         INT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'wild',  -- 'wild' | 'captured'
+  owner_id   UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  village_id UUID REFERENCES villages(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Guardián (`guardiancueva`)
+- Definido en `CREATURE_TYPES` en `game-caves.js` como fallback (también puede estar en `game-constants.js`)
+- **NO es una columna de la tabla `creatures`** — esta es la regla más crítica del módulo
+- Se persiste via la tabla `caves` (status, owner_id, village_id)
+- Al capturar: `caves.status = 'captured'`, `owner_id = currentUser.id`, `village_id = activeVillage.id`
+- Al morir: la cueva reaparece en posición aleatoria como `status = 'wild'`
+
+### Flujo de combate en cueva
+```
+openCaveAttackModal() → launchCaveAttack() → startCaveMission()
+  → misión tipo 'cave_attack' en mission_queue
+  → al resolver: executeAttackCave()
+    → simulateBattle() vs guardián
+    → victoria: caves.update({status:'captured'})
+    → derrota: tropas regresan, cueva sigue wild
+```
+
+### En `_adminDeleteUserData`
+Al borrar un usuario, liberar sus cuevas capturadas:
+```javascript
+await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null })
+  .eq('owner_id', userId);
+```
 
 ## MÓDULO game-simulator.js — ARQUITECTURA
 
@@ -298,6 +342,9 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 17. **El orden de carga de scripts en `<head>` es fijo:** game-globals → game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-smithy → game-auth → game-simulator → game-admin → css. No reordenar.
 18. **`game-globals.js` debe cargarse PRIMERO.** Contiene `sbClient` y los globals del juego. Cualquier módulo que los use antes fallará con ReferenceError.
 
+19. **`guardiancueva` NO es columna de la tabla `creatures`.** Se gestiona exclusivamente a través de la tabla `caves`. Nunca incluirlo en UPDATE/INSERT sobre `creatures`.
+20. **Espionaje sobre aldeas de jugadores reales:** leer tropas de `villages.state` (JSON blob), NO de las tablas separadas `troops`/`creatures`. Las tablas separadas solo existen para aldeas fantasma.
+
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
 ---
@@ -316,6 +363,7 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 | `phasedVal` | HTML | Del que dependen todos los costes |
 | `almacenCapForLevel` | HTML | Del que depende la capacidad del almacén |
 | `game-data.js` | game-data.js | Datos NPC inmutables |
+| `loadAdminCaves` / `executeAttackCave` / `onCaveGuardianDied` | game-caves.js | Sistema de cuevas completo |
 | `simJS_template` (en game-simulator.js) | game-simulator.js | Backticks internos deben estar escapados |
 
 > Si añades un componente crítico nuevo, añádelo a esta tabla.
@@ -325,6 +373,51 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.47 — Criaturas cazadas completamente funcionales + Admin mobile
+
+**game-caves.js — Garantía robusta de guardiancueva**
+- Añadida validación en `executeAttackCave()` para garantizar que `guardiancueva` existe en `CREATURE_TYPES`
+- Fallback completo: si no existe, se define automáticamente
+- Mejora robustez en caso de problemas de carga de módulos
+
+**game-troops.js — Nueva función `renderCaughtCreatures()`**
+- `renderCaughtCreatures()`: nueva función que renderiza guardias capturados separadamente
+- `renderCreaturesList()` modificada: ahora excluye `guardiancueva` (se renderiza en apartado separado)
+- `renderCreatures()` mejorada: llama a `renderCaughtCreatures()` entre `renderCreaturesList()` y `renderSummonOptions()`
+- Estilo visual diferenciado: gradiente dorado, borde brillante, label "⛏️ CAPTURADO"
+
+**index.html — Nueva sección + Navegación admin**
+- Nueva sección HTML: `<div id="caughtCreaturesBox">` para criaturas cazadas
+- Ubicación: entre "TUS CRIATURAS" y "INVOCAR" en página de criaturas
+- Botones navegación rápida admin: 👥 Usuarios | ⛏️ Cuevas | 🛡️ Alianzas
+- Responsive: usa `flex-wrap` funciona perfectamente en mobile
+
+**REFERENCIA_PARA_IA.md y ARQUITECTURA.md — Documentación actualizada**
+- Reglas nuevas v1.47: `guardiancueva` siempre debe existir en CREATURE_TYPES antes de usarlo
+- Sistema de Criaturas Cazadas documentado completamente
+
+### v1.46 — Cuevas, borrado de usuarios y correcciones de espionaje
+
+**game-caves.js (nuevo módulo)**
+- Sistema completo de cuevas salvajes en el mapa (`CAVES_TOTAL = 10`)
+- Guardián `guardiancueva` en `CREATURE_TYPES` — **no es columna de `creatures`**, se gestiona via tabla `caves`
+- Flujo: cueva wild → ataque → captura guardián → si muere, reaparece en posición aleatoria
+- Panel admin: botones 🎲 Random y 📍 Elegir coordenadas para teleportar cuevas
+- [Supabase] Tabla `caves`: `id, cx, cy, status ('wild'|'captured'), owner_id, village_id, created_at`
+
+**game-admin.js — borrado de usuarios corregido**
+- Orden de borrado corregido: `alliance_members → messages → thread_members → player_objectives → troops → resources → creatures → caves → villages → profiles`
+- Tabla `objectives` renombrada a `player_objectives` en todos los accesos
+- Tabla `ranking` eliminada del flujo (no existe)
+- `renderAdminUsersList` solo se llama si el elemento DOM existe (evita `null.innerHTML`)
+- `viewAdminUserDetails` corregido: usa `player_objectives`
+
+**game-engine.js — correcciones**
+- `PATCH creatures 400` corregido: filtrar `guardiancueva` en el UPDATE post-combate de aldeas fantasma
+- Espionaje PvP corregido: ahora lee tropas de `villages.state` para jugadores reales; solo usa tablas separadas (`troops`/`creatures`) para aldeas fantasma
+- [Regla nueva] `guardiancueva` nunca va en UPDATE a tabla `creatures`
+- [Regla nueva] Espionaje distingue jugador real vs fantasma para leer tropas
 
 ### v1.43 — Correcciones XP y stats de tropa
 - `weapon` y `armor` en `TROOP_TYPES` = 0 para todas las tropas. Son stats de Herrería, no base.

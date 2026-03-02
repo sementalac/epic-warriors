@@ -151,12 +151,13 @@ async function upgradeSmithyItem(troopKey, type) {
   var icon = d[type].icon;
   var name = d[type].name;
   showNotif(icon + ' ' + name + ' → Nv.' + nextLvl + '!', 'ok');
-  renderSmithy();
+  // OPT-D: pasar rd precargado para que renderSmithy no haga otra query a Supabase
+  renderSmithy(rd);
 }
 
 // ── Render ─────────────────────────────────────────────────
 
-async function renderSmithy() {
+async function renderSmithy(preloadedRd) {
   var box = document.getElementById('smithyContent');
   if (!box) return;
   if (!activeVillage) { box.innerHTML = '<div class="muted">Cargando…</div>'; return; }
@@ -174,20 +175,31 @@ async function renderSmithy() {
     return;
   }
 
-  var rd = await loadResearchData();
+  var rd = preloadedRd || await loadResearchData();
   var wLvls = rd.weapon_levels || {};
   var aLvls = rd.armor_levels  || {};
 
   var html = '';
 
   // Cabecera estado herrería
-  html += '<div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">'
-    + '<div><div class="muted" style="font-size:.68rem;letter-spacing:.08em;margin-bottom:4px;">HERRERÍA — NIVEL</div>'
-    + '<div style="font-size:1.5rem;color:var(--accent);font-family:VT323,monospace;">Nv. ' + bldLvl + ' / 15</div>'
-    + '<div class="muted" style="font-size:.62rem;margin-top:2px;">Mejoras desbloqueadas hasta Nv.' + bldLvl + ' — sube la Herrería para acceder a niveles superiores</div></div>'
-    + '<div style="font-size:.7rem;color:var(--dim);line-height:2;text-align:right;">'
-    + '⚔️ Cada nivel de <b style="color:var(--text)">arma</b> → +1 stat <span style="color:#f4c430;">weapon</span> en combate<br>'
-    + '🛡️ Cada nivel de <b style="color:var(--text)">armadura</b> → +1 stat <span style="color:#7ec8e3;">armor</span> en combate</div></div>';
+  var smithyPct = Math.round(bldLvl / 15 * 100);
+  html += '<div class="card" style="margin-bottom:14px;">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
+    + '<div style="flex:1;">'
+    + '<div class="muted" style="font-size:.65rem;letter-spacing:.1em;margin-bottom:6px;">HERRERÍA</div>'
+    + '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px;">'
+    + '<span style="font-size:1.4rem;color:var(--accent);font-family:VT323,monospace;">Nv. ' + bldLvl + '</span>'
+    + '<span style="font-size:.7rem;color:var(--dim);">/ 15</span>'
+    + '</div>'
+    + '<div style="height:4px;background:rgba(255,255,255,.07);border-radius:2px;max-width:200px;">'
+    + '<div style="height:4px;width:' + smithyPct + '%;background:var(--ok);border-radius:2px;"></div>'
+    + '</div>'
+    + '<div class="muted" style="font-size:.6rem;margin-top:4px;">Mejoras hasta Nv.' + bldLvl + ' desbloqueadas</div>'
+    + '</div>'
+    + '<div style="font-size:.68rem;color:var(--dim);line-height:2;text-align:right;flex-shrink:0;">'
+    + '<span style="color:var(--ok);">⚔️ +arma</span> en combate<br>'
+    + '<span style="color:var(--accent);">🛡️ +armor</span> en combate'
+    + '</div></div></div>';
 
   // Grid
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;">';
@@ -248,12 +260,14 @@ async function renderSmithy() {
       + '<span style="font-size:1.8rem;">' + troop.icon + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:.88rem;color:var(--accent);font-family:VT323,monospace;">' + troop.name.toUpperCase() + '</div>'
-      + '<div class="muted" style="font-size:.6rem;">Base weapon: ' + troop.weapon + ' · Base armor: ' + troop.armor + '</div>'
+      + '<div class="muted" style="font-size:.6rem;">Ataque base: ' + troop.weapon + ' · Defensa base: ' + troop.armor + (d.magical ? '' : '') + '</div>'
       + (d.magical ? '<div style="font-size:.58rem;color:var(--esencia,#c084fc);margin-top:1px;">✨ Tropa mágica — usa Esencia</div>' : '')
       + '</div>'
-      + '<div style="text-align:right;font-size:.68rem;color:var(--dim);line-height:1.8;">'
-      + '⚔️ ' + (wLvl > 0 ? '<b style="color:var(--ok);">+' + wLvl + '</b>' : '—') + '<br>'
-      + '🛡️ ' + (aLvl > 0 ? '<b style="color:var(--accent);">+' + aLvl + '</b>' : '—')
+      + '<div style="text-align:right;font-size:.68rem;color:var(--dim);line-height:1.9;">'
+      + '<span style="font-size:.55rem;letter-spacing:.08em;opacity:.6;">ARMA</span> '
+      + (wLvl > 0 ? '<b style="color:var(--ok);">+' + wLvl + '</b>' : '<span style="opacity:.4;">—</span>') + '<br>'
+      + '<span style="font-size:.55rem;letter-spacing:.08em;opacity:.6;">ARMOR</span> '
+      + (aLvl > 0 ? '<b style="color:var(--accent);">+' + aLvl + '</b>' : '<span style="opacity:.4;">—</span>')
       + '</div></div>';
     html += itemBlock('weapon', d.weapon, wLvl, wNext, wCost, wCanBuy, wLocked, wMaxed);
     html += itemBlock('armor',  d.armor,  aLvl, aNxt,  aCost, aCanBuy, aLocked, aMaxed);

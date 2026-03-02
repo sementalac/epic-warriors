@@ -36,6 +36,78 @@
       overflow-x: hidden;
     }
 
+    /* ============================================================ */
+    /* UTILITY CLASSES — card, h2, muted, btn, input                */
+    /* ============================================================ */
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .h2 {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .65rem;
+      color: var(--accent);
+      letter-spacing: .08em;
+      margin-bottom: 8px;
+    }
+
+    .muted {
+      color: var(--dim);
+      font-size: .75rem;
+      line-height: 1.5;
+    }
+
+    .input {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: 'VT323', monospace;
+      font-size: .85rem;
+      outline: none;
+      width: 100%;
+      transition: border-color .2s;
+    }
+
+    .input:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      background: rgba(0,212,255,.1);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      color: var(--accent);
+      font-family: 'VT323', monospace;
+      font-size: .82rem;
+      cursor: pointer;
+      letter-spacing: .06em;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: rgba(0,212,255,.22);
+    }
+
+    .btn:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    .btn.btn-sm {
+      padding: 6px 10px;
+      font-size: .8rem;
+    }
+
+    /* ============================================================ */
+
     .stars {
       position: fixed;
       inset: 0;
@@ -663,16 +735,33 @@
       padding: 9px;
       background: rgba(79, 255, 176, .04);
       border: 1px solid rgba(79, 255, 176, .15);
+      border-left: 3px solid var(--ok);
       border-radius: 4px;
       margin-bottom: 6px;
+      transition: background .2s;
+    }
+
+    .queue-item:hover {
+      background: rgba(79, 255, 176, .07);
+    }
+
+    .queue-item.mission {
+      background: rgba(0, 212, 255, .04);
+      border-color: rgba(0, 212, 255, .2);
+    }
+
+    .queue-item.mission:hover {
+      background: rgba(0, 212, 255, .08);
     }
 
     .queue-icon {
       font-size: 1.1rem;
+      flex-shrink: 0;
     }
 
     .queue-info {
       flex: 1;
+      min-width: 0;
     }
 
     .queue-name {
@@ -700,19 +789,24 @@
       transition: width .5s;
     }
 
-    /* BUILDINGS */
+    /* ============================================================ */
+    /* BUILDINGS — tarjetas con botón anclado al fondo              */
+    /* ============================================================ */
     .bld-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(265px, 1fr));
       gap: 14px;
     }
 
+    /* FIX: flex column para que el botón se ancle al fondo */
     .bld-card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
       transition: all .3s;
+      display: flex;
+      flex-direction: column;
     }
 
     .bld-card:hover {
@@ -728,6 +822,7 @@
       align-items: center;
       gap: 10px;
       border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
 
     .bld-ico {
@@ -740,6 +835,7 @@
       background: rgba(0, 212, 255, .08);
       border-radius: 6px;
       border: 1px solid rgba(0, 212, 255, .15);
+      flex-shrink: 0;
     }
 
     .bld-name {
@@ -760,8 +856,12 @@
       font-weight: bold;
     }
 
+    /* FIX: flex:1 + flex column → el botón cae al fondo */
     .bld-body {
       padding: 12px 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     .bld-desc {
@@ -769,6 +869,7 @@
       color: var(--dim);
       line-height: 1.5;
       margin-bottom: 9px;
+      min-height: 2.5em; /* altura mínima para alinear cards con descripción corta */
     }
 
     .prod-row {
@@ -776,6 +877,7 @@
       gap: 5px;
       margin-bottom: 9px;
       flex-wrap: wrap;
+      min-height: 20px; /* reserva espacio aunque no haya badges */
     }
 
     .pbadge {
@@ -817,6 +919,7 @@
       gap: 7px;
       margin-bottom: 9px;
       flex-wrap: wrap;
+      min-height: 18px; /* reserva espacio aunque el coste tenga menos recursos */
     }
 
     .cost-i {
@@ -849,6 +952,7 @@
       transition: width .5s;
     }
 
+    /* FIX: margin-top: auto ancla el botón al fondo de la tarjeta */
     .bld-btn {
       width: 100%;
       padding: 8px;
@@ -864,6 +968,7 @@
       align-items: center;
       justify-content: center;
       gap: 5px;
+      margin-top: auto;
     }
 
     .bld-btn.avail {
@@ -904,19 +1009,11 @@
     }
 
     /* OVERVIEW */
-
-
-
-
-
     .planet-coords {
       font-size: .7rem;
       color: var(--dim);
       margin-bottom: 8px;
     }
-
-
-
 
     /* MAP */
     .map-page-layout {
@@ -1535,6 +1632,12 @@
       padding: 2px 8px;
       border-radius: 10px;
       pointer-events: none;
+      transition: all .2s;
+    }
+
+    .bld-head:hover .detail-badge {
+      color: var(--accent);
+      border-color: rgba(0, 212, 255, .5);
     }
 
     ::-webkit-scrollbar {
@@ -1572,7 +1675,6 @@
       display: none;
     }
 
-
     .modal-close {
       margin-left: auto;
       background: rgba(255, 61, 90, .08);
@@ -1596,10 +1698,6 @@
       padding: 20px;
     }
 
-
-
-
-
     .lvl-badge {
       display: inline-block;
       font-family: 'Press Start 2P', cursive;
@@ -1615,7 +1713,6 @@
       background: rgba(0, 212, 255, .2);
       color: var(--accent);
     }
-
 
     .cost-line {
       font-size: .63rem;
@@ -1635,7 +1732,6 @@
     .cost-line.d {
       color: var(--deut);
     }
-
 
     .prod-line {
       font-size: .63rem;
@@ -1659,10 +1755,6 @@
     .prod-line.e {
       color: var(--energy);
     }
-
-
-
-
 
     .modal-note {
       font-size: .65rem;
@@ -1744,11 +1836,6 @@
       font-weight: 700;
       opacity: .85;
       background: rgba(255, 255, 255, .06);
-    }
-
-    .btn.btn-sm {
-      padding: 6px 10px;
-      font-size: .8rem;
     }
 
     .grid2 {
@@ -1961,12 +2048,17 @@
       gap: 14px;
     }
 
+    /* Tarjetas de recursos con altura uniforme */
+    .recursos-grid .card {
+      display: flex;
+      flex-direction: column;
+    }
+
     @media(max-width:700px) {
       .recursos-grid {
         grid-template-columns: 1fr;
       }
     }
-
 
     .rec-btn.red {
       background: rgba(224, 64, 64, .08);
@@ -1985,7 +2077,6 @@
       .main-layout {
         display: block;
         padding-bottom: 70px;
-        /* Space for bottom nav */
       }
 
       .sidebar {
@@ -2064,7 +2155,6 @@
         margin-right: 0;
       }
 
-
       .content {
         padding: 15px 10px 80px;
       }
@@ -2087,7 +2177,14 @@
 
       .version-footer {
         bottom: 75px;
-        /* Above bottom nav */
+      }
+
+      .bld-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .grid2 {
+        grid-template-columns: 1fr;
       }
     }
 
@@ -2106,12 +2203,6 @@
     .admin-overlay.hidden {
       display: none;
     }
-
-    /* Dropdown de usuarios en el panel admin */
-
-
-
-
 
     .admin-users-item {
       padding: 8px;
@@ -2287,4 +2378,596 @@
       border-left: 3px solid var(--danger);
       background: rgba(224, 64, 64, 0.1);
     }
-  </style>
+
+    /* ============================================================ */
+    /* TROPAS — página de entrenamiento y reclutamiento             */
+    /* ============================================================ */
+
+    /* ── Panel "EN ENTRENAMIENTO" — siempre visible, sin layout shift ── */
+    .training-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      /* Altura mínima garantizada: nunca colapsa a 0 */
+      min-height: 90px;
+    }
+
+    .training-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 12px;
+    }
+
+    .training-panel-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .68rem;
+      color: var(--accent);
+      letter-spacing: .1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .training-panel-title .icon {
+      font-size: 1rem;
+    }
+
+    /* Placeholder cuando no hay tropas entrenando */
+    .training-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 42px;
+      border: 1px dashed rgba(255,255,255,.08);
+      border-radius: 5px;
+      font-size: .7rem;
+      color: var(--dim);
+      letter-spacing: .06em;
+    }
+
+    /* Tropa activa entrenando */
+    .training-active-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: rgba(96, 208, 96, .05);
+      border: 1px solid rgba(96, 208, 96, .18);
+      border-radius: 5px;
+      margin-bottom: 8px;
+    }
+
+    .training-active-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .training-active-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .training-active-name {
+      font-size: .8rem;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .training-active-time {
+      font-size: .65rem;
+      color: var(--ok);
+    }
+
+    .training-active-eta {
+      font-size: .6rem;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+
+    /* Barra de progreso del entrenamiento activo */
+    .training-bar {
+      width: 100%;
+      height: 3px;
+      background: rgba(255,255,255,.05);
+      border-radius: 2px;
+      margin-top: 5px;
+      overflow: hidden;
+    }
+
+    .training-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--ok), var(--accent));
+      border-radius: 2px;
+      transition: width .8s linear;
+    }
+
+    /* Sección "EN ESPERA" — scroll horizontal, sin crecer en altura */
+    .training-waiting-section {
+      margin-top: 10px;
+    }
+
+    .training-waiting-label {
+      font-size: .55rem;
+      color: var(--dim);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .training-waiting-list {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .training-waiting-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: .72rem;
+      color: var(--text);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .training-waiting-chip .chip-icon {
+      font-size: .85rem;
+    }
+
+    .training-waiting-chip .chip-count {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .55rem;
+      color: var(--gold);
+    }
+
+    /* Botón "Cancelar todo" */
+    .training-cancel-all {
+      padding: 5px 12px;
+      background: rgba(224,64,64,.08);
+      border: 1px solid rgba(224,64,64,.35);
+      border-radius: 4px;
+      color: var(--danger);
+      font-family: 'VT323', monospace;
+      font-size: .68rem;
+      cursor: pointer;
+      letter-spacing: .06em;
+      transition: all .2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .training-cancel-all:hover {
+      background: rgba(224,64,64,.2);
+      border-color: var(--danger);
+    }
+
+    /* ── Sección RECLUTAR ── */
+    .recruit-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .recruit-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .recruit-panel-title {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .68rem;
+      color: var(--accent);
+      letter-spacing: .1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .recruit-panel-sub {
+      font-size: .65rem;
+      color: var(--dim);
+      margin-bottom: 12px;
+    }
+
+    /* Barra de capacidad de barracas */
+    .barracas-bar-wrap {
+      margin-bottom: 8px;
+    }
+
+    .barracas-bar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .6rem;
+      color: var(--dim);
+      margin-bottom: 4px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .barracas-bar-val {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .62rem;
+    }
+
+    .barracas-bar-val.full  { color: var(--danger); }
+    .barracas-bar-val.warn  { color: var(--gold); }
+    .barracas-bar-val.ok    { color: var(--ok); }
+
+    .barracas-bar-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .barracas-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width .5s, background .5s;
+    }
+
+    /* Colores dinámicos según % */
+    .barracas-bar-fill.ok   { background: var(--ok); }
+    .barracas-bar-fill.warn { background: var(--gold); }
+    .barracas-bar-fill.full {
+      background: var(--danger);
+      animation: barrPulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes barrPulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .6; }
+    }
+
+    /* Cuarteles bonus tag */
+    .cuarteles-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .62rem;
+      color: var(--gold);
+      background: rgba(240,192,64,.08);
+      border: 1px solid rgba(240,192,64,.2);
+      border-radius: 3px;
+      padding: 2px 8px;
+      margin-bottom: 12px;
+    }
+
+    /* Separadores de sección (CIVILES / MILITARES) */
+    .troop-section-label {
+      font-size: .55rem;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--dim);
+      padding: 10px 0 5px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      margin-bottom: 8px;
+    }
+
+    /* Fila de tropa individual */
+    .troop-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.02);
+      border: 1px solid rgba(255,255,255,.05);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      transition: background .15s, border-color .15s;
+      cursor: pointer;
+    }
+
+    .troop-row:hover {
+      background: rgba(0,212,255,.04);
+      border-color: rgba(0,212,255,.18);
+    }
+
+    .troop-row-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .troop-row-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .troop-row-name {
+      font-size: .82rem;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+    .troop-row-stats {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: .62rem;
+      color: var(--dim);
+    }
+
+    .troop-stat {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .troop-row-count {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .troop-count-val {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .9rem;
+      color: var(--gold);
+      line-height: 1;
+    }
+
+    .troop-count-label {
+      font-size: .55rem;
+      color: var(--dim);
+    }
+
+    /* Controles de reclutamiento (input + botón) */
+    .troop-recruit-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .troop-recruit-input {
+      width: 48px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 4px;
+      color: var(--text);
+      font-family: 'VT323', monospace;
+      font-size: .9rem;
+      text-align: center;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .troop-recruit-input:focus {
+      border-color: var(--accent);
+    }
+
+    .troop-recruit-btn {
+      padding: 7px 14px;
+      background: rgba(240,192,64,.12);
+      border: 1px solid var(--gold);
+      border-radius: 4px;
+      color: var(--gold);
+      font-family: 'VT323', monospace;
+      font-size: .75rem;
+      letter-spacing: .06em;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .troop-recruit-btn:hover {
+      background: rgba(240,192,64,.25);
+      box-shadow: 0 0 10px rgba(240,192,64,.2);
+    }
+
+    .troop-recruit-btn:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* Aldeano — fila especial, sin controles de reclutamiento */
+    .troop-row.aldeano {
+      background: rgba(255,221,96,.03);
+      border-color: rgba(255,221,96,.1);
+    }
+
+    .troop-row.aldeano:hover {
+      background: rgba(255,221,96,.06);
+      border-color: rgba(255,221,96,.22);
+    }
+
+    .troop-row.aldeano .troop-count-val {
+      color: var(--aldeanos);
+    }
+
+
+    /* ============================================================ */
+    /* TQ — Training Queue & Summoning Queue shared components      */
+    /* Panel siempre visible, chips con scroll horizontal           */
+    /* ============================================================ */
+
+    /* Contenedor externo — min-height para evitar layout shift */
+    .tq-box {
+      min-height: 80px;
+    }
+
+    /* Placeholder vacío — ocupa espacio sin mostrar nada feo */
+    .tq-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 56px;
+      border: 1px dashed rgba(255,255,255,.07);
+      border-radius: 6px;
+      font-size: .72rem;
+      color: var(--dim);
+      letter-spacing: .06em;
+    }
+
+    /* Cabecera: recuento + botón cancelar */
+    .tq-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 10px;
+    }
+
+    .tq-header-count {
+      font-size: .65rem;
+      color: var(--dim);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .tq-cancel-btn {
+      padding: 3px 10px;
+      background: rgba(224,64,64,.08);
+      border: 1px solid rgba(224,64,64,.3);
+      border-radius: 4px;
+      color: var(--danger);
+      font-family: 'VT323', monospace;
+      font-size: .7rem;
+      cursor: pointer;
+      letter-spacing: .04em;
+      transition: all .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tq-cancel-btn:hover {
+      background: rgba(224,64,64,.2);
+      border-color: var(--danger);
+    }
+
+    /* Tropa/criatura activa entrenando */
+    .tq-active {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: rgba(96,208,96,.05);
+      border: 1px solid rgba(96,208,96,.15);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .tq-active-icon {
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .tq-active-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tq-active-name {
+      font-size: .88rem;
+      color: var(--text);
+      margin-bottom: 5px;
+      font-family: 'VT323', monospace;
+    }
+
+    /* Barra de progreso */
+    .tq-bar {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,.06);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+
+    .tq-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--ok), var(--accent));
+      border-radius: 2px;
+      transition: width .9s linear;
+    }
+
+    .tq-active-time {
+      font-size: .68rem;
+      color: var(--ok);
+    }
+
+    .tq-active-eta {
+      font-size: .6rem;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+
+    /* Sección EN ESPERA */
+    .tq-waiting {
+      margin-top: 4px;
+    }
+
+    .tq-waiting-label {
+      font-size: .58rem;
+      color: var(--dim);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    /* Chips en scroll horizontal — NUNCA hace flex-wrap */
+    .tq-chips {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      /* No flex-wrap: el scroll absorbe el exceso */
+    }
+
+    .tq-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: .75rem;
+      color: var(--text);
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-family: 'VT323', monospace;
+    }
+
+    .tq-chip-icon {
+      font-size: .9rem;
+      line-height: 1;
+    }
+
+    .tq-chip-count {
+      font-family: 'Press Start 2P', cursive;
+      font-size: .52rem;
+      color: var(--gold);
+    }
+

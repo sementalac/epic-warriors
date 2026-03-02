@@ -282,7 +282,7 @@ function renderQueue(vs) {
       var div = document.createElement('div');
       div.className = 'queue-item mission';
       div.style.borderLeftColor = color;
-      var cancelBtn = (m.type !== 'return' && m.type !== 'found' && m.type !== 'move' && m.type !== 'reinforce' && m.type !== 'transport' && m.type !== 'return_reinforce')
+      var cancelBtn = (m.type !== 'return' && m.type !== 'found' && m.type !== 'return_reinforce')
         ? '<button onclick="cancelMission(\'' + (m.mid || m.finish_at) + '\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar</button>'
         : '';
       var hasTroopsInMission = m.troops && Object.keys(m.troops).some(function(k){return (m.troops[k]||0)>0;});
@@ -489,6 +489,11 @@ function renderMap() {
   var npcLookup = {};
   (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).forEach(function (n) { npcLookup[n.x + ',' + n.y] = n; });
 
+  // Cargar cuevas si aún no están (primer render)
+  if (typeof loadCaves === 'function' && !cavesLoaded) {
+    loadCaves().then(function () { renderMap(); });
+  }
+
   // Construir lookup de aldeas por coordenada
   var lookup = {};
   allVillages.forEach(function (v) { lookup[v.x + ',' + v.y] = v; });
@@ -499,9 +504,11 @@ function renderMap() {
 
   // Indica si la cámara está descentrada del jugador
   var isOffCenter = (cx !== activeVillage.x || cy !== activeVillage.y);
-  document.getElementById('mapCoordsDisplay').textContent =
-    'Cámara: [' + cx + ', ' + cy + ']' +
-    (isOffCenter ? '  |  Tu aldea: [' + activeVillage.x + ', ' + activeVillage.y + ']  |  (⌂ para volver)' : '  |  Vista: [' + (cx - r) + ',' + (cy - r) + '] a [' + (cx + r) + ',' + (cy + r) + ']');
+  document.getElementById('mapCoordsDisplay').innerHTML =
+    '<span style="font-family:VT323,monospace;color:var(--accent);">[' + cx + ', ' + cy + ']</span>' +
+    (isOffCenter
+      ? ' <span style="color:var(--dim);">·</span> Tu aldea: <span style="color:var(--gold);">[' + activeVillage.x + ', ' + activeVillage.y + ']</span> <span style="color:var(--dim);font-size:.75em;">⌂ para centrar</span>'
+      : ' <span style="color:var(--dim);font-size:.8em;">· ' + (r*2+1) + '×' + (r*2+1) + ' casillas visibles</span>');
 
   renderMinimap(cx, cy);
 
@@ -532,6 +539,11 @@ function renderMap() {
         cell.textContent = isCleared ? '🏰' : '🛡️';
         if (isCleared) { cell.style.opacity = '0.4'; cell.title += ' (SUPERADO)'; }
         (function (n, nx, ny) { cell.onclick = function () { selectNPC(n, nx, ny); }; })(npc, wx, wy);
+      } else if (typeof getCaveAt === 'function' && getCaveAt(wx, wy)) {
+        // ── CUEVA SALVAJE ──
+        var cave = getCaveAt(wx, wy);
+        if (typeof renderCaveCell === 'function') renderCaveCell(cell, cave);
+        (function (c, cx2, cy2) { cell.onclick = function () { selectCave(c, cx2, cy2); }; })(cave, wx, wy);
       } else {
         cell.classList.add('empty');
         if (wx === activeVillage.x && wy === activeVillage.y) cell.classList.add('center-marker');
@@ -624,13 +636,13 @@ async function openMissionModal(type, targetId, x, y) {
         + '<p style="font-size:0.7rem; color:var(--dim);">Solo los exploradores pueden realizar misiones de espionaje.</p>';
     }
   } else {
-    html += '<p>Selecciona tus tropas:</p>';
+    html += '<div style="font-size:.62rem;color:var(--dim);letter-spacing:.1em;padding:2px 0 8px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px;">TROPAS</div>';
     Object.keys(TROOP_TYPES).forEach(k => {
       var count = (k === 'aldeano') ? aldLibres : (troops[k] || 0);
       if (count > 0) {
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">'
-          + '<span>' + TROOP_TYPES[k].icon + ' ' + TROOP_TYPES[k].name + ' (' + count + ' disp.)</span>'
-          + '<input type="number" id="mUnits_' + k + '" value="0" min="0" max="' + count + '" style="width:60px;" oninput="calcMissionETA(' + x + ',' + y + ')">'
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">'
+          + '<span style="font-size:.82rem;">' + TROOP_TYPES[k].icon + ' ' + TROOP_TYPES[k].name + ' <span style="color:var(--dim);font-size:.72rem;">(' + count + ')</span></span>'
+          + '<input type="number" id="mUnits_' + k + '" value="0" min="0" max="' + count + '" style="width:56px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:VT323,monospace;font-size:.9rem;text-align:center;" oninput="calcMissionETA(' + x + ',' + y + ')">'
           + '</div>';
       }
     });
@@ -641,12 +653,12 @@ async function openMissionModal(type, targetId, x, y) {
       var count = creatures[k] || 0;
       if (count > 0) {
         if (!hasCreatures) {
-          html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);"><p style="color:var(--accent);font-size:.85rem;">🐉 Criaturas:</p></div>';
+          html += '<div style="font-size:.62rem;color:var(--dim);letter-spacing:.1em;padding:2px 0 8px;border-bottom:1px solid rgba(255,255,255,.06);margin-top:12px;margin-bottom:8px;">CRIATURAS</div>';
           hasCreatures = true;
         }
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">'
-          + '<span>' + CREATURE_TYPES[k].icon + ' ' + CREATURE_TYPES[k].name + ' (' + count + ' disponibles)</span>'
-          + '<input type="number" id="mUnits_' + k + '" value="0" min="0" max="' + count + '" style="width:60px;">'
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">'
+          + '<span style="font-size:.82rem;">' + CREATURE_TYPES[k].icon + ' ' + CREATURE_TYPES[k].name + ' <span style="color:var(--dim);font-size:.72rem;">(' + count + ')</span></span>'
+          + '<input type="number" id="mUnits_' + k + '" value="0" min="0" max="' + count + '" style="width:56px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-family:VT323,monospace;font-size:.9rem;text-align:center;">'
           + '</div>';
       }
     });
@@ -700,12 +712,12 @@ async function openMissionModal(type, targetId, x, y) {
   // ETA based on distance + slowest troop
   var dist = Math.max(Math.abs(x - activeVillage.x), Math.abs(y - activeVillage.y));
   html += '</div>'
-    + '<div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);">'
-    + '<div style="font-size:.68rem;color:var(--dim);margin-bottom:2px;">📍 Distancia: ' + dist + ' casillas</div>'
-    + '<div id="missionETA" style="font-size:.8rem;color:var(--accent);">Selecciona tropas para ver ETA</div>'
+    + '<div style="padding:8px 15px;border-top:1px solid var(--border);background:var(--panel2);display:flex;justify-content:space-between;align-items:center;">'
+    + '<span style="font-size:.68rem;color:var(--dim);">📍 ' + dist + ' casillas</span>'
+    + '<span id="missionETA" style="font-size:.78rem;color:var(--dim);">— elige tropas</span>'
     + '</div>'
     + '<div class="bld-modal-footer">'
-    + '<button class="bld-footer-btn avail" onclick="executeMissionClick(\'' + type + '\', \'' + targetId + '\', ' + x + ', ' + y + ')">Confirmar Misión</button>'
+    + '<button class="bld-footer-btn avail" onclick="executeMissionClick(\'' + type + '\', \'' + targetId + '\', ' + x + ', ' + y + ')">' + (type === 'spy' ? '🔍 Enviar espías' : '⚔️ Lanzar ataque') + '</button>'
     + '</div>'
     + '</div></div>';
   var wrap = document.getElementById('bldModal'); // reusing building modal container
@@ -1010,21 +1022,20 @@ function selectCell(village, isOwn, isAlly, x, y) {
       : ' <span style="color:var(--danger);font-size:.64rem;">✗ Fuera de rango (' + rng + ')</span>');
 
   if (!village) {
-    title.textContent = 'Casilla vacía';
-    sub.innerHTML = '[' + x + ', ' + y + ']' + rngTag;
+    title.innerHTML = '🌿 Territorio vacío';
+    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span>' + rngTag;
     if (inRange) {
       var myVillageCount = (myVillages || []).length;
       if (myVillageCount >= 10) {
-        actions.innerHTML = '<span style="font-size:.7rem;color:var(--danger);">Máximo 10 aldeas alcanzado.</span>';
+        actions.innerHTML = '<span style="font-size:.72rem;color:var(--danger);">⚠ Máximo de aldeas (10) alcanzado.</span>';
       } else {
-        actions.innerHTML = '<button class="map-action-btn move" onclick="foundVillage(' + x + ',' + y + ')">🏠 Fundar Aldea<br><span style="font-size:.6rem;color:rgba(255,255,255,.6);">Consume 1 explorador + 50 aldeanos</span></button>';
+        actions.innerHTML = '<button class="map-action-btn move" onclick="foundVillage(' + x + ',' + y + ')">🏠 Fundar Aldea <span style="font-size:.65rem;opacity:.7;">· 1 explorador + 50 aldeanos</span></button>';
       }
     } else {
       var rng2 = activeVillage ? getTorreRange(activeVillage.state.buildings) : 0;
-      var outMsg = rng2 === 0
-        ? '<span style="font-size:.7rem;color:var(--danger)">⚠ No tienes Torre de Vigía. Constrúyela para poder fundar aldeas aquí.</span>'
-        : '<span style="font-size:.7rem;color:var(--danger)">⚠ Fuera de alcance. Mejora la Torre de Vigía (nivel actual: ' + rng2 + ') para fundar una aldea aquí.</span>';
-      actions.innerHTML = outMsg;
+      actions.innerHTML = rng2 === 0
+        ? '<span style="font-size:.72rem;color:var(--danger);">⚠ Construye una Torre de Vigía para fundar aldeas.</span>'
+        : '<span style="font-size:.72rem;color:var(--danger);">⚠ Fuera de rango (Tu torre: ' + rng2 + '). Mejora la Torre de Vigía.</span>';
     }
     return;
   }
@@ -1032,10 +1043,10 @@ function selectCell(village, isOwn, isAlly, x, y) {
   var ownerName = (village.state && village.state.owner_name) ? village.state.owner_name : 'Desconocido';
 
   if (isOwn) {
-    title.textContent = (village.name || 'Mi Aldea') + ' 🏠';
-    sub.innerHTML = '[' + x + ', ' + y + '] · Tuya' + rngTag;
+    title.innerHTML = (escapeHtml(village.name || 'Mi Aldea')) + ' <span style="color:var(--gold);">🏠</span>';
+    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span> · <span style="color:var(--gold);">Tu aldea</span>' + rngTag;
     if (village.id === activeVillage.id) {
-      actions.innerHTML = '<span style="font-size:.7rem;color:var(--dim);">Esta es tu aldea activa.</span>';
+      actions.innerHTML = '<span style="font-size:.72rem;color:var(--dim);">⭐ Esta es tu aldea activa.</span>';
     } else {
       var vid2 = village.id || '';
       var vname2 = escapeJs(village.name || 'Aldea');
@@ -1047,8 +1058,8 @@ function selectCell(village, isOwn, isAlly, x, y) {
     var allyOwnerId = (village.owner_id || '');
     var allyVid = (village.id || '');
     var allyVname = escapeJs(village.name || 'Aldea aliada');
-    title.textContent = (village.name || 'Aldea aliada') + ' 🤝';
-    sub.innerHTML = '[' + x + ', ' + y + '] · Aliado' + rngTag;
+    title.innerHTML = (escapeHtml(village.name || 'Aldea aliada')) + ' <span style="color:var(--ok);">🤝</span>';
+    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span> · <span style="color:var(--ok);">' + escapeHtml(ownerName) + '</span>' + rngTag;
     if (inRange) {
       actions.innerHTML = ''
         + '<button class="map-action-btn move" onclick="openMoveModal(\'' + allyVid + '\',\'' + allyVname + '\',' + x + ',' + y + ',true)">🛡️ Enviar refuerzo</button>'
@@ -1058,15 +1069,8 @@ function selectCell(village, isOwn, isAlly, x, y) {
       actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
     }
   } else {
-    title.textContent = (village.name || 'Aldea enemiga') + ' ⚔️';
-    sub.textContent = '[' + x + ', ' + y + '] · ' + String(ownerName || '');
-    var span = document.createElement('span');
-    span.style.fontSize = '.64rem';
-    span.style.marginLeft = '6px';
-    if (rng === 0) { span.style.color = 'var(--danger)'; span.textContent = '⚠ Sin torre'; }
-    else if (inRange) { span.style.color = 'var(--ok)'; span.textContent = '✓ En rango (' + rng + ')'; }
-    else { span.style.color = 'var(--danger)'; span.textContent = '✗ Fuera de rango (' + rng + ')'; }
-    sub.appendChild(span);
+    title.innerHTML = (escapeHtml(village.name || 'Aldea enemiga')) + ' <span style="color:var(--danger);">⚔️</span>';
+    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span> · <span style="color:var(--text);">' + escapeHtml(String(ownerName || 'Desconocido')) + '</span>' + rngTag;
     var ownerId = (village.owner_id || village.user_id || '');
     var vid = (village.id || '');
     if (inRange) {
@@ -1766,19 +1770,28 @@ async function executeMove(m) {
       }
     }
 
+    // Bug B fix: criaturas no ocupan plazas de barracas — calcular slots solo para tropas normales
     var freeSlots = Math.max(0, getBarracksCapacity(dvs.buildings) - getBarracksUsed(dvs));
     var slotsNeeded = 0;
     Object.keys(m.troops).forEach(function (k) {
       var count = m.troops[k] || 0;
-      if (count > 0) slotsNeeded += (k === 'aldeano') ? count : count * ((TROOP_TYPES[k] && TROOP_TYPES[k].barracasSlots) || 1);
+      if (count > 0 && TROOP_TYPES[k]) {  // solo tropas, no criaturas
+        slotsNeeded += (k === 'aldeano') ? count : count * (TROOP_TYPES[k].barracasSlots || 1);
+      }
     });
-    var pct = slotsNeeded > freeSlots ? freeSlots / slotsNeeded : 1;
+    var pct = (slotsNeeded > 0 && slotsNeeded > freeSlots) ? freeSlots / slotsNeeded : 1;
     var accepted = {}, rejected = {}, anyRejected = false;
     Object.keys(m.troops).forEach(function (k) {
       var count = m.troops[k] || 0;
-      var toAccept = Math.floor(count * pct);
-      accepted[k] = toAccept;
-      if (toAccept < count) { rejected[k] = count - toAccept; anyRejected = true; }
+      if (count <= 0) { accepted[k] = 0; return; }
+      if (CREATURE_TYPES[k]) {
+        // Las criaturas siempre se aceptan todas (no ocupan barracas)
+        accepted[k] = count;
+      } else {
+        var toAccept = Math.floor(count * pct);
+        accepted[k] = toAccept;
+        if (toAccept < count) { rejected[k] = count - toAccept; anyRejected = true; }
+      }
     });
     Object.keys(accepted).forEach(function (k) {
       if ((accepted[k] || 0) <= 0) return;
@@ -1797,8 +1810,8 @@ async function executeMove(m) {
         await saveVillage(origV);
       }
     }
-    var rejMsg = anyRejected ? '\n\u26a0\ufe0f Algunas tropas volvieron (barracas llenas en destino).' : '';
-    await sendSystemReport(currentUser.id, '\u2694 TROPAS TRASLADADAS',
+    var rejMsg = anyRejected ? '\n⚠️ Algunas tropas volvieron (barracas llenas en destino).' : '';
+    await sendSystemReport(currentUser.id, '⚔ TROPAS TRASLADADAS',
       'Tropas llegaron a ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + '] y ya son de esa aldea.' + cargoMsg + rejMsg);
     renderMap();
   } catch (e) { console.error('executeMove error:', e); }
@@ -2233,6 +2246,8 @@ function snapshotResources(vs) {
   return res;
 }
 
+// Problema 6 fix: debouncedSave era un wrapper vacío sin debounce real.
+// scheduleSave() ya hace el debounce de 2s internamente — debouncedSave es ahora un alias directo.
 function debouncedSave() {
   scheduleSave();
 }
@@ -2513,6 +2528,7 @@ function openBuildingDetail(id) {
   var isAlmacen = (id === 'almacen');
   var isGranja = (id === 'granja');
   var isBarracas = (id === 'barracas');
+  var isRefugio = (id === 'refugio');
 
   var isTorre = (id === 'torre');
   var isTorreInv = (id === 'torreinvocacion');
@@ -2524,7 +2540,8 @@ function openBuildingDetail(id) {
           : isTorre ? '<th>👁️ Alcance</th>'
             : isTorreInv ? '<th>🔮 Reducción</th>'
               : isMuralla ? '<th>🛡️ Defensa</th>'
-                : '<th>Producción</th>';
+                : isRefugio ? '<th>🕵️ Capacidad oculta</th>'
+                  : '<th>Producción</th>';
 
   var rowsHTML = '';
   for (var lvl = curLvl; lvl <= endShow; lvl++) {
@@ -2620,6 +2637,13 @@ function openBuildingDetail(id) {
           ? '<div class="pl" style="color:var(--danger)">Sin muralla — tropas expuestas</div>'
           : '<div class="pl" style="color:var(--piedra)">🏰 ' + fmt(wallHPShow) + ' HP de escudo</div>'
           + '<div class="pl" style="color:var(--dim);font-size:.58rem;">Atacantes deben destruirlo antes de dañar tropas</div>';
+      } else if (id === 'refugio') {
+        var fakeBldRef = {}; fakeBldRef['refugio'] = { level: lvl };
+        var refCap = getRefugioCapacity(fakeBldRef);
+        plines = lvl === 0
+          ? '<div class="pl" style="color:var(--danger)">Sin refugio — tropas visibles</div>'
+          : '<div class="pl" style="color:var(--accent)">🕵️ ' + refCap + ' plazas ocultas</div>'
+          + '<div class="pl" style="color:var(--dim);font-size:.58rem;">Invisibles a espías · No defienden · Ocupan plazas de barracas</div>';
       } else if (id === 'lab') {
         plines = lvl === 0
           ? '<div class="pl" style="color:var(--danger)">Sin nivel</div>'

@@ -6,14 +6,14 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.44</title>
+  <title>Epic Warriors Online v1.48</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- ⚠️ game-globals.js PRIMERO — define sbClient y globals antes que cualquier módulo -->
-  <script src="game-globals.js?v=1.44"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.44">
+  <script src="game-globals.js?v=1.47"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.47">
 </head>
 
 <body>
@@ -165,7 +165,7 @@
           <div class="nav-label">Militar</div>
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
-          <div class="nav-item" onclick="showPage('defense',this)"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
+          <div class="nav-item" onclick="showPage('defense',this);renderRefugio()"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
           <div class="nav-item" onclick="window.open('battle-simulator.html','_blank')"><span
               class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
@@ -188,7 +188,7 @@
       </nav>
       <main class="content">
         <div class="page active" id="page-overview">
-          <div class="page-title">VISION GENERAL</div>
+          <div class="page-title">VISIÓN GENERAL</div>
 
           <!-- Player profile card -->
           <div class="card" style="margin-bottom:14px;">
@@ -253,19 +253,19 @@
 
           <!-- Troop movement alerts -->
           <div class="card" style="margin-bottom:14px;">
-            <div class="h2">⚠️ Movimientos de tropas</div>
-            <div id="ovAlertsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin alertas activas.</div>
+            <div class="h2">🗺 MOVIMIENTOS</div>
+            <div id="ovAlertsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin movimientos activos.</div>
           </div>
 
           <!-- Refuerzos estacionados en esta aldea -->
           <div class="card" style="margin-bottom:14px;" id="ovReinforcementsCard" style="display:none;">
-            <div class="h2">🛡️ Refuerzos estacionados</div>
-            <div id="ovReinforcementsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin refuerzos.</div>
+            <div class="h2">🛡️ REFUERZOS AQUÍ</div>
+            <div id="ovReinforcementsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin refuerzos estacionados.</div>
           </div>
 
           <!-- Build queue -->
           <div class="queue-panel">
-            <div class="queue-title">CONSTRUCCION EN CURSO</div>
+            <div class="queue-title">EN CONSTRUCCIÓN</div>
             <div class="queue-empty" id="qEmptyOv">Sin construcciones activas.</div>
             <div id="qItemsOv"></div>
           </div>
@@ -279,13 +279,26 @@
 
           <!-- Resumen aldeanos -->
           <div class="queue-panel" style="border-color:rgba(255,221,96,.2);margin-bottom:14px;">
-            <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
-              <span style="font-size:.8rem;">👤 Libres: <b id="recAldLibres" style="color:var(--aldeanos)">0</b></span>
-              <span style="font-size:.8rem;">⚒️ Trabajando: <b id="recAldWorking"
-                  style="color:var(--accent2)">0</b></span>
-              <span style="font-size:.8rem;">🏠 Barracas: <b id="recAldCap" style="color:var(--dim)">0</b> plazas</span>
-              <span style="font-size:.8rem;">📦 Almacén: <b id="recAlmPct" style="color:var(--gold)">0%</b>
-                ocupado</span>
+            <div style="display:flex;gap:0;flex-wrap:wrap;">
+              <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
+                <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">LIBRES</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--aldeanos);" id="recAldLibres">0</div>
+              </div>
+              <div style="width:1px;background:var(--border);"></div>
+              <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
+                <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">TRABAJANDO</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--accent2);" id="recAldWorking">0</div>
+              </div>
+              <div style="width:1px;background:var(--border);"></div>
+              <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
+                <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">BARRACAS</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--dim);" id="recAldCap">0</div>
+              </div>
+              <div style="width:1px;background:var(--border);"></div>
+              <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
+                <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">ALMACÉN</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--gold);" id="recAlmPct">0%</div>
+              </div>
             </div>
           </div>
 
@@ -307,7 +320,7 @@
 
         <div class="page" id="page-map">
           <div class="page-title">MAPA MUNDIAL</div>
-          <div class="page-sub">Vista 15×15 centrada — usa ↑↓←→ o WASD para moverte. Mapa de 380×380</div>
+          <div class="page-sub">Pulsa una casilla para atacar, espiar o mover tropas · ↑↓←→ o WASD para navegar</div>
           <div class="map-page-layout">
             <div class="map-main-col">
               <div class="map-container">
@@ -390,14 +403,13 @@
           <div class="page-sub">Entrenamiento y unidades disponibles</div>
 
           <div class="card" style="margin-bottom:14px;">
-            <div class="h2">⏳ Cola de entrenamiento</div>
+            <div class="h2">⏳ EN ENTRENAMIENTO</div>
             <div id="trainingQueueBox" style="margin-top:10px;"></div>
           </div>
 
           <div class="card" style="margin-bottom:14px;">
-            <div class="h2">⚔️ Entrenar tropas</div>
-            <div class="muted" style="font-size:.7rem;margin-bottom:10px;">Pulsa el icono para ver estadísticas. Los
-              aldeanos se descuentan y materiales al encolar.</div>
+            <div class="h2">⚔️ RECLUTAR</div>
+            <div class="muted" style="font-size:.65rem;margin-bottom:10px;">Pulsa el icono de cada tropa para ver sus estadísticas completas.</div>
             <div id="trainOptionsBox" style="margin-top:10px;"></div>
           </div>
 
@@ -406,35 +418,38 @@
         </div>
         <div class="page" id="page-creatures">
           <div class="page-title">🐉 CRIATURAS</div>
-          <div class="page-sub">Criaturas invocadas - No ocupan barracas ni consumen provisiones</div>
+          <div class="page-sub">No ocupan barracas · No consumen provisiones · Requieren invocadores</div>
 
           <div class="card" style="margin-bottom:14px;">
-            <div class="h2">🔮 Torre de Invocación</div>
-            <div id="torreInvocacionInfo" style="font-size:.82rem;margin-top:8px;color:var(--gold);">—</div>
-            <div class="muted" style="margin-top:4px;font-size:.7rem;">Cada nivel reduce -5% el tiempo de invocación.
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <div class="h2">⏳ EN INVOCACIÓN</div>
+              <div id="torreInvocacionInfo" style="font-size:.72rem;color:var(--gold);">—</div>
             </div>
+            <div id="summoningQueueBox" style="margin-top:4px;">—</div>
           </div>
 
-          <div class="card" style="margin-bottom:14px;">
-            <div class="h2">📋 Cola de Invocación</div>
-            <div id="summoningQueueBox" style="margin-top:10px;">—</div>
-          </div>
 
           <div class="card" style="margin-bottom:14px;">
-            <div class="h2">👹 Criaturas Disponibles</div>
+            <div class="h2">👹 TUS CRIATURAS</div>
             <div id="creaturesListBox" style="margin-top:10px;"></div>
           </div>
 
+          <!-- ⛏️ v1.47: Apartado de Criaturas Cazadas -->
+          <div class="card" style="margin-bottom:14px;">
+            <div class="h2">⛏️ CRIATURAS CAZADAS</div>
+            <div id="caughtCreaturesBox" style="margin-top:10px;"></div>
+          </div>
+
           <div class="card">
-            <div class="h2">⚡ Invocar Criatura</div>
+            <div class="h2">⚡ INVOCAR</div>
             <div id="summonBox" style="margin-top:10px;"></div>
           </div>
         </div>
         <div class="page" id="page-defense">
-          <div class="coming-soon">
-            <div class="cs-icon">&#x1F6E1;</div>
-            <div class="cs-title">MODULO DE DEFENSA</div>
-            <div>Proximamente</div>
+          <div class="page-title">🛡️ DEFENSA</div>
+          <div class="page-sub">Oculta tropas en el Refugio · Invisibles a espías · No defienden mientras están dentro</div>
+          <div id="refugioContent">
+            <div class="muted" style="padding:20px;text-align:center;">Cargando…</div>
           </div>
         </div>
 
@@ -448,15 +463,15 @@
         </div>
         <div class="page" id="page-research">
           <div class="page-title">CENTRO DE INVESTIGACIÓN</div>
-          <div class="page-sub">Mejora el nivel de tus tropas gastando experiencia</div>
+          <div class="page-sub">Gasta experiencia de combate para subir el nivel de tus tropas · Máximo nivel 30</div>
 
           <!-- XP disponible -->
           <div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div>
-              <div class="muted" style="font-size:.72rem;margin-bottom:2px;">TU EXPERIENCIA DISPONIBLE</div>
-              <div id="researchXPDisplay" style="font-size:1.3rem;color:var(--gold);font-weight:700;">—</div>
+              <div class="muted" style="font-size:.65rem;letter-spacing:.1em;margin-bottom:3px;">EXPERIENCIA DISPONIBLE</div>
+              <div id="researchXPDisplay" style="font-size:1.4rem;color:var(--gold);font-family:VT323,monospace;">—</div>
             </div>
-            <button class="btn btn-sm" onclick="renderResearch()">↻ Actualizar</button>
+            <button class="btn btn-sm" onclick="renderResearch()" style="font-size:.68rem;">↻ Actualizar</button>
           </div>
 
           <!-- Tabla de tropas -->
@@ -465,10 +480,8 @@
           </div>
 
           <!-- Leyenda stats -->
-          <div class="card" style="margin-top:14px;font-size:.72rem;color:var(--dim);line-height:1.8;">
-            <div style="color:var(--accent);font-weight:700;margin-bottom:6px;">📖 Efectos por nivel de tropa</div>
-            <div>Cada nivel sube los stats según la tabla oficial (HP, Daño, Defensa, etc.).</div>
-            <div>Nivel máximo: <strong style="color:var(--gold);">30</strong> &nbsp;|&nbsp; Los aldeanos cuestan XP reducida (×2 en lugar de ×10).</div>
+          <div class="muted" style="margin-top:10px;font-size:.65rem;text-align:center;padding:8px;">
+            Cada nivel mejora Daño, HP, Defensa y Prob. Golpe · Los aldeanos cuestan XP reducida · Nv. máx: <strong style="color:var(--gold);">30</strong>
           </div>
         </div>
 
@@ -482,24 +495,24 @@
 
         <div class="page" id="page-ranking">
           <div class="page-title">RANKING</div>
-          <div class="page-sub">Clasificación militar — cada tropa cuenta 1 punto</div>
+          <div class="page-sub">Puntuación militar global · Se actualiza en tiempo real al ganar o perder tropas</div>
           <div class="card">
-            <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;">
-              <div class="muted">Se actualiza automáticamente cada 6 horas.</div>
-              <button class="btn" onclick="forceRefreshRanking()">↻ Forzar actualización</button>
+            <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div class="muted" style="font-size:.68rem;">Actualización automática cada 6h</div>
+              <button class="btn btn-sm" onclick="forceRefreshRanking()" style="font-size:.68rem;padding:3px 10px;">↻ Actualizar</button>
             </div>
-            <div id="rankingBox" style="margin-top:12px;"></div>
+            <div id="rankingBox"></div>
           </div>
         </div>
 
         <div class="page" id="page-alliances">
           <div class="page-title">ALIANZAS</div>
-          <div class="page-sub">Crear, solicitar, gestionar y comunicarse</div>
+          <div class="page-sub">Forma alianzas con otros jugadores · Coordina ataques · Chat privado de alianza</div>
 
           <!-- CABECERA MI ALIANZA -->
           <div class="card" style="margin-bottom:14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-              <div class="h2">Mi alianza</div>
+              <div class="h2">MI ALIANZA</div>
               <button class="btn btn-sm" onclick="renderAlliances()">&#x21BB; Actualizar</button>
             </div>
             <div id="myAllianceBox" class="muted">Cargando&#x2026;</div>
@@ -509,7 +522,7 @@
           <div id="alNoAlliancePanel">
             <div class="grid2">
               <div class="card">
-                <div class="h2">Crear alianza</div>
+                <div class="h2">CREAR ALIANZA</div>
                 <div class="muted" style="margin-bottom:10px;">Nombre + Tag (2-6 letras). Ser&#xE1;s el l&#xED;der.
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 110px;gap:8px;">
@@ -520,14 +533,14 @@
                 <div id="createAllianceMsg" class="muted" style="margin-top:8px;min-height:16px;"></div>
               </div>
               <div class="card">
-                <div class="h2">Solicitar unirse</div>
+                <div class="h2">UNIRSE A UNA ALIANZA</div>
                 <div class="muted" style="margin-bottom:10px;">Busca una alianza en la lista y pulsa Solicitar. El
                   l&#xED;der deber&#xE1; aceptarte.</div>
                 <div id="alPendingMsg" class="muted" style="min-height:16px;"></div>
               </div>
             </div>
             <div class="card" style="margin-top:14px;">
-              <div class="h2">Alianzas activas</div>
+              <div class="h2">ALIANZAS ACTIVAS</div>
               <div id="alliancesBox" style="margin-top:8px;"></div>
             </div>
           </div>
@@ -625,8 +638,7 @@
 
               <!-- Cabecera + acciones rápidas -->
               <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border);">
-                <div style="font-size:.7rem;letter-spacing:.12em;color:var(--accent);margin-bottom:10px;">📬 BANDEJA
-                </div>
+                <div style="font-size:.65rem;letter-spacing:.12em;color:var(--dim);margin-bottom:10px;">CONVERSACIONES</div>
 
                 <!-- DM -->
                 <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -641,11 +653,9 @@
                 <!-- Botones rápidos -->
                 <div style="display:flex;gap:6px;">
                   <button onclick="openAllianceChat()"
-                    style="flex:1;padding:5px 4px;background:rgba(96,208,96,.08);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">⚔
-                    Alianza</button>
+                    style="flex:1;padding:5px 4px;background:rgba(96,208,96,.08);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">⚔ Alianza</button>
                   <button onclick="openSystemThread()"
-                    style="flex:1;padding:5px 4px;background:rgba(192,96,255,.08);border:1px solid var(--esencia);border-radius:4px;color:var(--esencia);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">🔔
-                    Sistema</button>
+                    style="flex:1;padding:5px 4px;background:rgba(192,96,255,.08);border:1px solid var(--esencia);border-radius:4px;color:var(--esencia);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">🔔 Sistema</button>
                   <button onclick="renderThreads()"
                     style="flex:1;padding:5px 4px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:4px;color:var(--dim);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">↻</button>
                 </div>
@@ -785,6 +795,13 @@
           Cerrar</button>
       </div>
 
+      <!-- ⛏️ v1.47: Navegación rápida de admin -->
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+        <button class="admin-btn search" onclick="openAdminUsersPage()" style="background:rgba(0,212,255,.15);flex:1;min-width:120px;font-size:.75rem;">👥 Usuarios</button>
+        <button class="admin-btn search" onclick="openAdminCavesSection()" style="background:rgba(255,215,0,.15);flex:1;min-width:120px;font-size:.75rem;">⛏️ Cuevas</button>
+        <button class="admin-btn search" onclick="openAdminAlliancesSection()" style="background:rgba(192,132,252,.15);flex:1;min-width:120px;font-size:.75rem;">🛡️ Alianzas</button>
+      </div>
+
       <!-- Buscador de jugadores -->
       <div style="margin-bottom: 10px; font-size: 0.7rem; color: var(--dim);">BUSCAR JUGADOR (EMAIL O USERNAME)</div>
       <div class="admin-search-wrap">
@@ -837,6 +854,7 @@
 
       <!-- ── Reparación Global ── -->
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+
       <!-- ── Aldeas Fantasma ── -->
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -864,6 +882,15 @@
           </div>
         </div>
         <div id="ghostList" style="font-size:.72rem;"></div>
+      </div>
+
+      <!-- ── Cuevas ── -->
+      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">⛏️ CUEVAS</div>
+          <button class="admin-btn search" onclick="loadAdminCaves()" style="font-size:.68rem;padding:4px 10px;">↻ Gestionar</button>
+        </div>
+        <div id="adminCavesBox" style="font-size:.72rem;color:var(--dim);">Pulsa "Gestionar" para cargar las cuevas.</div>
       </div>
 
         <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px;letter-spacing:.1em;">MANTENIMIENTO GLOBAL</div>
@@ -928,23 +955,25 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.44</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.48</div>
 
   <!-- Módulos JS — cargados al final del body para que el DOM exista -->
   <!-- Datos estáticos primero (NPC_CASTLES) -->
   <script src="game-data.js"></script>
-  <!-- Módulos del juego — v1.44 -->
-  <script src="game-constants.js?v=1.44"></script>
-  <script src="game-troops.js?v=1.44"></script>
-  <script src="game-combat.js?v=1.44"></script>
-  <script src="game-engine.js?v=1.44"></script>
-  <script src="game-ui.js?v=1.44"></script>
-  <script src="game-social.js?v=1.44"></script>
-  <script src="game-smithy.js?v=1.44"></script>
-  <script src="game-auth.js?v=1.44"></script>
+  <!-- Módulos del juego — v1.48 -->
+  <script src="game-constants.js?v=1.47"></script>
+  <script src="game-troops.js?v=1.47"></script>
+  <script src="game-combat.js?v=1.47"></script>
+  <script src="game-engine.js?v=1.47"></script>
+  <script src="game-ui.js?v=1.47"></script>
+  <script src="game-social.js?v=1.47"></script>
+  <script src="game-smithy.js?v=1.47"></script>
+  <script src="game-auth.js?v=1.47"></script>
   <!-- Módulos originales -->
-  <script src="game-simulator.js?v=1.44"></script>
-  <script src="game-admin.js?v=1.44"></script>
+  <script src="game-simulator.js?v=1.47"></script>
+  <script src="game-admin.js?v=1.47"></script>
+  <!-- v1.45: Sistema de cuevas -->
+  <script src="game-caves.js?v=1.47"></script>
   <script>
     // ============================================================
     // CONFIG
@@ -1046,6 +1075,8 @@
       updateOnlineCount();
       processRecalls();
       updateUnreadCount(); // Actualizar badge de mensajes no leídos
+      // Cargar cuevas al inicio (sin bloquear)
+      if (typeof loadCaves === 'function') loadCaves();
 
       // Mostrar/ocultar botón admin según email del usuario autenticado
       checkAdminButton();
@@ -1115,7 +1146,7 @@
 
       // 1. Fetch Villages — columnas reales: id, owner_id, name, cx, cy, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, created_at
       const { data: villages, error: vErr } = await sbClient.from('villages')
-        .select('id, owner_id, name, cx, cy, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, created_at')
+        .select('id, owner_id, name, cx, cy, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, refugio, created_at')
         .eq('owner_id', currentUser.id)
         .order('created_at', { ascending: true });
 
@@ -1131,9 +1162,17 @@
       const loaded = [];
 
       for (const v of villages) {
-        // Fetch Resources (Using maybeSingle to avoid 406 error if none found)
-        let { data: res, error: rErr } = await sbClient.from('resources').select('*').eq('village_id', v.id).maybeSingle();
-        if (rErr) console.warn('Error loading resources for village', v.id, rErr);
+        // Opt-G: Fetch all 4 tables in parallel (was sequential — now 4x faster per village)
+        const [rR, bR, tR, cR] = await Promise.all([
+          sbClient.from('resources').select('*').eq('village_id', v.id).maybeSingle(),
+          sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle(),
+          sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle(),
+          sbClient.from('creatures').select('*').eq('village_id', v.id).maybeSingle()
+        ]);
+        let res = rR.data; if (rR.error) console.warn('Error loading resources for village', v.id, rR.error);
+        let blds = bR.data; if (bR.error) console.warn('Error loading buildings for village', v.id, bR.error);
+        let trp = tR.data; if (tR.error) console.warn('Error loading troops for village', v.id, tR.error);
+        let crs = cR.data; if (cR.error) console.warn('Error loading creatures for village', v.id, cR.error);
 
         // SELF-HEALING: If resources missing, create default
         if (!res) {
@@ -1146,9 +1185,6 @@
           }
         }
 
-        let { data: blds, error: bErr } = await sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle();
-        if (bErr) console.warn('Error loading buildings for village', v.id, bErr);
-
         // SELF-HEALING: If buildings missing
         if (!blds) {
           const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0 };
@@ -1159,9 +1195,6 @@
             blds = defBlds;
           }
         }
-
-        let { data: trp, error: tErr } = await sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle();
-        if (tErr) console.warn('Error loading troops for village', v.id, tErr);
 
         // SELF-HEALING: If troops missing
         if (!trp) {
@@ -1176,9 +1209,6 @@
             trp = defTrp;
           }
         }
-
-        let { data: crs, error: cErr } = await sbClient.from('creatures').select('*').eq('village_id', v.id).maybeSingle();
-        if (cErr) console.warn('Error loading creatures for village', v.id, cErr);
 
         // SELF-HEALING: If creatures missing
         if (!crs) {
@@ -1233,6 +1263,7 @@
           }),
           last_updated: safeRes.last_update || new Date().toISOString(),
           last_aldeano_at: v.last_aldeano_at || null, // timer discreto de aldeanos
+          refugio: v.refugio || {},  // tropas ocultas en el refugio (persisted en villages.refugio)
           // Legacy/Compat flags
           _aldeanos_total_mode: true,
           owner_name: currentUser.email
@@ -1276,8 +1307,8 @@
           const newQ = JSON.stringify(v.state.build_queue);
 
           if (oldQ !== newQ) {
-            // We use the new generic save helper
-            await saveVillage(v);
+            // We use the new generic save helper (buildings only, no score recalc needed)
+            await saveVillage(v, { updateScore: false });
           }
         }
 
@@ -1386,8 +1417,11 @@
     }
 
     // Generic save function for ANY village (not just active)
-    async function saveVillage(v) {
+    async function saveVillage(v, opts) {
       if (!v || !currentUser) return;
+      opts = opts || {};
+      // updateScore: true → recalcular military_score (pass explicitly when troops/creatures changed)
+      var shouldUpdateScore = opts.updateScore !== false ? true : false;
 
       // Snapshot: calcular recursos actuales antes de guardar
       // Esto asegura que guardamos el valor real acumulado, no el del último tick
@@ -1435,28 +1469,19 @@
       s.troops.aldeano = trpUpd.aldeano;
       await sbClient.from('troops').update(trpUpd).eq('village_id', v.id);
 
-      // 4b. Actualizar military_score — suma TODAS las aldeas + criaturas del jugador
-      try {
-        const allVils = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
-        if (!allVils.error && allVils.data && allVils.data.length > 0) {
-          const vilIds = allVils.data.map(vv => vv.id);
-          const allTrps = await sbClient.from('troops').select('*').in('village_id', vilIds);
-          const allCrs = await sbClient.from('creatures').select('*').in('village_id', vilIds);
-          let grandTotal = 0;
-          if (!allTrps.error && allTrps.data) {
-            allTrps.data.forEach(row => { Object.keys(TROOP_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
-          }
-          if (!allCrs.error && allCrs.data) {
-            allCrs.data.forEach(row => { Object.keys(CREATURE_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
-          }
-          await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
-        }
-      } catch (e) { console.warn('military_score update failed', e); }
+      // 4b. Actualizar military_score — solo cuando shouldUpdateScore=true (evitar 3 queries extra en cada save trivial)
+      // Opt-F: delegar a refreshMilitaryScore que usa Promise.all para los 2 selects
+      if (shouldUpdateScore) { refreshMilitaryScore(); }
 
       // 4c. Update Creatures
       const crUpd = {};
       const crs = s.creatures || defaultCreatures();
-      Object.keys(CREATURE_TYPES).forEach(function (k) { crUpd[k] = crs[k] || 0; });
+      Object.keys(CREATURE_TYPES).forEach(function (k) { 
+        // ⛏️ v1.47: Excluir guardiancueva — NO es columna de tabla creatures
+        // guardiancueva se persiste SOLO en villages.state (JSON blob)
+        if (k === 'guardiancueva') return;
+        crUpd[k] = crs[k] || 0; 
+      });
       await sbClient.from('creatures').update(crUpd).eq('village_id', v.id);
 
       // 4. Update Village (Queue, Missions, Name, aldeano timer, summoning queue, training queue)
@@ -1466,7 +1491,8 @@
         summoning_queue: s.summoning_queue || [],
         training_queue: s.training_queue || [],
         name: v.name,
-        last_aldeano_at: s.last_aldeano_at || null
+        last_aldeano_at: s.last_aldeano_at || null,
+        refugio: s.refugio || {}  // Bug A fix: persisting refuge troop assignments
       }).eq('id', v.id);
     }
 
@@ -1478,7 +1504,9 @@
       setSave('saving');
 
       try {
-        await saveVillage(activeVillage);
+        // Opt-F: flushVillage skips military_score recalc (expensive: 3 extra queries).
+        // Score is updated explicitly via refreshMilitaryScore() after real troop/creature changes.
+        await saveVillage(activeVillage, { updateScore: false });
         setSave('saved');
       } catch (e) {
         console.error('Save error details:', e);
@@ -1492,6 +1520,29 @@
           flushVillage();
         }
       }
+    }
+
+    // Opt-F: Recalculates military_score. Call after real troop/creature changes.
+    async function refreshMilitaryScore() {
+      if (!currentUser) return;
+      try {
+        const allVils = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
+        if (!allVils.error && allVils.data && allVils.data.length > 0) {
+          const vilIds = allVils.data.map(vv => vv.id);
+          const [allTrps, allCrs] = await Promise.all([
+            sbClient.from('troops').select('*').in('village_id', vilIds),
+            sbClient.from('creatures').select('*').in('village_id', vilIds)
+          ]);
+          let grandTotal = 0;
+          if (!allTrps.error && allTrps.data) {
+            allTrps.data.forEach(row => { Object.keys(TROOP_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
+          }
+          if (!allCrs.error && allCrs.data) {
+            allCrs.data.forEach(row => { Object.keys(CREATURE_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
+          }
+          await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
+        }
+      } catch (e) { console.warn('refreshMilitaryScore failed', e); }
     }
 
     var saveDebounce = null;
@@ -1624,6 +1675,16 @@
       var newS2 = JSON.stringify(activeVillage.state.summoning_queue || []);
       if ((oldQ && !newQ2) || (oldM !== newM2) || (oldS !== newS2)) {
         scheduleSave();
+        // Cola de invocación completó → criatura añadida, refrescar panel si está abierto
+        if (oldS !== newS2 && document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
+          renderCreatures();
+        }
+        // Cola de entrenamiento completó → tropa añadida, refrescar panel de tropas
+        if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
+          renderTroops();
+        }
+        // Opt-F: actualizar military_score tras cambio real de tropas/criaturas
+        refreshMilitaryScore && refreshMilitaryScore();
       }
 
       // ── resolveMissions — REACTIVO, no polling ─────────────
@@ -1639,8 +1700,31 @@
           activeVillage.state = updated;
           _missionWatchScheduled = false;
           scheduleSave();
-          // Misión resuelta → hay un informe nuevo en mensajes, actualizar badge
+          // Misión resuelta → badge de mensajes
           updateUnreadCount && updateUnreadCount();
+          // ── Auto-refresh panels con datos reales, no calculados ──
+          // Tropas: recuento exacto de barracas tras llegada o retorno
+          if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
+            renderTroops();
+          }
+          // Criaturas: aparecen invocadas o regresan de misión
+          if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
+            renderCreatures();
+          }
+          // Refugio: plazas ocupadas pueden haber cambiado al regresar tropas
+          if (document.getElementById('page-defense') && document.getElementById('page-defense').classList.contains('active')) {
+            renderRefugio();
+          }
+          // Investigación: XP actualizada tras victoria (executeAttack la escribe en
+          // _researchData, pero si la página está abierta la renderizamos de nuevo)
+          if (document.getElementById('page-research') && document.getElementById('page-research').classList.contains('active')) {
+            var xpEl = document.getElementById('researchXPDisplay');
+            if (xpEl && typeof _researchData !== 'undefined' && _researchData) {
+              xpEl.textContent = formatNumber(_researchData.experience) + ' XP';
+            }
+          }
+          // Actualizar military_score tras cambio real de tropas
+          refreshMilitaryScore && refreshMilitaryScore();
         }).catch(function () { _missionWatchScheduled = false; });
       }
 
@@ -1709,12 +1793,21 @@
       if (_el('ovBattlesWon')) _el('ovBattlesWon').textContent = (vs.battles_won_pvp || 0);
       if (_el('ovBattlesLost')) _el('ovBattlesLost').textContent = (vs.battles_lost_pvp || 0);
       if (_el('ovBattlesNPC')) _el('ovBattlesNPC').textContent = (vs.battles_won_npc || 0);
-      // Troop movement alerts in overview
+      // Troop movement alerts in overview — muestra misiones de TODAS las aldeas del jugador
       if (_el('ovAlertsBox')) {
         var alerts = _incomingAttacks || [];
-        var allMissions = (vs.mission_queue || []);
-        var myOutgoing = allMissions.filter(function (m) { return m.type !== 'return'; });
-        var myReturning = allMissions.filter(function (m) { return m.type === 'return'; });
+        // Recoger misiones de todas las aldeas del jugador, no solo activeVillage
+        var myOutgoing = [];
+        var myReturning = [];
+        (myVillages || []).forEach(function (v) {
+          var vName = v.name || ('[' + v.cx + ',' + v.cy + ']');
+          var mq = (v.state && v.state.mission_queue) || [];
+          mq.forEach(function (m) {
+            var mWithVillage = Object.assign({}, m, { _villageName: vName });
+            if (m.type === 'return') myReturning.push(mWithVillage);
+            else myOutgoing.push(mWithVillage);
+          });
+        });
         var alertLines = '';
         alerts.forEach(function (a) {
           var eta = Math.max(0, Math.ceil((new Date(a.finish_at).getTime() - Date.now()) / 1000));
@@ -1727,10 +1820,11 @@
         });
         myOutgoing.forEach(function (m) {
           var eta = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
-          var ico = m.type === 'spy' ? '🔍' : m.type === 'found' ? '🏠' : m.type === 'move' ? '⚔' : m.type === 'reinforce' ? '🛡️' : m.type === 'transport' ? '📦' : '⚔️';
-          var label = m.type === 'spy' ? 'Espionaje' : m.type === 'found' ? 'Colonos → [' + m.tx + ',' + m.ty + ']' : m.type === 'move' ? 'Moviendo tropas → [' + m.tx + ',' + m.ty + ']' : m.type === 'reinforce' ? 'Refuerzo → [' + m.tx + ',' + m.ty + ']' : m.type === 'transport' ? 'Caravana → [' + m.tx + ',' + m.ty + ']' : 'Ataque';
+          var ico = m.type === 'spy' ? '🔍' : m.type === 'found' ? '🏠' : m.type === 'move' ? '⚔' : m.type === 'reinforce' ? '🛡️' : m.type === 'transport' ? '📦' : m.type === 'cave_attack' ? '🧿' : '⚔️';
+          var label = m.type === 'spy' ? 'Espionaje' : m.type === 'found' ? 'Colonos → [' + m.tx + ',' + m.ty + ']' : m.type === 'move' ? 'Moviendo tropas → [' + m.tx + ',' + m.ty + ']' : m.type === 'reinforce' ? 'Refuerzo → [' + m.tx + ',' + m.ty + ']' : m.type === 'transport' ? 'Caravana → [' + m.tx + ',' + m.ty + ']' : m.type === 'cave_attack' ? 'Ataque cueva [' + m.tx + ',' + m.ty + ']' : 'Ataque → [' + m.tx + ',' + m.ty + ']';
           alertLines += '<div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.1);border-radius:6px;padding:7px 10px;margin-bottom:5px;">'
             + '<span style="color:var(--accent);">' + ico + ' ' + label + '</span>'
+            + '<span style="color:var(--dim);font-size:.68rem;margin-left:6px;">· ' + escapeHtml(m._villageName) + '</span>'
             + '<span style="float:right;color:var(--accent);font-size:.75rem;">ETA ' + fmtTime(eta) + '</span>'
             + '</div>';
         });
@@ -1738,6 +1832,7 @@
           var eta = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
           alertLines += '<div style="background:rgba(79,255,176,.04);border:1px solid rgba(79,255,176,.1);border-radius:6px;padding:7px 10px;margin-bottom:5px;">'
             + '<span style="color:var(--ok);">↩️ Tropas regresando</span>'
+            + '<span style="color:var(--dim);font-size:.68rem;margin-left:6px;">· ' + escapeHtml(m._villageName) + '</span>'
             + '<span style="float:right;color:var(--ok);font-size:.75rem;">ETA ' + fmtTime(eta) + '</span>'
             + '</div>';
         });
@@ -1912,3 +2007,4 @@
   </script>
 </body>
 
+</html>

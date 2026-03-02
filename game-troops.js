@@ -1,9 +1,11 @@
 // ============================================================
-// EPIC WARRIORS — game-troops.js
+// EPIC WARRIORS — game-troops.js v1.47
 // UI: renderTroops, renderCreatures, renderSummoningQueue,
 // renderCreaturesList, showCreatureStats, renderSummonOptions,
 // showBarracasModal, startRecruitment, showTroopStats,
 // renderTrainOptions, resolveTrainingQueue, renderTrainingQueue
+//
+// v1.47: renderCaughtCreatures() para apartado de guardianes capturados
 // ============================================================
 
 function renderTroops() {
@@ -24,7 +26,6 @@ function renderTroops() {
   var barrCap = getBarracksCapacity(vs.buildings);
 
   var usedSlots = getBarracksUsed(vs);
-  // Tropas militares (no aldeanos) para mostrar en desglose
   var usedTroopSlots = 0;
   Object.keys(TROOP_TYPES).forEach(function (k) {
     if (k === 'aldeano') return;
@@ -50,7 +51,6 @@ function renderTroops() {
     + '</div>'
     + '<div style="margin-bottom:4px;"></div>';
 
-  // troopsListBox ya no se usa — la lista está integrada en renderTrainOptions
   box.innerHTML = '';
 }
 
@@ -62,7 +62,6 @@ function renderCreatures() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
 
-  // Torre de Invocación info
   var torreLevel = (vs.buildings.torreinvocacion && vs.buildings.torreinvocacion.level) || 0;
   var torreInfo = document.getElementById('torreInvocacionInfo');
   if (torreInfo) {
@@ -74,13 +73,9 @@ function renderCreatures() {
     }
   }
 
-  // Cola de invocación
   renderSummoningQueue();
-
-  // Lista de criaturas actuales
   renderCreaturesList();
-
-  // Botones de invocación
+  renderCaughtCreatures();  // ⛏️ v1.47: Mostrar criaturas cazadas
   renderSummonOptions();
 }
 
@@ -90,20 +85,20 @@ function renderSummoningQueue() {
 
   var vs = activeVillage.state;
   var queue = vs.summoning_queue || [];
+  var now = Date.now();
 
   if (queue.length === 0) {
-    box.innerHTML = '<div style="color:var(--dim);font-size:.8rem;">No hay invocaciones en curso</div>';
+    box.innerHTML = '<div class="tq-empty">🐉 Sin invocaciones en curso</div>';
     return;
   }
 
   var html = '';
-  var now = Date.now();
 
-  // Cabecera con botón cancelar
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-  html += '<span style="font-size:.68rem;color:var(--dim);letter-spacing:.08em;">' + queue.length + ' EN COLA</span>';
-  html += '<button onclick="cancelSummoningQueue()" style="font-size:.65rem;padding:3px 9px;border-radius:4px;border:1px solid var(--danger);background:rgba(255,80,80,.1);color:var(--danger);cursor:pointer;">🗑 Cancelar todo</button>';
-  html += '</div>';
+  html += '<div class="tq-header">'
+    + '<span class="tq-header-count">' + queue.length + ' en cola</span>'
+    + '<button class="tq-cancel-btn" onclick="cancelSummoningQueue()">✕ Cancelar todo</button>'
+    + '</div>';
+
   var active = queue[0];
   var cData = CREATURE_TYPES[active.creature];
   if (cData) {
@@ -112,41 +107,42 @@ function renderSummoningQueue() {
     var start = new Date(active.start_at).getTime();
     var total = Math.max(1, (finish - start) / 1000);
     var pct = Math.min(100, Math.round(((total - timeLeft) / total) * 100));
+    var arrStr = new Date(finish).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    html += '<div style="background:var(--panel2);padding:8px 10px;border-radius:6px;margin-bottom:8px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">';
-    html += '<span style="font-size:.9rem;">' + cData.icon + ' ' + cData.name + '</span>';
-    html += '<span style="font-size:.75rem;color:var(--ok);">' + fmtTime(timeLeft) + '</span>';
-    html += '</div>';
-    html += '<div style="background:var(--bg);height:7px;border-radius:4px;overflow:hidden;">';
-    html += '<div style="width:' + pct + '%;height:100%;background:var(--ok);transition:width 1s linear;"></div>';
-    html += '</div>';
-    html += '</div>';
+    html += '<div class="tq-active">'
+      + '<div class="tq-active-icon">' + cData.icon + '</div>'
+      + '<div class="tq-active-info">'
+      + '<div class="tq-active-name">' + cData.name + '</div>'
+      + '<div class="tq-bar"><div class="tq-bar-fill" style="width:' + pct + '%"></div></div>'
+      + '<div class="tq-active-time">' + fmtTime(timeLeft) + ' restantes · termina ' + arrStr + '</div>'
+      + '</div>'
+      + '</div>';
   }
 
-  // Remaining items: grouped by creature type, just count
   if (queue.length > 1) {
     var waiting = queue.slice(1);
     var counts = {};
-    waiting.forEach(function (s) {
-      counts[s.creature] = (counts[s.creature] || 0) + 1;
-    });
-    var lastFinishQ = new Date(queue[queue.length - 1].finish_at);
-    var lastStrQ = lastFinishQ.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    var totalLeft = Math.max(0, Math.ceil((lastFinishQ.getTime() - Date.now()) / 1000));
-    html += '<div style="background:var(--panel2);padding:7px 10px;border-radius:6px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">';
-    html += '<div style="font-size:.68rem;color:var(--dim);letter-spacing:.08em;">EN ESPERA</div>';
-    html += '<div style="font-size:.63rem;color:var(--dim);">Cola completa: <span style="color:var(--accent);">' + fmtTime(totalLeft) + '</span> · <b>' + lastStrQ + '</b></div>';
-    html += '</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    waiting.forEach(function (s) { counts[s.creature] = (counts[s.creature] || 0) + 1; });
+
+    var lastFinish = new Date(queue[queue.length - 1].finish_at);
+    var totalLeft = Math.max(0, Math.ceil((lastFinish.getTime() - now) / 1000));
+    var lastStr = lastFinish.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    html += '<div class="tq-waiting">'
+      + '<div class="tq-waiting-label">En espera · Cola: <span style="color:var(--accent);">'
+      + fmtTime(totalLeft) + '</span> · <b>' + lastStr + '</b></div>'
+      + '<div class="tq-chips">';
+
     Object.keys(counts).forEach(function (key) {
       var cd = CREATURE_TYPES[key];
       if (!cd) return;
-      html += '<div style="display:flex;align-items:center;gap:4px;background:var(--bg);padding:3px 8px;border-radius:4px;font-size:.78rem;">';
-      html += cd.icon + ' ' + cd.name + ' <span style="color:var(--ok);font-weight:bold;margin-left:2px;">×' + counts[key] + '</span>';
-      html += '</div>';
+      html += '<div class="tq-chip">'
+        + '<span class="tq-chip-icon">' + cd.icon + '</span>'
+        + '<span>' + cd.name + '</span>'
+        + (counts[key] > 1 ? '<span class="tq-chip-count">×' + counts[key] + '</span>' : '')
+        + '</div>';
     });
+
     html += '</div></div>';
   }
 
@@ -164,15 +160,20 @@ function renderCreaturesList() {
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
 
   Object.keys(CREATURE_TYPES).forEach(function (key) {
+    // ⛏️ v1.47: Excluir guardiancueva — se renderiza en apartado separado
+    if (key === 'guardiancueva') return;
+    
     var count = creatures[key] || 0;
     if (count === 0) return;
     hasAny = true;
 
     var cData = CREATURE_TYPES[key];
-    html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;text-align:center;">';
-    html += '<div style="font-size:2rem;">' + cData.icon + '</div>';
-    html += '<div style="font-size:.75rem;margin-top:4px;">' + cData.name + '</div>';
-    html += '<div style="font-size:1.2rem;color:var(--ok);font-weight:bold;margin-top:4px;">' + count + '</div>';
+    html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;text-align:center;position:relative;">';
+    html += '<div style="position:absolute;top:6px;left:6px;font-size:.55rem;color:var(--esencia);letter-spacing:.08em;background:rgba(192,132,252,.12);border:1px solid rgba(192,132,252,.2);border-radius:3px;padding:1px 4px;">TIER ' + cData.tier + '</div>';
+    html += '<button onclick="showCreatureStats(\'' + key + '\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;margin-top:6px;display:block;width:100%;">' + cData.icon + '</button>';
+    html += '<div style="font-size:.78rem;color:var(--text);margin-top:5px;font-family:VT323,monospace;">' + cData.name + '</div>';
+    html += '<div style="font-size:1.5rem;color:var(--ok);font-weight:bold;font-family:VT323,monospace;line-height:1.2;">' + count + '</div>';
+    html += '<div style="font-size:.58rem;color:var(--dim);margin-top:1px;">en base</div>';
     html += '</div>';
   });
 
@@ -183,6 +184,38 @@ function renderCreaturesList() {
   } else {
     box.innerHTML = html;
   }
+}
+
+// ============================================================
+// ⛏️ v1.47: CRIATURAS CAZADAS — Apartado especial para guardiancueva
+// ============================================================
+
+function renderCaughtCreatures() {
+  var box = document.getElementById('caughtCreaturesBox');
+  if (!box || !activeVillage) return;
+
+  var vs = activeVillage.state;
+  var creatures = vs.creatures || defaultCreatures();
+  var caughtCount = creatures.guardiancueva || 0;
+
+  if (caughtCount === 0) {
+    box.innerHTML = '<div style="color:var(--dim);font-size:.8rem;">Aún no has capturado guardianes de cuevas</div>';
+    return;
+  }
+
+  var cData = CREATURE_TYPES.guardiancueva || {};
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
+  
+  html += '<div style="background:linear-gradient(135deg,rgba(255,215,0,.15),rgba(184,134,11,.1));border:2px solid rgba(255,215,0,.4);padding:10px;border-radius:6px;text-align:center;position:relative;box-shadow:0 0 12px rgba(255,215,0,.1);">';
+  html += '<div style="position:absolute;top:6px;left:6px;font-size:.55rem;color:var(--gold);letter-spacing:.08em;background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.4);border-radius:3px;padding:1px 4px;font-weight:bold;">⛏️ CAPTURADO</div>';
+  html += '<button onclick="showCreatureStats(\'guardiancueva\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;margin-top:6px;display:block;width:100%;">' + cData.icon + '</button>';
+  html += '<div style="font-size:.78rem;color:var(--gold);margin-top:5px;font-family:VT323,monospace;font-weight:bold;">' + (cData.name || 'Guardián') + '</div>';
+  html += '<div style="font-size:1.5rem;color:var(--gold);font-weight:bold;font-family:VT323,monospace;line-height:1.2;">' + caughtCount + '</div>';
+  html += '<div style="font-size:.58rem;color:var(--dim);margin-top:1px;">en base</div>';
+  html += '</div>';
+
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 function showCreatureStats(key) {
@@ -203,19 +236,23 @@ function showCreatureStats(key) {
     + '<button onclick="_closeCreatureStats()" style="margin-left:auto;background:none;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;">✕</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;margin-bottom:14px;">'
-    + '<div style="color:var(--dim);">❤️ HP</div><div style="color:var(--text);">' + c.hp + '</div>'
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">OFENSA</div>'
     + '<div style="color:var(--dim);">⚔️ Daño</div><div style="color:var(--text);">' + c.damage + '</div>'
-    + '<div style="color:var(--dim);">🛡️ Defensa</div><div style="color:var(--text);">' + c.defense + '</div>'
     + '<div style="color:var(--dim);">⚡ Ataques/turno</div><div style="color:var(--text);">' + c.attacksPerTurn + '</div>'
-    + '<div style="color:var(--dim);">🎯 Precisión</div><div style="color:var(--text);">' + c.attackChance + '</div>'
-    + '<div style="color:var(--dim);">🏃 Velocidad</div><div style="color:var(--text);">' + c.speed + '</div>'
+    + '<div style="color:var(--dim);">🎯 Prob. Golpe</div><div style="color:var(--text);">' + c.attackChance + '</div>'
+    + '<div style="color:var(--dim);">🌀 Destreza</div><div style="color:var(--text);">' + c.dexterity + '</div>'
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">DEFENSA</div>'
+    + '<div style="color:var(--dim);">❤️ HP</div><div style="color:var(--text);">' + c.hp + '</div>'
+    + '<div style="color:var(--dim);">🛡️ Defensa</div><div style="color:var(--text);">' + c.defense + '</div>'
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">MOVILIDAD</div>'
+    + '<div style="color:var(--dim);">🏃 Velocidad</div><div style="color:var(--text);">' + c.speed + ' <span style="font-size:.68rem;color:var(--dim);">cas/h</span></div>'
     + '</div>'
-    + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;margin-bottom:14px;">' + escapeHtml(c.desc) + '</div>'
-    + '<div style="font-size:.75rem;background:var(--panel2);border-radius:6px;padding:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">'
+    + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;margin-bottom:10px;">' + escapeHtml(c.desc) + '</div>'
+    + '<div style="font-size:.75rem;background:var(--panel2);border-radius:6px;padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;text-align:center;">'
     + '<div><div style="color:var(--dim);">Invocadores</div><div style="color:var(--esencia);">' + c.summonersNeeded + '</div></div>'
     + '<div><div style="color:var(--dim);">Esencia</div><div style="color:var(--esencia);">✨ ' + c.cost.esencia + '</div></div>'
-    + '<div><div style="color:var(--dim);">Tiempo</div><div style="color:var(--gold);">⏱ ' + Math.floor(c.time / 60) + 'min</div></div>'
     + '</div>'
+    + '<div style="font-size:.6rem;color:var(--dim);opacity:.45;text-align:center;margin-top:6px;">⏱ ' + Math.floor(c.time / 60) + 'min de invocación</div>'
     + '</div>';
   document.body.appendChild(overlay);
 }
@@ -237,7 +274,6 @@ function renderSummonOptions() {
 
   var html = '<div style="display:grid;gap:10px;">';
 
-  // Group by tier
   var tiers = {};
   Object.keys(CREATURE_TYPES).forEach(function (key) {
     var cData = CREATURE_TYPES[key];
@@ -247,23 +283,22 @@ function renderSummonOptions() {
 
   Object.keys(tiers).sort().forEach(function (tier) {
     var tierInt = parseInt(tier);
-    // VISIBLE si el nivel de la Torre de Invocación >= tier
-    // INVOCABLE solo si además tienes los invocadores necesarios
     var visible = torreLevel >= tierInt;
     var unlocked = invocadorLevel >= tierInt;
 
-    // Ocultar solo si la torre no tiene nivel suficiente
     if (!visible) return;
 
-    html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;">';
-    html += '<div style="font-size:.75rem;color:var(--dim);letter-spacing:.1em;margin-bottom:8px;">TIER ' + tier + '</div>';
+    html += '<div style="background:var(--panel2);padding:10px;border-radius:6px;border-top:2px solid rgba(192,132,252,' + (0.15 + tierInt * 0.08) + ');">';
+    html += '<div style="font-size:.63rem;color:var(--esencia);letter-spacing:.12em;opacity:.9;margin-bottom:10px;display:flex;align-items:center;gap:6px;">';
+    html += '<span>TIER ' + tier + '</span>';
+    html += '<span style="flex:1;height:1px;background:rgba(192,132,252,.15);"></span>';
+    html += '</div>';
 
     tiers[tier].forEach(function (c) {
       var canSummonResult = canSummon(c.key, vs);
       var isOk = canSummonResult.ok;
 
       html += '<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:4px;margin-bottom:6px;' + (!unlocked ? 'opacity:.5;filter:grayscale(.4);' : (!isOk ? 'opacity:.7;' : '')) + '">';
-      // Icon clickable for stats
       html += '<button onclick="showCreatureStats(\'' + c.key + '\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:1.8rem;padding:0;line-height:1;flex-shrink:0;">' + c.data.icon + '</button>';
       html += '<div style="flex:1;min-width:0;">';
       html += '<div style="font-size:.85rem;color:var(--text);">' + c.data.name + '</div>';
@@ -276,7 +311,6 @@ function renderSummonOptions() {
         html += '<div style="font-size:.63rem;color:var(--danger);margin-top:2px;">' + escapeHtml(canSummonResult.reason) + '</div>';
       }
       html += '</div>';
-      // Quantity input + button
       html += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">';
       html += '<input id="summonQty_' + c.key + '" type="number" value="1" min="1" max="99" style="width:46px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:4px;padding:4px 6px;color:var(--text);font-family:VT323,monospace;font-size:.85rem;text-align:center;">';
       html += '<button onclick="startSummoningFromInput(\'' + c.key + '\')" ' + (!isOk ? 'disabled' : '') + ' style="background:' + (isOk ? 'var(--ok)' : 'var(--border)') + ';border:none;color:white;padding:5px 10px;border-radius:4px;cursor:' + (isOk ? 'pointer' : 'default') + ';font-size:.75rem;white-space:nowrap;">+ Cola</button>';
@@ -290,7 +324,6 @@ function renderSummonOptions() {
   html += '</div>';
   box.innerHTML = html;
 }
-
 
 function showBarracasModal() {
   if (!activeVillage) return;
@@ -359,29 +392,26 @@ function startRecruitment(type, amount) {
 
   var barrCap = getBarracksCapacity(vs.buildings);
   var usedSlots = getBarracksUsed(vs);
-  var slotsFreed = amount * 1;
+  var slotsFreed = amount * (TROOP_TYPES['aldeano'].barracasSlots || 1);
   var slotsNeeded = amount * (stats.barracasSlots || 1);
   if (usedSlots - slotsFreed + slotsNeeded > barrCap) {
     showNotif('No hay espacio suficiente en las barracas.', 'err'); return;
   }
 
-  var resNow = calcRes(vs);
-  var aldLibres = resNow.aldeanos_libres || 0;
+  var aldLibres = res.aldeanos_libres || 0;
   if (aldLibres < amount) {
     showNotif('Necesitas ' + amount + ' aldeanos LIBRES. Tienes ' + aldLibres + '.', 'err'); return;
   }
 
   snapshotResources(vs);
 
-  // Descontar recursos y aldeanos INMEDIATAMENTE
   Object.keys(costTotal).forEach(k => {
     if (k === 'prov') vs.resources.provisiones = Math.max(0, vs.resources.provisiones - costTotal[k]);
     else if (vs.resources[k] !== undefined) vs.resources[k] = Math.max(0, vs.resources[k] - costTotal[k]);
   });
   if (!vs.troops) vs.troops = {};
-  consumeAldeanos(vs, amount); // resta proporcional de recolectores si hace falta
+  consumeAldeanos(vs, amount);
 
-  // Encolar entrenamiento (secuencial, como criaturas)
   if (!vs.training_queue) vs.training_queue = [];
   var cuartRed = getCuartelesReduction(vs.buildings);
   var baseTime = stats.time || 180;
@@ -405,7 +435,6 @@ function startRecruitment(type, amount) {
   renderTroops();
 }
 
-// Cancelar toda la cola de entrenamiento (devuelve recursos y aldeanos)
 function cancelTrainingQueue() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -428,13 +457,26 @@ function cancelTrainingQueue() {
   Object.keys(refund).forEach(function(k) {
     if (vs.resources[k] !== undefined) vs.resources[k] += refund[k];
   });
-  vs.troops.aldeano = (vs.troops.aldeano || 0) + refundAld;
+
   vs.training_queue = [];
+  var barrCap = getBarracksCapacity(vs.buildings);
+  var usedAfterClear = getBarracksUsed(vs);
+  var freeSlots = Math.max(0, barrCap - usedAfterClear);
+  var toRefund = Math.min(refundAld, freeSlots);
+  vs.troops.aldeano = (vs.troops.aldeano || 0) + toRefund;
+
   flushVillage();
-  showNotif('Cola cancelada. ' + refundAld + ' aldeanos y recursos devueltos.', 'ok');
+  if (toRefund < refundAld) {
+    showNotif('Cola cancelada. ' + toRefund + ' aldeanos devueltos (' + (refundAld - toRefund) + ' no cabían en barracas).', 'ok');
+  } else {
+    showNotif('Cola cancelada. ' + toRefund + ' aldeanos y recursos devueltos.', 'ok');
+  }
   renderTroops();
 }
 
+// ============================================================
+// showTroopStats — v1.44: muestra stats REALES (con investigación + herrería)
+// ============================================================
 function showTroopStats(key) {
   var t = TROOP_TYPES[key];
   if (!t) return;
@@ -442,9 +484,28 @@ function showTroopStats(key) {
   if (existing) existing.remove();
   window._closeTroopStats = function () { var m = document.getElementById('troopStatsModal'); if (m) m.remove(); };
 
-  // Nivel de herrería actual para esta tropa
+  // Niveles de equipamiento desde herrería
   var wLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.weapon_levels && _researchData.weapon_levels[key]) || 0;
   var aLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.armor_levels  && _researchData.armor_levels[key])  || 0;
+
+  // Stats REALES: nivel de investigación aplicado + bonuses de herrería
+  var troopLvl = (typeof getTroopLevel === 'function') ? getTroopLevel(key) : 1;
+  var s = (typeof getTroopStatsWithLevel === 'function') ? getTroopStatsWithLevel(key, troopLvl) : t;
+
+  // Aplicar bonificaciones de herrería (igual que createArmy en game-combat.js)
+  var realDamage  = (s.damage  || t.damage)  + (wLvl > 0 ? wLvl : 0);
+  var realDefense = (s.defense || t.defense) + (aLvl > 0 ? aLvl : 0);
+  var realHp      = s.hp      || t.hp;
+  var realAtk     = s.attacksPerTurn || t.attacksPerTurn;
+  var realChance  = s.attackChance   || t.attackChance;
+  var realDex     = s.dexterity      || t.dexterity;
+  var realSpeed   = s.speed          || t.speed;
+  var realCap     = s.capacity       || t.capacity;
+
+  // helpers para mostrar delta
+  var dmgBonus = realDamage - t.damage;
+  var defBonus = realDefense - t.defense;
+  var hpBonus  = realHp - t.hp;
 
   var overlay = document.createElement('div');
   overlay.id = 'troopStatsModal';
@@ -454,26 +515,43 @@ function showTroopStats(key) {
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">'
     + '<span style="font-size:2.5rem;">' + t.icon + '</span>'
     + '<div><div style="font-size:1.2rem;color:var(--accent);">' + t.name + '</div>'
-    + '<div style="font-size:.7rem;color:var(--dim);">Tropa normal · 1 plaza barracas</div></div>'
+    + '<div style="font-size:.7rem;color:var(--dim);">Tropa · ' + (t.barracasSlots || 1) + ' plaza' + ((t.barracasSlots || 1) > 1 ? 's' : '') + ' · ⏱ ' + Math.floor((t.time || 180) / 60) + 'min'
+    + (troopLvl > 1 ? ' · <span style="color:var(--ok);">Nv.' + troopLvl + '</span>' : '') + '</div></div>'
     + '<button onclick="_closeTroopStats()" style="margin-left:auto;background:none;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;">✕</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;margin-bottom:14px;">'
-    + '<div style="color:var(--dim);">❤️ HP</div><div style="color:var(--text);">' + t.hp + '</div>'
-    + '<div style="color:var(--dim);">⚔️ Daño</div><div style="color:var(--text);">' + t.damage + '</div>'
-    + '<div style="color:var(--dim);">🛡️ Defensa</div><div style="color:var(--text);">' + t.defense + '</div>'
-    + '<div style="color:var(--dim);">⚡ Ataques/turno</div><div style="color:var(--text);">' + t.attacksPerTurn + '</div>'
-    + '<div style="color:var(--dim);">🎯 % Acierto</div><div style="color:var(--text);">' + t.attackChance + '/20</div>'
-    + '<div style="color:var(--dim);">🏃 Velocidad</div><div style="color:var(--text);">' + t.speed + '</div>'
-    + '<div style="color:var(--dim);">🗡️ Arma (Herrería)</div><div style="color:' + (wLvl > 0 ? 'var(--ok)' : 'var(--dim)') + ';">+' + wLvl + (wLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
-    + '<div style="color:var(--dim);">🛡 Armadura (Herrería)</div><div style="color:' + (aLvl > 0 ? 'var(--accent)' : 'var(--dim)') + ';">+' + aLvl + (aLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
-    + '<div style="color:var(--dim);">📦 Capacidad carga</div><div style="color:var(--text);">' + t.capacity + '</div>'
+
+    // — OFENSA —
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">OFENSA</div>'
+    + '<div style="color:var(--dim);">⚔️ Daño</div>'
+    + '<div style="color:var(--text);">' + realDamage
+    + (dmgBonus > 0 ? ' <span style="font-size:.65rem;color:var(--ok);">(+' + dmgBonus + ' vs base ' + t.damage + ')</span>' : '') + '</div>'
+    + '<div style="color:var(--dim);">⚡ Ataques/turno</div><div style="color:var(--text);">' + realAtk + '</div>'
+    + '<div style="color:var(--dim);">🎯 Prob. Golpe</div><div style="color:var(--text);">' + realChance + '</div>'
+    + '<div style="color:var(--dim);">🌀 Destreza</div><div style="color:var(--text);">' + realDex + '</div>'
+
+    // — DEFENSA —
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">DEFENSA</div>'
+    + '<div style="color:var(--dim);">❤️ HP</div>'
+    + '<div style="color:var(--text);">' + realHp
+    + (hpBonus > 0 ? ' <span style="font-size:.65rem;color:var(--ok);">(+' + hpBonus + ')</span>' : '') + '</div>'
+    + '<div style="color:var(--dim);">🛡️ Defensa</div>'
+    + '<div style="color:var(--text);">' + realDefense
+    + (defBonus > 0 ? ' <span style="font-size:.65rem;color:var(--accent);">(+' + defBonus + ')</span>' : '') + '</div>'
+
+    // — EQUIPAMIENTO (herrería) —
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">EQUIPAMIENTO</div>'
+    + '<div style="color:var(--dim);">🗡️ Arma</div><div style="color:' + (wLvl > 0 ? 'var(--ok)' : 'var(--dim)') + ';">+' + wLvl + (wLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
+    + '<div style="color:var(--dim);">🛡 Armadura</div><div style="color:' + (aLvl > 0 ? 'var(--accent)' : 'var(--dim)') + ';">+' + aLvl + (aLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
+
+    // — LOGÍSTICA —
+    + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">LOGÍSTICA</div>'
+    + '<div style="color:var(--dim);">🏃 Velocidad</div>'
+    + '<div style="color:var(--text);">' + realSpeed + ' <span style="font-size:.68rem;color:var(--dim);">cas/h</span></div>'
+    + '<div style="color:var(--dim);">📦 Cap. carga</div><div style="color:var(--text);">' + realCap + '</div>'
+
     + '</div>'
-    + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;margin-bottom:14px;">' + escapeHtml(t.desc) + '</div>'
-    + '<div style="font-size:.75rem;background:var(--panel2);border-radius:6px;padding:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center;">'
-    + '<div><div style="color:var(--dim);">1 Aldeano</div><div style="color:var(--aldeanos);">👤 ×1</div></div>'
-    + '<div><div style="color:var(--dim);">Tiempo</div><div style="color:var(--gold);">⏱ ' + Math.floor((t.time || 180) / 60) + 'min</div></div>'
-    + '<div><div style="color:var(--dim);">Plazas</div><div style="color:var(--accent);">🏠 ' + (t.barracasSlots || 1) + '</div></div>'
-    + '</div>'
+    + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;">' + escapeHtml(t.desc) + '</div>'
     + '</div>';
   document.body.appendChild(overlay);
 }
@@ -492,21 +570,27 @@ function renderTrainOptions() {
   var usedSlots = getBarracksUsed(vs);
   var barrLvl = (vs.buildings.barracas && vs.buildings.barracas.level) || 0;
 
+  var barrPct = barrCap > 0 ? Math.min(100, Math.round(usedSlots / barrCap * 100)) : 0;
+  var barrColor = barrPct >= 90 ? 'var(--danger)' : barrPct >= 70 ? 'var(--gold)' : 'var(--ok)';
   var html = '';
 
-  // Cabecera plazas + cuarteles
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 10px;border-bottom:1px solid var(--border);margin-bottom:10px;">';
-  html += '<span style="font-size:.78rem;color:var(--dim);letter-spacing:.08em;">PLAZAS OCUPADAS</span>';
-  html += '<span style="font-size:1rem;color:var(--accent);font-family:VT323,monospace;"><b>' + usedSlots + '</b> / ' + barrCap + '</span>';
+  html += '<div style="margin-bottom:14px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">';
+  html += '<span style="font-size:.65rem;color:var(--dim);letter-spacing:.1em;">BARRACAS</span>';
+  html += '<span style="font-family:VT323,monospace;color:' + barrColor + ';">' + usedSlots + ' <span style="color:var(--dim);">/ ' + barrCap + '</span></span>';
+  html += '</div>';
+  html += '<div style="height:4px;background:rgba(255,255,255,.07);border-radius:2px;">';
+  html += '<div style="height:4px;width:' + barrPct + '%;background:' + barrColor + ';border-radius:2px;transition:width .3s;"></div>';
   html += '</div>';
   if (cuartLvl > 0) {
-    html += '<div style="font-size:.72rem;color:var(--ok);margin-bottom:10px;">🎖️ Cuarteles Niv.' + cuartLvl + ' → -' + Math.round(cuartRed * 100) + '% entrenamiento</div>';
+    html += '<div style="font-size:.63rem;color:var(--ok);margin-top:5px;">🎖️ Cuarteles Nv.' + cuartLvl + ' · -' + Math.round(cuartRed * 100) + '% tiempo de entrenamiento</div>';
   }
+  html += '</div>';
 
   html += '<div style="display:grid;gap:7px;">';
 
-  // ── Aldeano: tropa base, sin botón entrenar ──
   var ald = TROOP_TYPES['aldeano'];
+  html += '<div style="font-size:.63rem;color:var(--dim);letter-spacing:.12em;opacity:.8;padding:4px 0 5px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:2px;">CIVILES</div>';
   html += '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--panel2);border-radius:7px;border:1px solid rgba(255,221,96,.18);">';
   html += '<button onclick="showTroopStats(\'aldeano\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;flex-shrink:0;">' + ald.icon + '</button>';
   html += '<div style="flex:1;min-width:0;">';
@@ -523,7 +607,7 @@ function renderTrainOptions() {
     return;
   }
 
-  // ── Tropas militares ──
+  html += '<div style="font-size:.63rem;color:var(--dim);letter-spacing:.12em;opacity:.8;padding:4px 0 5px;border-bottom:1px solid rgba(255,255,255,.06);margin-top:6px;margin-bottom:2px;">MILITARES</div>';
   Object.keys(TROOP_TYPES).forEach(function (key) {
     if (key === 'aldeano') return;
     var t = TROOP_TYPES[key];
@@ -545,21 +629,18 @@ function renderTrainOptions() {
     if (costPerUnit.prov) costStr += '🌾' + costPerUnit.prov + ' ';
 
     html += '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--panel2);border-radius:7px;border:1px solid ' + (canTrain ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.02)') + ';' + (!canTrain ? 'opacity:.6;' : '') + '">';
-    // Icono clickable para stats
     html += '<button onclick="showTroopStats(\'' + key + '\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;flex-shrink:0;">' + t.icon + '</button>';
-    // Info centro
     html += '<div style="flex:1;min-width:0;">';
     html += '<div style="font-size:1.1rem;color:var(--text);font-family:VT323,monospace;">' + t.name + '</div>';
-    html += '<div style="font-size:.72rem;color:var(--dim);margin-top:2px;">👤×1 · ' + (costStr.trim() || '—') + ' · ⏱ ' + timeStr + '</div>';
-    if (!hasAldeano) html += '<div style="font-size:.68rem;color:var(--danger);margin-top:2px;">Sin aldeanos libres</div>';
-    else if (!canAffordOne) html += '<div style="font-size:.68rem;color:var(--danger);margin-top:2px;">Sin recursos suficientes</div>';
+    html += '<div style="font-size:.7rem;color:var(--dim);margin-top:2px;">' + (costStr.trim() || '—') + '</div>';
+    html += '<div style="font-size:.65rem;color:var(--dim);opacity:.7;margin-top:1px;">⏱ ' + timeStr + '</div>';
+    if (!hasAldeano) html += '<div style="font-size:.67rem;color:var(--danger);margin-top:2px;">Sin aldeanos libres</div>';
+    else if (!canAffordOne) html += '<div style="font-size:.67rem;color:var(--danger);margin-top:2px;">Sin recursos</div>';
     html += '</div>';
-    // Cantidad en base
     html += '<div style="text-align:right;flex-shrink:0;margin-right:10px;min-width:36px;">';
     html += '<div style="font-size:1.8rem;color:' + (count > 0 ? 'var(--accent)' : 'var(--dim)') + ';font-family:VT323,monospace;line-height:1;">' + count + '</div>';
     html += '<div style="font-size:.6rem;color:var(--dim);">en base</div>';
     html += '</div>';
-    // Input + botón
     html += '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">';
     html += '<input id="trainQty_' + key + '" type="number" value="1" min="1" max="99" style="width:48px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:5px;padding:5px 6px;color:var(--text);font-family:VT323,monospace;font-size:1rem;text-align:center;">';
     html += '<button onclick="startRecruitmentFromInput(\'' + key + '\')" ' + (!canTrain ? 'disabled' : '') + ' style="background:' + (canTrain ? 'var(--accent)' : 'var(--border)') + ';border:none;color:' + (canTrain ? 'var(--bg)' : 'var(--dim)') + ';padding:6px 13px;border-radius:5px;cursor:' + (canTrain ? 'pointer' : 'default') + ';font-family:VT323,monospace;font-size:1rem;white-space:nowrap;font-weight:bold;">+ Cola</button>';
@@ -579,8 +660,6 @@ function resolveTrainingQueue(vs) {
   for (var t of vs.training_queue) {
     var finishTime = new Date(t.finish_at).getTime();
     if (finishTime <= now) {
-      // Tropa lista — añadir (el slot ya estaba reservado en getBarracksUsed,
-      // así que simplemente convertimos el slot de "entrenando" a "en base")
       if (!vs.troops) vs.troops = {};
       vs.troops[t.type] = (vs.troops[t.type] || 0) + 1;
       changed = true;
@@ -597,25 +676,25 @@ function renderTrainingQueue() {
   if (!box || !activeVillage) return;
   var vs = activeVillage.state;
   var queue = vs.training_queue || [];
+  var now = Date.now();
+
+  box.style.cssText = 'height:160px;overflow-y:auto;overflow-x:hidden;';
+
   if (queue.length === 0) {
-    box.innerHTML = '<div style="color:var(--dim);font-size:.8rem;">No hay tropas en entrenamiento</div>';
+    box.innerHTML = '<div class="tq-empty">⚔ Sin tropas en entrenamiento</div>';
     return;
   }
-  var now = Date.now();
-  var html = '';
 
-  // Tiempo total de TODA la cola — siempre del último elemento
+  var html = '';
   var lastFinish = new Date(queue[queue.length - 1].finish_at);
   var lastStr = lastFinish.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   var totalSecsLeft = Math.max(0, Math.ceil((lastFinish.getTime() - now) / 1000));
 
-  // Cabecera con botón cancelar
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
-  html += '<span style="font-size:.68rem;color:var(--dim);letter-spacing:.08em;">' + queue.length + ' TROPA(S) EN COLA</span>';
-  html += '<button onclick="cancelTrainingQueue()" style="font-size:.65rem;padding:3px 9px;border-radius:4px;border:1px solid var(--danger);background:rgba(255,80,80,.1);color:var(--danger);cursor:pointer;">🗑 Cancelar todo</button>';
-  html += '</div>';
+  html += '<div class="tq-header">'
+    + '<span class="tq-header-count">' + queue.length + ' tropa(s) en cola</span>'
+    + '<button class="tq-cancel-btn" onclick="cancelTrainingQueue()">✕ Cancelar todo</button>'
+    + '</div>';
 
-  // First active
   var active = queue[0];
   var tStats = TROOP_TYPES[active.type];
   if (tStats) {
@@ -624,35 +703,42 @@ function renderTrainingQueue() {
     var start = new Date(active.start_at).getTime();
     var total = Math.max(1, (finish - start) / 1000);
     var pct = Math.min(100, Math.round(((total - timeLeft) / total) * 100));
-    html += '<div style="background:var(--panel2);padding:8px 10px;border-radius:6px;margin-bottom:8px;">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">';
-    html += '<span style="font-size:.9rem;">' + tStats.icon + ' ' + tStats.name + '</span>';
-    html += '<span style="font-size:.75rem;color:var(--ok);">' + fmtTime(timeLeft) + '</span>';
-    html += '</div>';
-    html += '<div style="background:var(--bg);height:7px;border-radius:4px;overflow:hidden;">';
-    html += '<div style="width:' + pct + '%;height:100%;background:var(--accent);transition:width 1s linear;"></div>';
-    html += '</div>';
-    // Total queue time — siempre visible, no solo si hay >1
-    html += '<div style="font-size:.63rem;color:var(--dim);margin-top:4px;">Cola completa (' + queue.length + ' tropas): <span style="color:var(--accent);">' + fmtTime(totalSecsLeft) + '</span> · termina <b>' + lastStr + '</b></div>';
-    html += '</div>';
+    var arrStr = new Date(finish).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    html += '<div class="tq-active">'
+      + '<div class="tq-active-icon">' + tStats.icon + '</div>'
+      + '<div class="tq-active-info">'
+      + '<div class="tq-active-name">' + tStats.name + '</div>'
+      + '<div class="tq-bar"><div class="tq-bar-fill" style="width:' + pct + '%"></div></div>'
+      + '<div class="tq-active-time">' + fmtTime(timeLeft) + ' restantes · termina ' + arrStr + '</div>'
+      + '<div class="tq-active-eta">Cola completa (' + queue.length + '): '
+      + fmtTime(totalSecsLeft) + ' · <b>' + lastStr + '</b></div>'
+      + '</div>'
+      + '</div>';
   }
-  // Waiting
+
   if (queue.length > 1) {
     var waiting = queue.slice(1);
     var counts = {};
     waiting.forEach(function (t) { counts[t.type] = (counts[t.type] || 0) + 1; });
-    html += '<div style="background:var(--panel2);padding:7px 10px;border-radius:6px;">';
-    html += '<div style="font-size:.68rem;color:var(--dim);margin-bottom:5px;letter-spacing:.08em;">EN ESPERA</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+
+    html += '<div class="tq-waiting">'
+      + '<div class="tq-waiting-label">En espera</div>'
+      + '<div class="tq-chips">';
+
     Object.keys(counts).forEach(function (key) {
       var ts = TROOP_TYPES[key];
       if (!ts) return;
-      html += '<div style="display:flex;align-items:center;gap:4px;background:var(--bg);padding:3px 8px;border-radius:4px;font-size:.78rem;">';
-      html += ts.icon + ' ' + ts.name + ' <span style="color:var(--accent);font-weight:bold;margin-left:2px;">×' + counts[key] + '</span>';
-      html += '</div>';
+      html += '<div class="tq-chip">'
+        + '<span class="tq-chip-icon">' + ts.icon + '</span>'
+        + '<span>' + ts.name + '</span>'
+        + (counts[key] > 1 ? '<span class="tq-chip-count">×' + counts[key] + '</span>' : '')
+        + '</div>';
     });
+
     html += '</div></div>';
   }
+
   box.innerHTML = html;
 }
 
@@ -679,7 +765,6 @@ function renderRefugio() {
   var used = getRefugioUsed(vs);
   var missions = vs.mission_queue || [];
 
-  // Tropas en misión por tipo
   var inMission = {};
   missions.forEach(function (m) {
     if (!m.troops) return;
@@ -689,13 +774,11 @@ function renderRefugio() {
   var pct = cap > 0 ? Math.min(100, Math.round(used / cap * 100)) : 0;
   var pctColor = pct >= 90 ? 'var(--danger)' : pct >= 60 ? 'var(--gold)' : 'var(--ok)';
 
-  // Calcular capacidad siguiente nivel para mostrar al jugador
   var nextLvl = lvl + 1;
   var nextCap = Math.floor(Math.round(50 * Math.pow(1.40, nextLvl - 1)) * 0.10);
 
   var html = '';
 
-  // Cabecera estado refugio
   html += '<div class="card" style="margin-bottom:14px;">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
   html += '<div>';
@@ -710,24 +793,28 @@ function renderRefugio() {
   html += '<div style="height:6px;border-radius:3px;width:' + pct + '%;background:' + pctColor + ';transition:width .3s;"></div>';
   html += '</div></div>';
 
-  // Sliders por tropa
   html += '<div class="card"><div style="display:grid;gap:10px;">';
-  Object.keys(TROOP_TYPES).forEach(function (key) {
+  var troopOrder = ['aldeano'].concat(Object.keys(TROOP_TYPES).filter(function(k){ return k !== 'aldeano'; }));
+  var shownCivil = false, shownMilitar = false;
+  troopOrder.forEach(function (key) {
+    if (key === 'aldeano' && !shownCivil) {
+      shownCivil = true;
+      html += '<div style="font-size:.63rem;color:var(--dim);letter-spacing:.12em;opacity:.8;padding:2px 0 5px;border-bottom:1px solid rgba(255,255,255,.06);">CIVILES</div>';
+    } else if (key !== 'aldeano' && !shownMilitar) {
+      shownMilitar = true;
+      html += '<div style="font-size:.63rem;color:var(--dim);letter-spacing:.12em;opacity:.8;padding:6px 0 5px;border-bottom:1px solid rgba(255,255,255,.06);">MILITARES</div>';
+    }
     var t = TROOP_TYPES[key];
     var inBase = Math.max(0, (vs.troops[key] || 0) - (inMission[key] || 0));
     var inRef = refugio[key] || 0;
-    // Max para este slider: lo que ya está dentro + lo que hay libre fuera (sin misión, sin ya en refugio)
-    var outside = inBase - inRef;
     var slotsPerUnit = t.barracasSlots || 1;
     var freeSlots = cap - used;
     var maxCanAdd = Math.floor(freeSlots / slotsPerUnit);
-    var maxVal = inRef + Math.max(0, maxCanAdd);
-    // No puede superar los que están en base
-    maxVal = Math.min(maxVal, inBase);
+    var maxVal = Math.min(inRef + Math.max(0, maxCanAdd), inBase);
 
     var isInvocador = (key === 'invocador');
-
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">';
+    var hasInBase = inBase > 0;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);' + (hasInBase ? '' : 'opacity:.38;') + '">';
     html += '<span style="font-size:1.4rem;flex-shrink:0;">' + t.icon + '</span>';
     html += '<div style="flex:1;min-width:0;">';
     html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">';
@@ -769,7 +856,6 @@ function applyRefugio() {
     Object.keys(m.troops).forEach(function (k) { inMission[k] = (inMission[k] || 0) + (m.troops[k] || 0); });
   });
 
-  // Leer valores de los sliders
   var newRefugio = {};
   var totalSlots = 0;
   var valid = true;
@@ -790,11 +876,9 @@ function applyRefugio() {
     showNotif('Capacidad del Refugio insuficiente (' + totalSlots + ' / ' + cap + ' plazas).', 'err'); return;
   }
 
-  // Check invocadores: si metes más invocadores de los que había, revisar cola de invocación
   var prevInvRef = (vs.refugio && vs.refugio.invocador) || 0;
   var newInvRef = newRefugio.invocador || 0;
   if (newInvRef > prevInvRef) {
-    // Invocadores disponibles fuera del refugio después del cambio
     var totalInv = vs.troops.invocador || 0;
     var invInMission = inMission.invocador || 0;
     var invOutsideAfter = totalInv - invInMission - newInvRef;
@@ -831,4 +915,3 @@ function applyRefugio() {
 // ============================================================
 // COMBAT SIMULATOR LOGIC (Ported from v0.11)
 // ============================================================
-

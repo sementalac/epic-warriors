@@ -75,13 +75,10 @@ async function onUserInput() {
   userCheckTimer = setTimeout(async function () {
     setUserMsg('Comprobando...', '');
     if (await isUsernameBanned(normalized)) { setUserMsg('Nombre no permitido.', 'err'); return; }
+    var av = await isUsernameAvailable(normalized);
     setUserMsg(av.ok ? 'Disponible ✅' : 'No disponible ❌', av.ok ? 'ok' : 'err');
   }, 250);
 }
-
-// ============================================================
-// AUTH & NETWORK
-// ============================================================
 
 // ============================================================
 // AUTH & NETWORK
@@ -283,7 +280,8 @@ function openProfile() {
   document.getElementById('profMsg').className = 'profile-msg';
   // Mostrar nombre de la aldea activa en el botón de borrar
   var pvn = document.getElementById('profVillageName');
-  if (pvn && activeVillage) pvn.textContent = '("' + activeVillage.name + '")';      // Deshabilitar borrar aldea si solo tienen 1
+  if (pvn && activeVillage) pvn.textContent = '("' + activeVillage.name + '")';
+  // Deshabilitar borrar aldea si solo tienen 1
   var dvBtn = document.querySelector('button[onclick="doDeleteVillage()"]');
   if (dvBtn) {
     var canDel = myVillages && myVillages.length > 1;
@@ -332,6 +330,11 @@ async function doChangeUsername() {
   showNotif('Nombre actualizado: ' + raw, 'ok');
 }
 
+// ============================================================
+// FIX v1.45: doDeleteVillage
+// — Añadido DELETE en resources (faltaba → FK constraint o fila huérfana)
+// — Orden correcto: tablas hijas primero, villages al final
+// ============================================================
 async function doDeleteVillage() {
   if (!activeVillage || !currentUser) return;
   // Solo se puede borrar si tienes más de 1 aldea
@@ -351,14 +354,40 @@ async function doDeleteVillage() {
   }
   if (!confirm('¿Borrar la aldea "' + vilName + '" y todo su contenido?\nTropas, edificios y recursos se perderán.\nEsta acción no se puede deshacer.')) return;
 
+  var vid = activeVillage.id;
   try {
-    await sbClient.from('buildings').delete().eq('village_id', activeVillage.id);
-    await sbClient.from('troops').delete().eq('village_id', activeVillage.id);
-    await sbClient.from('creatures').delete().eq('village_id', activeVillage.id);
-    await sbClient.from('villages').delete().eq('id', activeVillage.id);
+    // Borrar tablas hijas en orden correcto (FK a villages.id)
+    var errs = [];
+    var r1 = await sbClient.from('resources').delete().eq('village_id', vid);
+    if (r1.error) errs.push('resources: ' + r1.error.message);
+    var r2 = await sbClient.from('buildings').delete().eq('village_id', vid);
+    if (r2.error) errs.push('buildings: ' + r2.error.message);
+    var r3 = await sbClient.from('troops').delete().eq('village_id', vid);
+    if (r3.error) errs.push('troops: ' + r3.error.message);
+    var r4 = await sbClient.from('creatures').delete().eq('village_id', vid);
+    if (r4.error) errs.push('creatures: ' + r4.error.message);
+
+    if (errs.length > 0) {
+      // Avisar pero intentar borrar la aldea igualmente
+      console.warn('[doDeleteVillage] Errores en tablas hijas:', errs.join(' | '));
+    }
+
+    // Finalmente borrar la aldea principal
+    var r5 = await sbClient.from('villages').delete().eq('id', vid);
+    if (r5.error) throw new Error(r5.error.message);
+
+    // También liberar cueva capturada si tenía guardián
+    if (typeof onCaveGuardianDied === 'function') {
+      var hadGuardian = activeVillage.state &&
+        activeVillage.state.creatures &&
+        (activeVillage.state.creatures.guardiancueva || 0) > 0;
+      if (hadGuardian) {
+        await onCaveGuardianDied(vid, currentUser.id);
+      }
+    }
 
     // Recargar localmente
-    myVillages = myVillages.filter(function (v) { return v.id !== activeVillage.id; });
+    myVillages = myVillages.filter(function (v) { return v.id !== vid; });
     activeVillage = myVillages[0];
     activeVillageId = activeVillage.id;
     populateVillageSel();
@@ -370,6 +399,11 @@ async function doDeleteVillage() {
   }
 }
 
+// ============================================================
+// FIX v1.45: doDeleteAccount
+// — Corregido .eq('user_id', ...) → .eq('owner_id', ...) para villages
+// — Añadido borrado de resources/buildings/troops/creatures antes de villages
+// ============================================================
 async function doDeleteAccount() {
   var raw = (document.getElementById('profNewName').value || '').trim();
   var myName = document.getElementById('profUsername').textContent;
@@ -381,8 +415,26 @@ async function doDeleteAccount() {
     return;
   }
   if (!confirm('¿Estás SEGURO de que quieres eliminar tu cuenta? Todos tus datos se perderán.')) return;
-  await sbClient.from('villages').delete().eq('user_id', currentUser.id);
-  await sbClient.from('profiles').delete().eq('id', currentUser.id);
+
+  try {
+    // Obtener IDs de todas mis aldeas
+    var vilR = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
+    if (!vilR.error && vilR.data && vilR.data.length > 0) {
+      var vids = vilR.data.map(function (v) { return v.id; });
+      // Borrar tablas hijas de todas las aldeas
+      await sbClient.from('resources').delete().in('village_id', vids);
+      await sbClient.from('buildings').delete().in('village_id', vids);
+      await sbClient.from('troops').delete().in('village_id', vids);
+      await sbClient.from('creatures').delete().in('village_id', vids);
+    }
+    // Borrar aldeas (columna correcta: owner_id)
+    await sbClient.from('villages').delete().eq('owner_id', currentUser.id);
+    // Borrar perfil
+    await sbClient.from('profiles').delete().eq('id', currentUser.id);
+  } catch (e) {
+    console.warn('doDeleteAccount cleanup error:', e);
+  }
+
   // Cerrar sesión (el usuario de auth.users queda; si quieres borrarlo del todo necesitas el trigger)
   await sbClient.auth.signOut();
   location.reload();
@@ -461,5 +513,3 @@ function validateTransportRes() {
   }
 }
 // processMissions eliminado: resolveMissions (tick cada segundo) gestiona todos los tipos de misión incluyendo transport.
-
-
