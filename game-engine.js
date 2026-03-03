@@ -288,6 +288,23 @@ async function sendSystemReport(userId, title, body) {
 async function resolveMissions(vs) {
   if (!vs.mission_queue || vs.mission_queue.length === 0) return vs;
 
+  // ── v1.48: Fallback robusto para guardiancueva ──────────────
+  // Si game-caves.js no ha cargado aún, CREATURE_TYPES.guardiancueva
+  // podría no existir → el guardián se perdería al regresar de misión.
+  if (typeof CREATURE_TYPES !== 'undefined' && !CREATURE_TYPES.guardiancueva) {
+    CREATURE_TYPES.guardiancueva = {
+      name: 'Guardián de la Cueva', icon: '🧿', tier: 5,
+      isCaveGuardian: true,
+      attackChance: 17, hp: 200, attacksPerTurn: 2, damage: 38,
+      defense: 17, armor: 0, weapon: 0, dexterity: 17,
+      speed: 140, capacity: 0,
+      summonersNeeded: 0,
+      cost: { esencia: 0 }, time: 0,
+      desc: 'Guardián ancestral de una cueva mágica.'
+    };
+  }
+  // ────────────────────────────────────────────────────────────
+
   var now = Date.now();
   var remaining = [];
   var changed = false;
@@ -416,16 +433,15 @@ async function resolveMissions(vs) {
           });
 
           // ── DEATH CHECK del Guardián de la Cueva ──────────────────────
-          // Si el jugador tenía un guardián (guardiancueva > 0) ANTES de
-          // esta batalla, pero ahora en los aceptados es 0, ha muerto.
-          var guardianWasSent = (m.troops && (m.troops.guardiancueva || 0) > 0);
-          var guardianReturned = (accepted.guardiancueva || 0) > 0;
-          if (guardianWasSent && !guardianReturned) {
-            // El guardián murió en batalla → reaparece cueva en el mapa
-            if (typeof onCaveGuardianDied === 'function') {
-              onCaveGuardianDied(activeVillage.id, currentUser.id).catch(function(e) {
-                console.warn('[Caves] onCaveGuardianDied error:', e);
-              });
+          // v1.48: Soporte para múltiples guardianes — contar cuántos murieron
+          var guardiansSent     = (m.troops && m.troops.guardiancueva) || 0;
+          var guardiansReturned = accepted.guardiancueva || 0;
+          var guardiansDied     = guardiansSent - guardiansReturned;
+          if (guardiansDied > 0 && typeof onCaveGuardianDied === 'function') {
+            // Liberar una cueva por cada guardián muerto (secuencial para no pisar)
+            for (var gdi = 0; gdi < guardiansDied; gdi++) {
+              try { await onCaveGuardianDied(activeVillage.id, currentUser.id); }
+              catch (gde) { console.warn('[Caves] onCaveGuardianDied error:', gde); }
             }
           }
           // ──────────────────────────────────────────────────────────────

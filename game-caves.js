@@ -1,7 +1,10 @@
 // ============================================================
-// EPIC WARRIORS — game-caves.js  v1.47
+// EPIC WARRIORS — game-caves.js  v1.48
 // Sistema de Cuevas: NPCs especiales en el mapa cuya criatura
 // guardiana puede ser capturada y añadida al ejército del jugador.
+//
+// v1.48: Fix loadAdminCaves — muestra ubicación real del guardián
+//        (coordenadas de la aldea actual o "En movimiento")
 //
 // v1.47: Criaturas cazadas completamente funcionales
 //        - renderCaughtCreatures() en game-troops.js
@@ -230,21 +233,25 @@ function selectCave(cave, x, y) {
     return;
   }
 
-  // Verificar si el jugador ya tiene un guardián
-  var alreadyHas = _playerHasCaveGuardian();
-  if (alreadyHas) {
-    actions.innerHTML = '<span style="color:var(--gold);font-size:.72rem;">🧿 Ya tienes un Guardián. Solo puedes tener uno a la vez.</span>';
-    return;
-  }
+  // ── v1.48: Sin límite de guardianes — se pueden capturar tantos como cuevas haya
+  var currentGuardians = _countPlayerCaveGuardians();
 
   actions.innerHTML =
-    '<button class="map-action-btn atk" onclick="openCaveAttackModal(\'' + cave.id + '\',' + x + ',' + y + ')">⚔️ Atacar la Cueva</button>';
+    '<button class="map-action-btn atk" onclick="openCaveAttackModal(\'' + cave.id + '\',' + x + ',' + y + ')">⚔️ Atacar la Cueva</button>'
+    + (currentGuardians > 0
+      ? '<div style="font-size:.62rem;color:var(--gold);margin-top:6px;">🧿 Guardianes capturados: ' + currentGuardians + '</div>'
+      : '');
 }
 
-function _playerHasCaveGuardian() {
-  if (!activeVillage || !activeVillage.state) return false;
-  var creatures = activeVillage.state.creatures || {};
-  return (creatures.guardiancueva || 0) > 0;
+// Cuenta guardianes capturados en la aldea activa (incluye los que están en misión)
+function _countPlayerCaveGuardians() {
+  if (!activeVillage || !activeVillage.state) return 0;
+  var inBase = (activeVillage.state.creatures && activeVillage.state.creatures.guardiancueva) || 0;
+  var inMission = 0;
+  (activeVillage.state.mission_queue || []).forEach(function (m) {
+    if (m.troops && (m.troops.guardiancueva || 0) > 0) inMission += m.troops.guardiancueva;
+  });
+  return inBase + inMission;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -279,9 +286,8 @@ function openCaveAttackModal(caveId, x, y) {
       + 'style="width:60px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:.82rem;text-align:right;outline:none;">'
       + '</div>';
   });
-  // Criaturas propias (no guardiancueva)
+  // Criaturas propias (incluye guardiancueva — v1.48: capturados pueden atacar cuevas)
   Object.keys(CREATURE_TYPES).forEach(function (k) {
-    if (k === 'guardiancueva') return;
     var available = (vs.creatures && vs.creatures[k]) || 0;
     if (available <= 0) return;
     var cd = CREATURE_TYPES[k];
@@ -371,7 +377,6 @@ async function launchCaveAttack(caveId, x, y) {
     if (n > 0) { troops[k] = n; hasAny = true; }
   });
   Object.keys(CREATURE_TYPES).forEach(function (k) {
-    if (k === 'guardiancueva') return;
     var el = document.getElementById('cave_troop_' + k);
     if (!el) return;
     var n = parseInt(el.value) || 0;
@@ -712,6 +717,8 @@ async function _findFreeCaveSpot() {
 
 // ─────────────────────────────────────────────────────────────
 // ADMIN — PANEL DE CUEVAS
+// v1.48: Muestra ubicación real del guardián capturado
+//        (coordenadas de aldea + nombre, o "En movimiento")
 // ─────────────────────────────────────────────────────────────
 
 async function loadAdminCaves() {
@@ -737,8 +744,18 @@ async function loadAdminCaves() {
     if (!ur.error && ur.data) ur.data.forEach(function (u) { usernameMap[u.id] = u.username; });
   }
 
-  var wild     = caves.filter(function (c) { return c.status === 'wild'; });
+  // ── v1.48: Cargar datos de aldeas de captores para ubicación real ──
   var captured = caves.filter(function (c) { return c.status === 'captured'; });
+  var villageIds = [...new Set(captured.filter(function (c) { return c.village_id; }).map(function (c) { return c.village_id; }))];
+  var villageMap = {}; // village_id → { name, cx, cy, state }
+  if (villageIds.length > 0) {
+    var vr = await sbClient.from('villages').select('id,name,cx,cy,state').in('id', villageIds);
+    if (!vr.error && vr.data) {
+      vr.data.forEach(function (v) { villageMap[v.id] = v; });
+    }
+  }
+
+  var wild = caves.filter(function (c) { return c.status === 'wild'; });
 
   var html =
     '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;">'
@@ -777,13 +794,41 @@ async function loadAdminCaves() {
   if (captured.length === 0) {
     html += '<div class="muted">Ningún jugador tiene guardián actualmente.</div>';
   } else {
-    html += '<div class="table"><div class="trow thead"><div>Jugador</div><div>Aldea ID</div><div>Cueva</div><div></div></div>';
+    html += '<div class="table"><div class="trow thead"><div>Jugador</div><div>Ubicación actual</div><div></div></div>';
     captured.forEach(function (c) {
       var uname = c.owner_id ? (usernameMap[c.owner_id] || c.owner_id.slice(0, 8)) : '—';
+
+      // ── v1.48: Determinar ubicación real del guardián ──
+      var locationHtml = '';
+      var village = c.village_id ? villageMap[c.village_id] : null;
+
+      if (village) {
+        // Comprobar si el guardián está en movimiento (misión activa con guardiancueva)
+        var onMission = false;
+        var vState = typeof village.state === 'string' ? JSON.parse(village.state) : (village.state || {});
+        var mq = (vState && vState.mission_queue) || [];
+        for (var mi = 0; mi < mq.length; mi++) {
+          var mission = mq[mi];
+          if (mission.troops && (mission.troops.guardiancueva || 0) > 0) {
+            onMission = true;
+            break;
+          }
+        }
+
+        if (onMission) {
+          locationHtml = '<span style="color:var(--accent);">🚶 En movimiento</span>';
+        } else {
+          locationHtml = '<span style="font-family:VT323,monospace;color:var(--ok);">'
+            + escapeHtml(village.name) + ' [' + village.cx + ', ' + village.cy + ']'
+            + '</span>';
+        }
+      } else {
+        locationHtml = '<span style="color:var(--dim);font-size:.65rem;">Aldea desconocida</span>';
+      }
+
       html += '<div class="trow">'
         + '<div>👤 ' + escapeHtml(uname) + '</div>'
-        + '<div style="font-size:.62rem;color:var(--dim);">' + (c.village_id ? c.village_id.slice(0, 8) + '…' : '—') + '</div>'
-        + '<div style="font-family:VT323,monospace;color:var(--dim);">[' + c.cx + ', ' + c.cy + ']</div>'
+        + '<div>' + locationHtml + '</div>'
         + '<div>'
         + '<button class="btn btn-sm" style="background:rgba(224,64,64,.1);border-color:var(--danger);color:var(--danger);" '
         + 'onclick="adminRevokeCave(\'' + c.id + '\',\'' + escapeAttr(uname) + '\')" title="Liberar guardián (vuelve al mapa)">🔓 Liberar</button>'

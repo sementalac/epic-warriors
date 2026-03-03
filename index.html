@@ -795,13 +795,6 @@
           Cerrar</button>
       </div>
 
-      <!-- ⛏️ v1.47: Navegación rápida de admin -->
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
-        <button class="admin-btn search" onclick="openAdminUsersPage()" style="background:rgba(0,212,255,.15);flex:1;min-width:120px;font-size:.75rem;">👥 Usuarios</button>
-        <button class="admin-btn search" onclick="openAdminCavesSection()" style="background:rgba(255,215,0,.15);flex:1;min-width:120px;font-size:.75rem;">⛏️ Cuevas</button>
-        <button class="admin-btn search" onclick="openAdminAlliancesSection()" style="background:rgba(192,132,252,.15);flex:1;min-width:120px;font-size:.75rem;">🛡️ Alianzas</button>
-      </div>
-
       <!-- Buscador de jugadores -->
       <div style="margin-bottom: 10px; font-size: 0.7rem; color: var(--dim);">BUSCAR JUGADOR (EMAIL O USERNAME)</div>
       <div class="admin-search-wrap">
@@ -1214,6 +1207,7 @@
         if (!crs) {
           const defCrs = { village_id: v.id };
           Object.keys(CREATURE_TYPES).forEach(k => {
+            if (k === 'guardiancueva') return; // ⛏️ v1.48: no es columna de creatures
             defCrs[k] = 0;
           });
           const { data: newCrs, error: insErr } = await sbClient.from('creatures').insert(defCrs).select().single();
@@ -1526,20 +1520,47 @@
     async function refreshMilitaryScore() {
       if (!currentUser) return;
       try {
-        const allVils = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
+        const allVils = await sbClient.from('villages').select('id,mission_queue').eq('owner_id', currentUser.id);
         if (!allVils.error && allVils.data && allVils.data.length > 0) {
           const vilIds = allVils.data.map(vv => vv.id);
-          const [allTrps, allCrs] = await Promise.all([
+          const [allTrps, allCrs, allCaves] = await Promise.all([
             sbClient.from('troops').select('*').in('village_id', vilIds),
-            sbClient.from('creatures').select('*').in('village_id', vilIds)
+            sbClient.from('creatures').select('*').in('village_id', vilIds),
+            // ── v1.48: Contar guardianes capturados (no son columna de creatures) ──
+            sbClient.from('caves').select('village_id').eq('status', 'captured').eq('owner_id', currentUser.id)
           ]);
           let grandTotal = 0;
+
+          // Tropas en base (tablas)
           if (!allTrps.error && allTrps.data) {
             allTrps.data.forEach(row => { Object.keys(TROOP_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
           }
+          // Criaturas en base (tablas — excluye guardiancueva que no es columna)
           if (!allCrs.error && allCrs.data) {
             allCrs.data.forEach(row => { Object.keys(CREATURE_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
           }
+
+          // ── v1.48: Guardianes capturados (1 por cueva capturada) ──
+          if (!allCaves.error && allCaves.data) {
+            grandTotal += allCaves.data.length;
+          }
+
+          // ── v1.48: Tropas y criaturas en misión (restadas de tablas al enviar) ──
+          allVils.data.forEach(function (vil) {
+            var mq = vil.mission_queue || [];
+            for (var mi = 0; mi < mq.length; mi++) {
+              var mTroops = mq[mi].troops || {};
+              Object.keys(mTroops).forEach(function (k) {
+                // No contar guardiancueva aquí — ya contado via caves
+                if (k === 'guardiancueva') return;
+                if (TROOP_TYPES[k] || CREATURE_TYPES[k]) {
+                  grandTotal += (mTroops[k] || 0);
+                }
+              });
+            }
+          });
+          // ─────────────────────────────────────────────────────────────────
+
           await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
         }
       } catch (e) { console.warn('refreshMilitaryScore failed', e); }

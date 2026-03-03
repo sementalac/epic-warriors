@@ -1,10 +1,12 @@
 // ============================================================
-// EPIC WARRIORS — game-troops.js v1.47
+// EPIC WARRIORS — game-troops.js v1.48
 // UI: renderTroops, renderCreatures, renderSummoningQueue,
 // renderCreaturesList, showCreatureStats, renderSummonOptions,
 // showBarracasModal, startRecruitment, showTroopStats,
 // renderTrainOptions, resolveTrainingQueue, renderTrainingQueue
 //
+// v1.48: renderCaughtCreatures() cross-check con caves table
+//        para múltiples aldeas + auto-corrección de estado
 // v1.47: renderCaughtCreatures() para apartado de guardianes capturados
 // ============================================================
 
@@ -198,10 +200,55 @@ function renderCaughtCreatures() {
   var creatures = vs.creatures || defaultCreatures();
   var caughtCount = creatures.guardiancueva || 0;
 
+  // ── v1.48: Verificar contra tabla caves que los guardianes pertenecen a ESTA aldea ──
+  // Evita mostrar guardianes fantasma cuando el jugador tiene múltiples aldeas
+  // o cuando el estado está desincronizado (admin revoke, muerte en combate, etc.)
+  if (typeof _cavesCache !== 'undefined' && _cavesCache.length > 0) {
+    var cavesOwnedByVillage = _cavesCache.filter(function (c) {
+      return c.status === 'captured' && c.village_id === activeVillage.id;
+    }).length;
+
+    // Contar guardianes en misión (están fuera de vs.creatures pero siguen siendo de esta aldea)
+    var guardiansInMission = 0;
+    (vs.mission_queue || []).forEach(function (m) {
+      if (m.troops && (m.troops.guardiancueva || 0) > 0) guardiansInMission += m.troops.guardiancueva;
+    });
+
+    var expectedTotal = cavesOwnedByVillage; // cada cueva capturada = 1 guardián
+    var actualTotal = caughtCount + guardiansInMission;
+
+    if (actualTotal > expectedTotal) {
+      // Más guardianes en estado que cuevas capturadas → corregir
+      vs.creatures.guardiancueva = Math.max(0, expectedTotal - guardiansInMission);
+      caughtCount = vs.creatures.guardiancueva;
+      if (typeof scheduleSave === 'function') scheduleSave();
+    } else if (actualTotal < expectedTotal) {
+      // Menos guardianes de los esperados → restaurar los que faltan
+      vs.creatures.guardiancueva = expectedTotal - guardiansInMission;
+      caughtCount = vs.creatures.guardiancueva;
+      if (typeof scheduleSave === 'function') scheduleSave();
+    }
+  }
+
   if (caughtCount === 0) {
-    box.innerHTML = '<div style="color:var(--dim);font-size:.8rem;">Aún no has capturado guardianes de cuevas</div>';
+    // Comprobar si hay guardianes en misión para mostrar info
+    var inMissionOnly = 0;
+    (vs.mission_queue || []).forEach(function (m) {
+      if (m.troops && (m.troops.guardiancueva || 0) > 0) inMissionOnly += m.troops.guardiancueva;
+    });
+    if (inMissionOnly > 0) {
+      box.innerHTML = '<div style="color:var(--accent);font-size:.8rem;">🚶 ' + inMissionOnly + ' guardián' + (inMissionOnly > 1 ? 'es' : '') + ' en misión</div>';
+    } else {
+      box.innerHTML = '<div style="color:var(--dim);font-size:.8rem;">Aún no has capturado guardianes de cuevas</div>';
+    }
     return;
   }
+
+  // Contar los que están en misión para info adicional
+  var guardiansInMissionDisplay = 0;
+  (vs.mission_queue || []).forEach(function (m) {
+    if (m.troops && (m.troops.guardiancueva || 0) > 0) guardiansInMissionDisplay += m.troops.guardiancueva;
+  });
 
   var cData = CREATURE_TYPES.guardiancueva || {};
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
@@ -211,7 +258,7 @@ function renderCaughtCreatures() {
   html += '<button onclick="showCreatureStats(\'guardiancueva\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;margin-top:6px;display:block;width:100%;">' + cData.icon + '</button>';
   html += '<div style="font-size:.78rem;color:var(--gold);margin-top:5px;font-family:VT323,monospace;font-weight:bold;">' + (cData.name || 'Guardián') + '</div>';
   html += '<div style="font-size:1.5rem;color:var(--gold);font-weight:bold;font-family:VT323,monospace;line-height:1.2;">' + caughtCount + '</div>';
-  html += '<div style="font-size:.58rem;color:var(--dim);margin-top:1px;">en base</div>';
+  html += '<div style="font-size:.58rem;color:var(--dim);margin-top:1px;">en base' + (guardiansInMissionDisplay > 0 ? ' · <span style="color:var(--accent);">' + guardiansInMissionDisplay + ' en misión</span>' : '') + '</div>';
   html += '</div>';
 
   html += '</div>';
@@ -277,6 +324,8 @@ function renderSummonOptions() {
   var tiers = {};
   Object.keys(CREATURE_TYPES).forEach(function (key) {
     var cData = CREATURE_TYPES[key];
+    // ⛏️ v1.48: Criaturas capturadas NO son invocables — excluir del listado
+    if (cData.isCaveGuardian) return;
     if (!tiers[cData.tier]) tiers[cData.tier] = [];
     tiers[cData.tier].push({ key: key, data: cData });
   });
