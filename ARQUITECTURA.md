@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 2.1 — Última actualización: v1.47
+> Versión del documento: 2.2 — Última actualización: v1.49
 > Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
 
 ---
@@ -119,12 +119,9 @@ flushVillage()
 
 | Tabla | Contenido | Cuándo se escribe |
 |---|---|---|
-| `villages` | Colas (build, mission, summoning, training), nombre, coords | En cada `saveVillage` |
+| `villages` | `state` jsonb completo (troops+creatures+buildings+resources+colas), nombre, coords | En cada `saveVillage` |
 | `profiles` | username, XP, military_score, last_seen, victorias PvP/NPC | Al login, al ganar/perder batallas, al cambiar XP |
-| `buildings` | Niveles de edificios por aldea (una fila por aldea) | Dentro de `saveVillage` |
-| `troops` | Tropas por aldea (una fila por aldea) | Dentro de `saveVillage` |
-| `creatures` | Criaturas por aldea (una fila por aldea) | Dentro de `saveVillage` |
-| `resources` | Recursos + aldeanos asignados por aldea | Dentro de `saveVillage` |
+> Las tablas `troops`, `creatures`, `buildings` y `resources` fueron **eliminadas en v1.49**. Todo su contenido vive ahora en `villages.state` jsonb.
 | `guest_troops` | Tropas de refuerzo en aldeas ajenas | `processRecalls` al login |
 | `player_objectives` | Estado de objetivos NPC por jugador | Al completar batalla NPC |
 | `caves` | Cuevas del mapa: id, cx, cy, status (wild/captured), owner_id, village_id | Al capturar/liberar guardián, al morir el guardián |
@@ -150,26 +147,22 @@ Los usuarios solo pueden leer/escribir sus propias filas. Para que el admin pued
 Las aldeas fantasma son aldeas NPC controladas por el admin para poblar el mapa sin jugadores reales.
 
 - **owner_id:** `'00000000-0000-0000-0000-000000000000'` (constante `GHOST_OWNER_ID`)
-- **Datos:** guardados en las 5 tablas separadas igual que cualquier aldea (NO tienen columna `state`)
-- **Trigger:** al crear en `villages`, el trigger `trigger_create_creatures` inserta automáticamente en `creatures` — nunca hacer INSERT manual en `creatures`
+- **Datos:** en `villages.state` jsonb, exactamente igual que las aldeas de jugadores reales
+- **Creación:** RPC `admin_ghost_create` — inserta directamente con `state` jsonb completo
+- El trigger `trigger_create_creatures` **ya no existe** (eliminado en v1.49)
 
-### Al atacar o espiar una aldea fantasma (o cualquier aldea sin `state`)
+### Al atacar o espiar cualquier aldea (jugador real o fantasma)
 ```javascript
-// executeAttackPvP / executeSpyMission detectan ts === null
-// y cargan desde tablas separadas:
-var bldR = await sbClient.from('buildings').select('*').eq('village_id', targetId).maybeSingle();
-var trpR = await sbClient.from('troops').select('*').eq('village_id', targetId).maybeSingle();
-var crtR = await sbClient.from('creatures').select('*').eq('village_id', targetId).maybeSingle();
-var resR = await sbClient.from('resources').select('*').eq('village_id', targetId).maybeSingle();
+// Un solo camino — todas las aldeas tienen state jsonb
+var r = await sbClient.from('villages').select('state').eq('id', targetId).maybeSingle();
+var ts = typeof r.data.state === 'string' ? JSON.parse(r.data.state) : r.data.state;
+if (!ts) ts = { buildings: {}, troops: {}, creatures: {}, resources: {} }; // self-healing
 ```
 
-### Al guardar resultado de combate en aldea fantasma
+### Al guardar resultado de combate en cualquier aldea
 ```javascript
-// NO usar villages.update({ state: ... })
-// Usar UPDATE directo en tablas:
-await sbClient.from('troops').update(trpUpdate).eq('village_id', targetId);
-await sbClient.from('creatures').update(crtUpdate).eq('village_id', targetId);
-await sbClient.from('resources').update(resUpdate).eq('village_id', targetId);
+// Un solo camino — jugador real y fantasma idénticos
+await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', targetId);
 ```
 
 ---
@@ -334,16 +327,16 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 10. **Costes de edificios siempre con `phasedVal`.** Nunca `Math.pow(X, l)` directo.
 11. **Capacidad almacén siempre con `almacenCapForLevel`.**
 12. **Admin nunca escribe en tablas ajenas con `.from().update()`.** Siempre RPCs.
-13. **Al crear una aldea, NO insertar en `creatures` manualmente.** El trigger lo hace.
-14. **Aldeas fantasma y aldeas sin `state`: cargar datos desde tablas separadas antes de combate/espionaje.**
+13. **Al crear una aldea (jugador o fantasma), insertar con `state` jsonb completo.** El trigger `trigger_create_creatures` ya no existe.
+14. **Todas las aldeas (jugador real y fantasma) usan `villages.state` jsonb.** No hay tablas separadas `troops`/`creatures`/`buildings`/`resources` — fueron eliminadas en v1.49.
 15. **`battles_won_pvp/npc` se persisten en `profiles` inmediatamente**, no solo en `state`.
 
 16. **`game-constants.js` solo datos puros.** Ninguna función en él puede referenciar `document`, `sbClient` o cualquier global del juego a nivel de módulo.
 17. **El orden de carga de scripts en `<head>` es fijo:** game-globals → game-data → game-constants → game-troops → game-combat → game-engine → game-ui → game-social → game-smithy → game-auth → game-simulator → game-admin → css. No reordenar.
 18. **`game-globals.js` debe cargarse PRIMERO.** Contiene `sbClient` y los globals del juego. Cualquier módulo que los use antes fallará con ReferenceError.
 
-19. **`guardiancueva` NO es columna de la tabla `creatures`.** Se gestiona exclusivamente a través de la tabla `caves`. Nunca incluirlo en UPDATE/INSERT sobre `creatures`.
-20. **Espionaje sobre aldeas de jugadores reales:** leer tropas de `villages.state` (JSON blob), NO de las tablas separadas `troops`/`creatures`. Las tablas separadas solo existen para aldeas fantasma.
+19. **`guardiancueva` vive en `state.creatures` dentro del jsonb de `villages`.** Es una criatura normal a efectos de persistencia — no requiere tratamiento especial.
+20. **Espionaje y combate PvP: un solo camino para jugador real y fantasma.** Leer y escribir siempre via `villages.state`. No hay bifurcación `isGhost` para datos de aldea.
 
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
@@ -373,6 +366,32 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.49 — Migración a JSON blob (state jsonb)
+
+**Objetivo:** eliminar el modelo de 5 tablas separadas y unificar todos los datos de aldea en `villages.state jsonb`. Un read, un write, cero ensamblaje.
+
+**[Supabase] Cambios en base de datos:**
+- `ALTER TABLE villages ADD COLUMN state jsonb`
+- Script SQL migró datos de las 5 tablas a `state` para todas las aldeas (jugadores y fantasmas)
+- `DROP TABLE troops, creatures, buildings, resources` — tablas legacy eliminadas
+- `DROP TRIGGER trigger_create_creatures` — ya no necesario
+- RPC `admin_ghost_create` reescrito: un solo `INSERT INTO villages` con `state` jsonb completo
+
+**[JS] Archivos modificados:**
+- `index.html`: `loadMyVillages` (1 select), `saveVillage` (1 update), `refreshMilitaryScore`, `createFirstVillage`
+- `game-ui.js`: `executeTransport`, `syncResourcesFromDB`, refuerzos → `villages.state`
+- `game-engine.js`: espionaje unificado (sin bifurcación isGhost), `executeAttackPvP` sin fallback a tablas, guardar defensor via `villages.state`
+- `game-admin.js`: info usuario lee `state.resources`, borrado no toca tablas legacy
+- `game-caves.js`: eliminado write legacy a tabla `creatures` al liberar guardián
+
+**[Eliminado]:**
+- Tablas `troops`, `creatures`, `buildings`, `resources`
+- Trigger `trigger_create_creatures`
+- Toda bifurcación `isGhost` para leer/escribir datos de aldea
+- Fallback de carga desde tablas separadas en `executeAttackPvP`
+
+**[Regla nueva]:** Todas las aldeas usan `villages.state` jsonb. No hay tablas separadas. No hay bifurcación jugador/fantasma para datos de aldea.
 
 ### v1.47 — Criaturas cazadas completamente funcionales + Admin mobile
 
