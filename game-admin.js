@@ -776,7 +776,7 @@ async function viewAdminUserDetails(userId, username) {
 
   // Obtener datos del usuario
   const profile = await sbClient.from('profiles').select('*').eq('id', userId).single();
-  const villages = await sbClient.from('villages').select('id,name,cx,cy,resources,last_updated').eq('owner_id', userId);
+  const villages = await sbClient.from('villages').select('id,name,cx,cy,state,last_updated').eq('owner_id', userId);
   const objectives = await sbClient.from('player_objectives').select('*').eq('user_id', userId);
 
   if (profile.error) {
@@ -806,8 +806,9 @@ async function viewAdminUserDetails(userId, username) {
   } else {
     vills.forEach((v, i) => {
       info += '  ' + (i + 1) + '. ' + v.name + ' [' + v.cx + ',' + v.cy + ']\n';
-      if (v.resources) {
-        info += '     Recursos: 🌲' + Math.floor(v.resources.madera || 0) + ' ⛰️' + Math.floor(v.resources.piedra || 0) + ' ⚙️' + Math.floor(v.resources.hierro || 0) + ' 🌾' + Math.floor(v.resources.provisiones || 0) + ' ✨' + Math.floor(v.resources.esencia || 0) + '\n';
+      if (v.state && v.state.resources) {
+        var res = v.state.resources;
+        info += '     Recursos: 🌲' + Math.floor(res.madera || 0) + ' ⛰️' + Math.floor(res.piedra || 0) + ' ⚙️' + Math.floor(res.hierro || 0) + ' 🌾' + Math.floor(res.provisiones || 0) + ' ✨' + Math.floor(res.esencia || 0) + '\n';
       }
     });
   }
@@ -868,10 +869,7 @@ async function _adminDeleteUserData(userId, username) {
   const vills = await sbClient.from('villages').select('id').eq('owner_id', userId);
   if (!vills.error && vills.data && vills.data.length > 0) {
     var villIds = vills.data.map(function(v) { return v.id; });
-    // Primero borrar todas las tablas que tienen FK a villages
-    await tryDelete('troops', sbClient.from('troops').delete().in('village_id', villIds));
-    await tryDelete('resources', sbClient.from('resources').delete().in('village_id', villIds));
-    await tryDelete('creatures', sbClient.from('creatures').update({ guardiancueva: 0 }).in('village_id', villIds).then ? sbClient.from('creatures').delete().in('village_id', villIds) : Promise.resolve({ error: null }));
+    // v1.49: troops/resources/creatures ya no tienen FK a villages (datos en state jsonb)
     // Liberar cuevas capturadas por este usuario (marcarlas wild)
     await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null })
       .eq('owner_id', userId).then(function(){}).catch(function(){});

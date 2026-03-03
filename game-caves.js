@@ -1014,8 +1014,7 @@ async function adminRevokeCave(caveId, username) {
         st.creatures.guardiancueva = 0;
         await sbClient.from('villages').update({ state: JSON.stringify(st) }).eq('id', caveR.data.village_id);
       }
-      // También borrar en tabla creatures separada si existe
-      await sbClient.from('creatures').update({ guardiancueva: 0 }).eq('village_id', caveR.data.village_id).then(function(){}).catch(function(){});
+      // v1.49: guardiancueva vive en villages.state — no hay tabla creatures separada
     }
   }
 

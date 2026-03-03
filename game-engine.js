@@ -583,34 +583,12 @@ async function executeSpyMission(m) {
       var troopLines = '';
       var wallLvlSpy = 0;
 
-      if (isGhost) {
-        // Aldea fantasma: tropas en tablas separadas (troops / creatures / buildings)
-        var spyTrpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
-        var spyCrtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
-        var spyBldR = await sbClient.from('buildings').select('muralla').eq('village_id', m.targetId).maybeSingle();
-        if (spyTrpR.data) {
-          Object.keys(spyTrpR.data).forEach(function(k) {
-            if (k === 'village_id') return;
-            var n = Math.max(0, (spyTrpR.data[k] || 0) - (spyRefugio[k] || 0));
-            var td = TROOP_TYPES[k];
-            if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
-          });
-        }
-        if (spyCrtR.data) {
-          Object.keys(spyCrtR.data).forEach(function(k) {
-            if (k === 'village_id' || k === 'created_at' || k === 'updated_at' || k === 'guardiancueva') return;
-            var n = spyCrtR.data[k] || 0;
-            var cd = CREATURE_TYPES[k];
-            if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
-          });
-        }
-        wallLvlSpy = (spyBldR.data && spyBldR.data.muralla) || 0;
-      } else {
-        // Aldea de jugador real: tropas en villages.state (JSON blob)
-        var spyVR = await sbClient.from('villages').select('state').eq('id', m.targetId).maybeSingle();
+      // v1.49 jsonb: fantasma y jugador real, mismo camino via villages.state
+      {
+        var spyVR = await sbClient.from("villages").select("state").eq("id", m.targetId).maybeSingle();
         var spyState = null;
         if (spyVR.data && spyVR.data.state) {
-          spyState = typeof spyVR.data.state === 'string' ? JSON.parse(spyVR.data.state) : spyVR.data.state;
+          spyState = typeof spyVR.data.state === "string" ? JSON.parse(spyVR.data.state) : spyVR.data.state;
         }
         if (spyState) {
           var spyTroops = spyState.troops || {};
@@ -621,7 +599,6 @@ async function executeSpyMission(m) {
           });
           var spyCreatures = spyState.creatures || {};
           Object.keys(CREATURE_TYPES).forEach(function(k) {
-            if (k === 'guardiancueva') return;
             var n = spyCreatures[k] || 0;
             var cd = CREATURE_TYPES[k];
             if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
@@ -802,32 +779,8 @@ async function executeAttackPvP(m) {
     var targetVillage = r.data;
     var ts = typeof targetVillage.state === 'string' ? JSON.parse(targetVillage.state) : (targetVillage.state || null);
 
-    // Si ts es null (aldea fantasma o sin state blob), cargar desde tablas separadas
-    if (!ts) {
-      ts = { buildings: {}, troops: {}, creatures: {}, resources: {} };
-      var bldR = await sbClient.from('buildings').select('*').eq('village_id', m.targetId).maybeSingle();
-      if (bldR.data) {
-        Object.keys(bldR.data).forEach(function(k) {
-          if (k !== 'village_id') ts.buildings[k] = { level: bldR.data[k] || 0 };
-        });
-      }
-      var trpR = await sbClient.from('troops').select('*').eq('village_id', m.targetId).maybeSingle();
-      if (trpR.data) {
-        Object.keys(trpR.data).forEach(function(k) {
-          if (k !== 'village_id') ts.troops[k] = trpR.data[k] || 0;
-        });
-      }
-      var crtR = await sbClient.from('creatures').select('*').eq('village_id', m.targetId).maybeSingle();
-      if (crtR.data) {
-        Object.keys(crtR.data).forEach(function(k) {
-          if (k !== 'village_id' && k !== 'created_at' && k !== 'updated_at') ts.creatures[k] = crtR.data[k] || 0;
-        });
-      }
-      var resR = await sbClient.from('resources').select('*').eq('village_id', m.targetId).maybeSingle();
-      if (resR.data) {
-        ts.resources = { madera: resR.data.madera || 0, piedra: resR.data.piedra || 0, hierro: resR.data.hierro || 0, oro: 0, esencia: resR.data.esencia || 0 };
-      }
-    }
+    // v1.49: todas las aldeas tienen state jsonb — no hay fallback a tablas separadas
+    if (!ts) ts = { buildings: {}, troops: {}, creatures: {}, resources: {} }; // self-healing
 
     var wallLvl = (ts.buildings && ts.buildings.muralla && ts.buildings.muralla.level) || 0;
 
@@ -934,21 +887,8 @@ async function executeAttackPvP(m) {
       if (hasSurv) await sbClient.from('guest_troops').update({ troops: JSON.stringify(dRes.survivors) }).eq('id', gtId);
       else          await sbClient.from('guest_troops').delete().eq('id', gtId);
     }
-    // Guardar estado defensor: si es aldea fantasma, actualizar tablas separadas
-    if (targetVillage.owner_id === GHOST_OWNER_ID) {
-      var trpUpdate = {};
-      Object.keys(TROOP_TYPES).forEach(function(k) { trpUpdate[k] = ts.troops[k] || 0; });
-      await sbClient.from('troops').update(trpUpdate).eq('village_id', m.targetId);
-      var crtUpdate = {};
-      Object.keys(CREATURE_TYPES).forEach(function(k) { if (k === 'guardiancueva') return; crtUpdate[k] = ts.creatures[k] || 0; });
-      await sbClient.from('creatures').update(crtUpdate).eq('village_id', m.targetId);
-      if (Object.keys(loot).length > 0) {
-        var resUpdate = { madera: ts.resources.madera || 0, piedra: ts.resources.piedra || 0, hierro: ts.resources.hierro || 0, esencia: ts.resources.esencia || 0 };
-        await sbClient.from('resources').update(resUpdate).eq('village_id', m.targetId);
-      }
-    } else {
-      await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', m.targetId);
-    }
+    // v1.49: guardar defensor siempre via villages.state jsonb (fantasma y jugador real)
+    await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', m.targetId);
 
     // 7. Retorno propias tropas
     var ownRes = bResult.attackerResults[0];

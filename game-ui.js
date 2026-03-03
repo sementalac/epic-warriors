@@ -946,29 +946,37 @@ async function executeFounding(m) {
   }
   try {
     var newVillageName = 'Aldea ' + (myVillagesList.length + 1);
+    // v1.49: Crear aldea con state jsonb
+    var initialState = typeof defaultState === 'function' ? defaultState() : {
+      resources: { madera: 500, piedra: 300, hierro: 100, provisiones: 200, esencia: 0, aldeanos: 0 },
+      aldeanos_assigned: { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 },
+      troops: {}, creatures: {}, buildings: {
+        aserradero: { level: 1 }, cantera: { level: 1 }, minehierro: { level: 1 },
+        granja: { level: 1 }, almacen: { level: 1 }, torre: { level: 1 },
+        barracas: { level: 1 }, circulo: { level: 1 }, reclutamiento: { level: 1 },
+        muralla: { level: 0 }, lab: { level: 0 }
+      },
+      build_queue: null, mission_queue: [], summoning_queue: [], training_queue: [],
+      last_updated: new Date().toISOString(), refugio: {}, _aldeanos_total_mode: true
+    };
     var r = await sbClient.from('villages').insert({
-      owner_id: currentUser.id,
-      name: newVillageName,
-      cx: m.tx,
-      cy: m.ty,
-      build_queue: null,
-      mission_queue: [],
-      summoning_queue: [],
-      training_queue: []
+      owner_id: currentUser.id, name: newVillageName,
+      cx: m.tx, cy: m.ty,
+      build_queue: null, mission_queue: [], summoning_queue: [], training_queue: [],
+      state: initialState
     }).select('id').single();
     if (r.error) throw r.error;
 
     var newId = r.data.id;
-    await sbClient.from('resources').insert({ village_id: newId, madera: 500, piedra: 300, hierro: 100, prov: 200, esencia: 0 });
+    // Tablas legacy
+    await sbClient.from('resources').insert({ village_id: newId, madera: 500, piedra: 300, hierro: 100, prov: 200, esencia: 0 }).catch(function () {});
     await sbClient.from('buildings').insert({
-      village_id: newId,
-      aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1,
-      torre: 1, barracas: 1, circulo: 1, reclutamiento: 1,
-      muralla: 0, lab: 0
-    });
+      village_id: newId, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1,
+      torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
+    }).catch(function () {});
     var newTroops = { village_id: newId };
     Object.keys(TROOP_TYPES).forEach(function (k) { newTroops[k] = k === 'aldeano' ? 50 : 0; });
-    await sbClient.from('troops').insert(newTroops);
+    await sbClient.from('troops').insert(newTroops).catch(function () {});
 
     await sendSystemReport(currentUser.id, '🏠 ¡NUEVA ALDEA FUNDADA!',
       'Tus colonos han llegado a [' + m.tx + ', ' + m.ty + '] y han fundado ' + newVillageName + '.\n¡Ya puedes seleccionarla en el desplegable de aldeas!');
@@ -1747,22 +1755,27 @@ async function executeMove(m) {
     // Entregar recursos si hay cargo
     var cargoMsg = '';
     if (m.cargo && Object.keys(m.cargo).length > 0) {
-      var rr = await sbClient.from('resources').select('madera,piedra,hierro,prov,esencia').eq('village_id', m.targetId).single();
-      if (!rr.error) {
-        var newRes = {
-          madera: (Number(rr.data.madera) || 0) + (m.cargo.madera || 0),
-          piedra: (Number(rr.data.piedra) || 0) + (m.cargo.piedra || 0),
-          hierro: (Number(rr.data.hierro) || 0) + (m.cargo.hierro || 0),
-          prov: (Number(rr.data.prov) || 0) + (m.cargo.provisiones || 0),
-          esencia: (Number(rr.data.esencia) || 0) + (m.cargo.esencia || 0),
-          last_update: new Date().toISOString()
+      // v1.49: Leer recursos destino desde state jsonb
+      var rr = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
+      if (!rr.error && rr.data && rr.data.state) {
+        var destRes = rr.data.state.resources || {};
+        var newResObj = {
+          madera: (Number(destRes.madera) || 0) + (m.cargo.madera || 0),
+          piedra: (Number(destRes.piedra) || 0) + (m.cargo.piedra || 0),
+          hierro: (Number(destRes.hierro) || 0) + (m.cargo.hierro || 0),
+          provisiones: (Number(destRes.provisiones) || 0) + (m.cargo.provisiones || 0),
+          esencia: (Number(destRes.esencia) || 0) + (m.cargo.esencia || 0),
+          aldeanos: destRes.aldeanos || 0
         };
-        await sbClient.from('resources').update(newRes).eq('village_id', m.targetId);
-        dvs.resources.madera = newRes.madera;
-        dvs.resources.piedra = newRes.piedra;
-        dvs.resources.hierro = newRes.hierro;
-        dvs.resources.provisiones = newRes.prov;
-        dvs.resources.esencia = newRes.esencia;
+        var updState = rr.data.state;
+        updState.resources = newResObj;
+        updState.last_updated = new Date().toISOString();
+        await sbClient.from('villages').update({ state: updState }).eq('id', m.targetId);
+        dvs.resources.madera = newResObj.madera;
+        dvs.resources.piedra = newResObj.piedra;
+        dvs.resources.hierro = newResObj.hierro;
+        dvs.resources.provisiones = newResObj.provisiones;
+        dvs.resources.esencia = newResObj.esencia;
 
         var cargoList = Object.keys(m.cargo).filter(function (k) { return m.cargo[k] > 0; })
           .map(function (k) { return fmt(m.cargo[k]) + ' ' + k; }).join(', ');
@@ -1864,22 +1877,27 @@ async function executeReinforce(m) {
 async function executeTransport(m) {
   try {
     var cargo = m.cargo || {};
-    var rr = await sbClient.from('resources').select('madera,piedra,hierro,prov,esencia').eq('village_id', m.targetId).single();
+    // v1.49: Leer/escribir recursos destino via state jsonb
+    var rr = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
     if (rr.error) throw rr.error;
-    var newRes = {
-      madera: (Number(rr.data.madera) || 0) + (cargo.madera || 0),
-      piedra: (Number(rr.data.piedra) || 0) + (cargo.piedra || 0),
-      hierro: (Number(rr.data.hierro) || 0) + (cargo.hierro || 0),
-      prov: (Number(rr.data.prov) || 0) + (cargo.provisiones || 0),
-      esencia: (Number(rr.data.esencia) || 0) + (cargo.esencia || 0),
-      last_update: new Date().toISOString()
+    var destState = rr.data.state || {};
+    var destRes = destState.resources || {};
+    var newResObj = {
+      madera: (Number(destRes.madera) || 0) + (cargo.madera || 0),
+      piedra: (Number(destRes.piedra) || 0) + (cargo.piedra || 0),
+      hierro: (Number(destRes.hierro) || 0) + (cargo.hierro || 0),
+      provisiones: (Number(destRes.provisiones) || 0) + (cargo.provisiones || 0),
+      esencia: (Number(destRes.esencia) || 0) + (cargo.esencia || 0),
+      aldeanos: destRes.aldeanos || 0
     };
-    await sbClient.from('resources').update(newRes).eq('village_id', m.targetId);
+    destState.resources = newResObj;
+    destState.last_updated = new Date().toISOString();
+    await sbClient.from('villages').update({ state: destState }).eq('id', m.targetId);
     var destV = myVillages.find(function (v) { return v.id === m.targetId; });
     if (destV) {
-      destV.state.resources.madera = newRes.madera; destV.state.resources.piedra = newRes.piedra;
-      destV.state.resources.hierro = newRes.hierro; destV.state.resources.provisiones = newRes.prov;
-      destV.state.resources.esencia = newRes.esencia;
+      destV.state.resources.madera = newResObj.madera; destV.state.resources.piedra = newResObj.piedra;
+      destV.state.resources.hierro = newResObj.hierro; destV.state.resources.provisiones = newResObj.provisiones;
+      destV.state.resources.esencia = newResObj.esencia;
     }
     var cargoStr = Object.keys(cargo).filter(function (k) { return cargo[k] > 0; })
       .map(function (k) { return fmt(cargo[k]) + ' ' + k; }).join(', ');
@@ -2101,24 +2119,26 @@ function showPage(name, el) {
 async function syncResourcesFromDB() {
   if (!activeVillage || !currentUser) return;
   try {
-    var { data: res, error } = await sbClient
-      .from('resources')
-      .select('madera,piedra,hierro,prov,esencia,last_update')
-      .eq('village_id', activeVillage.id)
+    // v1.49: Leer state jsonb directamente
+    var { data: vil, error } = await sbClient
+      .from('villages')
+      .select('state')
+      .eq('id', activeVillage.id)
       .single();
-    if (error || !res) return;
+    if (error || !vil || !vil.state) return;
+    var dbState = vil.state;
     var s = activeVillage.state;
-    // Solo actualizar si el valor de DB es más reciente
-    var dbTime = new Date(res.last_update || 0).getTime();
+    var dbTime = new Date(dbState.last_updated || 0).getTime();
     var localTime = new Date(s.last_updated || 0).getTime();
     if (dbTime >= localTime) {
-      s.resources.madera = Number(res.madera) || 0;
-      s.resources.piedra = Number(res.piedra) || 0;
-      s.resources.hierro = Number(res.hierro) || 0;
-      s.resources.provisiones = Number(res.prov) || 0;
-      s.resources.esencia = Number(res.esencia) || 0;
-      s.last_updated = res.last_update;
-      _elCache = {}; // limpiar cache DOM
+      var dbRes = dbState.resources || {};
+      s.resources.madera = Number(dbRes.madera) || 0;
+      s.resources.piedra = Number(dbRes.piedra) || 0;
+      s.resources.hierro = Number(dbRes.hierro) || 0;
+      s.resources.provisiones = Number(dbRes.provisiones) || 0;
+      s.resources.esencia = Number(dbRes.esencia) || 0;
+      s.last_updated = dbState.last_updated;
+      _elCache = {};
       tick();
     }
   } catch (e) {

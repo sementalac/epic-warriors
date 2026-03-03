@@ -1134,174 +1134,83 @@
     // VILLAGES & DATA MAPPING
     // ============================================================
     async function loadMyVillages() {
-      // We need to fetch villages AND their resources/buildings/troops to construct the "state" object
-      // expected by the game engine.
-
-      // 1. Fetch Villages — columnas reales: id, owner_id, name, cx, cy, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, created_at
+      // ── v1.49: Lee state directamente del jsonb — 1 query en vez de 5 ──
       const { data: villages, error: vErr } = await sbClient.from('villages')
-        .select('id, owner_id, name, cx, cy, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, refugio, created_at')
+        .select('id, owner_id, name, cx, cy, state, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, refugio, created_at')
         .eq('owner_id', currentUser.id)
         .order('created_at', { ascending: true });
 
       if (vErr) { console.error('Error fetching villages:', vErr); throw vErr; }
-
 
       if (!villages || villages.length === 0) {
         myVillages = [];
         return;
       }
 
-      // 2. Fetch related data for ALL villages
       const loaded = [];
 
       for (const v of villages) {
-        // Opt-G: Fetch all 4 tables in parallel (was sequential — now 4x faster per village)
-        const [rR, bR, tR, cR] = await Promise.all([
-          sbClient.from('resources').select('*').eq('village_id', v.id).maybeSingle(),
-          sbClient.from('buildings').select('*').eq('village_id', v.id).maybeSingle(),
-          sbClient.from('troops').select('*').eq('village_id', v.id).maybeSingle(),
-          sbClient.from('creatures').select('*').eq('village_id', v.id).maybeSingle()
-        ]);
-        let res = rR.data; if (rR.error) console.warn('Error loading resources for village', v.id, rR.error);
-        let blds = bR.data; if (bR.error) console.warn('Error loading buildings for village', v.id, bR.error);
-        let trp = tR.data; if (tR.error) console.warn('Error loading troops for village', v.id, tR.error);
-        let crs = cR.data; if (cR.error) console.warn('Error loading creatures for village', v.id, cR.error);
+        // ── State desde jsonb (o default si es aldea nueva / pre-migración) ──
+        var s = v.state;
 
-        // SELF-HEALING: If resources missing, create default
-        if (!res) {
-          const defRes = { village_id: v.id, madera: 500, piedra: 300, hierro: 100, prov: 0, esencia: 0 };
-          const { data: newRes, error: insErr } = await sbClient.from('resources').insert(defRes).select().single();
-          if (!insErr) res = newRes;
-          else {
-            console.error('Failed to self-heal resources:', insErr);
-            res = defRes; // Fallback to memory object
-          }
+        if (!s) {
+          // Self-healing: crear state por defecto para aldeas sin migrar
+          s = defaultState();
+          s.last_updated = new Date().toISOString();
+          // Guardar state para que no vuelva a pasar
+          await sbClient.from('villages').update({ state: s }).eq('id', v.id);
         }
 
-        // SELF-HEALING: If buildings missing
-        if (!blds) {
-          const defBlds = { village_id: v.id, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0 };
-          const { data: newBlds, error: insErr } = await sbClient.from('buildings').insert(defBlds).select().single();
-          if (!insErr) blds = newBlds;
-          else {
-            console.error('Failed to self-heal buildings:', insErr);
-            blds = defBlds;
-          }
-        }
-
-        // SELF-HEALING: If troops missing
-        if (!trp) {
-          const defTrp = { village_id: v.id };
-          Object.keys(TROOP_TYPES).forEach(k => {
-            defTrp[k] = (k === 'aldeano' ? 50 : 0);
-          });
-          const { data: newTrp, error: insErr } = await sbClient.from('troops').insert(defTrp).select().single();
-          if (!insErr) trp = newTrp;
-          else {
-            console.error('Failed to self-heal troops:', insErr);
-            trp = defTrp;
-          }
-        }
-
-        // SELF-HEALING: If creatures missing
-        if (!crs) {
-          const defCrs = { village_id: v.id };
-          Object.keys(CREATURE_TYPES).forEach(k => {
-            if (k === 'guardiancueva') return; // ⛏️ v1.48: no es columna de creatures
-            defCrs[k] = 0;
-          });
-          const { data: newCrs, error: insErr } = await sbClient.from('creatures').insert(defCrs).select().single();
-          if (!insErr) crs = newCrs;
-          else {
-            console.error('Failed to self-heal creatures:', insErr);
-            crs = defCrs;
-          }
-        }
-
-
-        // If data is missing (maybe insert failed too), try to recover using defaults so the game doesn't break
-        const safeRes = res || { madera: 500, piedra: 300, hierro: 100, prov: 0, esencia: 0 };
-        const safeBlds = blds || { aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 0, reclutamiento: 0, muralla: 0, lab: 0, torreinvocacion: 0 };
-        const safeTrp = trp || {}; // Si no hay fila de troops, empezar en 0 — no hardcodear 50
-
-        // MAPPING: SQL -> Game State JSON
-        const state = {
-          resources: {
-            madera: Number(safeRes.madera) || 0,
-            piedra: Number(safeRes.piedra) || 0,
-            hierro: Number(safeRes.hierro) || 0,
-            provisiones: Number(safeRes.prov) || 0,
-            esencia: Number(safeRes.esencia) || 0,
-            aldeanos: 0
-          },
-          aldeanos_assigned: {
-            madera: Number(safeRes.w_madera) || 0,
-            piedra: Number(safeRes.w_piedra) || 0,
-            hierro: Number(safeRes.w_hierro) || 0,
-            provisiones: Number(safeRes.w_prov) || 0,
-            esencia: Number(safeRes.w_esencia) || 0
-          },
-          // v0.17 — mapa completo de tropas desde DB
-          troops: {},
-          buildings: {},
-          build_queue: v.build_queue || null,
-          mission_queue: (v.mission_queue || []).filter(function (m) {
-            // Descartar solo misiones con finish_at hace más de 7 días (corruptas)
-            var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
-            return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
-          }),
-          summoning_queue: (v.summoning_queue || []),
-          training_queue: (v.training_queue || []).filter(function (t) {
-            var ft = t.finish_at ? new Date(t.finish_at).getTime() : 0;
-            return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
-          }),
-          last_updated: safeRes.last_update || new Date().toISOString(),
-          last_aldeano_at: v.last_aldeano_at || null, // timer discreto de aldeanos
-          refugio: v.refugio || {},  // tropas ocultas en el refugio (persisted en villages.refugio)
-          // Legacy/Compat flags
-          _aldeanos_total_mode: true,
-          owner_name: currentUser.email
-        };
-
-        Object.keys(TROOP_TYPES).forEach(k => {
-          state.troops[k] = Number(safeTrp[k]) || 0;
+        // Colas vienen de columnas (son la versión "live", usadas por checkIncomingAttacks)
+        s.build_queue = v.build_queue || null;
+        s.mission_queue = (v.mission_queue || []).filter(function (m) {
+          var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
+          return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
         });
-        state.resources.aldeanos = state.troops.aldeano || 0;
+        s.summoning_queue = v.summoning_queue || [];
+        s.training_queue = (v.training_queue || []).filter(function (t) {
+          var ft = t.finish_at ? new Date(t.finish_at).getTime() : 0;
+          return (Date.now() - ft) < 7 * 24 * 3600 * 1000;
+        });
+        s.last_aldeano_at = v.last_aldeano_at || null;
+        s.refugio = s.refugio || v.refugio || {};
 
-        // Map creatures from DB
-        state.creatures = {};
-        const safeCrs = crs || {};
-        Object.keys(CREATURE_TYPES).forEach(k => {
-          state.creatures[k] = Number(safeCrs[k]) || 0;
+        // Garantizar sub-objetos
+        s.resources = s.resources || { madera: 500, piedra: 300, hierro: 100, provisiones: 0, esencia: 0, aldeanos: 0 };
+        s.aldeanos_assigned = s.aldeanos_assigned || { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 };
+        s.troops = s.troops || {};
+        s.creatures = s.creatures || {};
+        s.buildings = s.buildings || {};
+        s.last_updated = s.last_updated || new Date().toISOString();
+        s._aldeanos_total_mode = true;
+
+        // Sync aldeano count
+        if (s.troops.aldeano !== undefined) {
+          s.resources.aldeanos = s.troops.aldeano;
+        }
+
+        // Garantizar que todos los edificios starter existen
+        var starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
+        var allBldKeys = typeof BUILDINGS !== 'undefined' ? BUILDINGS.map(function (b) { return b.id; }) : starterBlds;
+        allBldKeys.forEach(function (k) {
+          if (!s.buildings[k]) {
+            s.buildings[k] = { level: starterBlds.includes(k) ? 1 : 0 };
+          }
         });
 
-
-        // Map buildings flat columns -> nested objects
-        // Columns: aserradero, cantera, etc.
-        // bldKeys derivado de BUILDINGS — añadir edificio nuevo solo en BUILDINGS[]
-        const bldKeys = BUILDINGS.map(b => b.id);
-        // Edificios activos desde nivel 1 (starter); el resto arrancan en 0 (no construidos)
-        const starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
-        bldKeys.forEach(k => {
-          var raw = safeBlds[k];
-          // Si la columna existe en DB, usar ese valor. Si no existe aún (edificio nuevo), defaultear correctamente.
-          var lvl = (raw !== undefined && raw !== null) ? Number(raw) : (starterBlds.includes(k) ? 1 : 0);
-          state.buildings[k] = { level: lvl };
-        });
+        s.owner_name = currentUser.email;
 
         // Attach state to village object
-        v.state = state;
-        v.x = Number(v.cx); v.y = Number(v.cy); // Ensure numbers
+        v.state = s;
+        v.x = Number(v.cx); v.y = Number(v.cy);
 
         // IMMEDIATE OFFLINE PROGRESSION:
-        // Check if a building finished while we were offline
         if (v.state.build_queue) {
           const oldQ = JSON.stringify(v.state.build_queue);
           v.state = resolveQueue(v.state);
           const newQ = JSON.stringify(v.state.build_queue);
 
           if (oldQ !== newQ) {
-            // We use the new generic save helper (buildings only, no score recalc needed)
             await saveVillage(v, { updateScore: false });
           }
         }
@@ -1311,6 +1220,7 @@
 
       myVillages = loaded;
     }
+
 
     async function loadAllVillages() {
       // Cargar TODAS las aldeas del mapa (para el mapa global)
@@ -1378,117 +1288,86 @@
       for (let i = 0; i < 100; i++) {
         cx = Math.floor(Math.random() * MAP_SIZE);
         cy = Math.floor(Math.random() * MAP_SIZE);
-        // Simple check (collisions will fail on insert unique constraint)
         const { error } = await sbClient.from('villages').select('id').eq('cx', cx).eq('cy', cy).single();
-        if (error) { found = true; break; } // Assuming error means "not found" (good)
+        if (error) { found = true; break; }
       }
 
       const vName = 'Aldea 1';
 
-      // Insert Village
+      // v1.49: Crear aldea con state jsonb inicial
+      var initialState = defaultState();
+      initialState.last_updated = new Date().toISOString();
+
       const { data: v, error: err } = await sbClient.from('villages').insert({
         owner_id: currentUser.id,
         name: vName,
         cx: cx,
         cy: cy,
-        build_queue: null
+        build_queue: null,
+        state: initialState
       }).select().single();
 
       if (err) { throw new Error(err.message); }
 
-      // Insert Related
-      await sbClient.from('resources').insert({ village_id: v.id });
-      // NEW: Start everything at Level 1
+      // Tablas legacy (mantener mientras existan)
+      await sbClient.from('resources').insert({ village_id: v.id }).catch(function () {});
       await sbClient.from('buildings').insert({
         village_id: v.id,
         aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
-      });
-      const initialTroops = { village_id: v.id };
-      Object.keys(TROOP_TYPES).forEach(k => {
-        initialTroops[k] = (k === 'aldeano' ? 50 : 0);
-      });
-      await sbClient.from('troops').insert(initialTroops);
+      }).catch(function () {});
+      var initialTroops = { village_id: v.id };
+      Object.keys(TROOP_TYPES).forEach(function (k) { initialTroops[k] = (k === 'aldeano' ? 50 : 0); });
+      await sbClient.from('troops').insert(initialTroops).catch(function () {});
     }
 
     // Generic save function for ANY village (not just active)
+    // Generic save function for ANY village (not just active)
+    // ── v1.49: Escribe state jsonb en villages (1 write en vez de 5) ──
     async function saveVillage(v, opts) {
       if (!v || !currentUser) return;
       opts = opts || {};
-      // updateScore: true → recalcular military_score (pass explicitly when troops/creatures changed)
       var shouldUpdateScore = opts.updateScore !== false ? true : false;
 
       // Snapshot: calcular recursos actuales antes de guardar
-      // Esto asegura que guardamos el valor real acumulado, no el del último tick
       snapshotResources(v.state);
 
       const s = v.state;
-      const w = s.aldeanos_assigned || {};
-      // 1. Update Resources
-      const { error: rErr } = await sbClient.from('resources').update({
-        madera: s.resources.madera,
-        piedra: s.resources.piedra,
-        hierro: s.resources.hierro,
-        prov: s.resources.provisiones,
-        esencia: s.resources.esencia,
-        w_madera: (s.aldeanos_assigned && s.aldeanos_assigned.madera) || 0,
-        w_piedra: (s.aldeanos_assigned && s.aldeanos_assigned.piedra) || 0,
-        w_hierro: (s.aldeanos_assigned && s.aldeanos_assigned.hierro) || 0,
-        w_prov: (s.aldeanos_assigned && s.aldeanos_assigned.provisiones) || 0,
-        w_esencia: (s.aldeanos_assigned && s.aldeanos_assigned.esencia) || 0,
-        last_update: new Date().toISOString()
-      }).eq('village_id', v.id);
 
-      if (rErr) throw rErr;
-
-      // 2. Update Buildings
-      const bUpd = {};
-      for (let k in s.buildings) { bUpd[k] = s.buildings[k].level; }
-      const { error: bErr } = await sbClient.from('buildings').update(bUpd).eq('village_id', v.id);
-      if (bErr) {
-        console.error('Buildings save error:', bErr);
-        throw bErr;
-      }
-
-      // 3. Update Troops — all types
-      const trpUpd = {};
-      const trps = s.troops || defaultTroops();
-      Object.keys(TROOP_TYPES).forEach(function (k) { trpUpd[k] = trps[k] || 0; });
-      // Sync aldeanos: el total real de aldeanos en barracas se guarda en troops.aldeano.
-      // resources.aldeanos es la fuente de verdad en memoria — actualizamos troops para que coincida.
-      // Usamos una asignación directa sin ||, para que aldeano=0 sea un valor válido y no se sobreescriba.
-      trpUpd.aldeano = (s.resources.aldeanos !== undefined && s.resources.aldeanos !== null)
+      // Sync aldeano count
+      s.troops.aldeano = (s.resources.aldeanos !== undefined && s.resources.aldeanos !== null)
         ? Math.max(0, Math.floor(s.resources.aldeanos))
-        : (trps.aldeano || 0);
-      // Mantener sincronizado el estado en memoria también
-      s.troops.aldeano = trpUpd.aldeano;
-      await sbClient.from('troops').update(trpUpd).eq('village_id', v.id);
+        : (s.troops.aldeano || 0);
 
-      // 4b. Actualizar military_score — solo cuando shouldUpdateScore=true (evitar 3 queries extra en cada save trivial)
-      // Opt-F: delegar a refreshMilitaryScore que usa Promise.all para los 2 selects
-      if (shouldUpdateScore) { refreshMilitaryScore(); }
+      s.last_updated = new Date().toISOString();
 
-      // 4c. Update Creatures
-      const crUpd = {};
-      const crs = s.creatures || defaultCreatures();
-      Object.keys(CREATURE_TYPES).forEach(function (k) { 
-        // ⛏️ v1.47: Excluir guardiancueva — NO es columna de tabla creatures
-        // guardiancueva se persiste SOLO en villages.state (JSON blob)
-        if (k === 'guardiancueva') return;
-        crUpd[k] = crs[k] || 0; 
-      });
-      await sbClient.from('creatures').update(crUpd).eq('village_id', v.id);
-
-      // 4. Update Village (Queue, Missions, Name, aldeano timer, summoning queue, training queue)
-      await sbClient.from('villages').update({
+      // Un solo UPDATE: state jsonb + columnas de colas
+      const { error } = await sbClient.from('villages').update({
+        state: {
+          resources: s.resources,
+          aldeanos_assigned: s.aldeanos_assigned || {},
+          troops: s.troops,
+          creatures: s.creatures,
+          buildings: s.buildings,
+          last_updated: s.last_updated,
+          refugio: s.refugio || {},
+          _aldeanos_total_mode: true
+        },
         build_queue: s.build_queue,
         mission_queue: s.mission_queue || [],
         summoning_queue: s.summoning_queue || [],
         training_queue: s.training_queue || [],
         name: v.name,
-        last_aldeano_at: s.last_aldeano_at || null,
-        refugio: s.refugio || {}  // Bug A fix: persisting refuge troop assignments
+        last_aldeano_at: s.last_aldeano_at || null
       }).eq('id', v.id);
+
+      if (error) {
+        console.error('Save error:', error);
+        throw error;
+      }
+
+      if (shouldUpdateScore) { refreshMilitaryScore(); }
     }
+
 
     async function flushVillage() {
       if (!activeVillage) return;
@@ -1517,54 +1396,41 @@
     }
 
     // Opt-F: Recalculates military_score. Call after real troop/creature changes.
+    // v1.49: Lee directamente de state jsonb - 1 query, sin tablas separadas
     async function refreshMilitaryScore() {
       if (!currentUser) return;
       try {
-        const allVils = await sbClient.from('villages').select('id,mission_queue').eq('owner_id', currentUser.id);
-        if (!allVils.error && allVils.data && allVils.data.length > 0) {
-          const vilIds = allVils.data.map(vv => vv.id);
-          const [allTrps, allCrs, allCaves] = await Promise.all([
-            sbClient.from('troops').select('*').in('village_id', vilIds),
-            sbClient.from('creatures').select('*').in('village_id', vilIds),
-            // ── v1.48: Contar guardianes capturados (no son columna de creatures) ──
-            sbClient.from('caves').select('village_id').eq('status', 'captured').eq('owner_id', currentUser.id)
-          ]);
-          let grandTotal = 0;
+        const { data: vils, error } = await sbClient.from('villages')
+          .select('state, mission_queue')
+          .eq('owner_id', currentUser.id);
+        if (error || !vils) return;
 
-          // Tropas en base (tablas)
-          if (!allTrps.error && allTrps.data) {
-            allTrps.data.forEach(row => { Object.keys(TROOP_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
+        let grandTotal = 0;
+
+        vils.forEach(function (vil) {
+          var s = vil.state || {};
+          // Tropas en base
+          var troops = s.troops || {};
+          Object.keys(TROOP_TYPES).forEach(function (k) { grandTotal += (Number(troops[k]) || 0); });
+          // Criaturas en base (incluye guardiancueva - ya vive naturalmente en state)
+          var creatures = s.creatures || {};
+          Object.keys(CREATURE_TYPES).forEach(function (k) { grandTotal += (Number(creatures[k]) || 0); });
+          // Tropas y criaturas en mision (restadas de state al enviarlas)
+          var mq = vil.mission_queue || [];
+          for (var mi = 0; mi < mq.length; mi++) {
+            var mTroops = mq[mi].troops || {};
+            Object.keys(mTroops).forEach(function (k) {
+              if (TROOP_TYPES[k] || CREATURE_TYPES[k]) {
+                grandTotal += (mTroops[k] || 0);
+              }
+            });
           }
-          // Criaturas en base (tablas — excluye guardiancueva que no es columna)
-          if (!allCrs.error && allCrs.data) {
-            allCrs.data.forEach(row => { Object.keys(CREATURE_TYPES).forEach(k => { grandTotal += (Number(row[k]) || 0); }); });
-          }
+        });
 
-          // ── v1.48: Guardianes capturados (1 por cueva capturada) ──
-          if (!allCaves.error && allCaves.data) {
-            grandTotal += allCaves.data.length;
-          }
-
-          // ── v1.48: Tropas y criaturas en misión (restadas de tablas al enviar) ──
-          allVils.data.forEach(function (vil) {
-            var mq = vil.mission_queue || [];
-            for (var mi = 0; mi < mq.length; mi++) {
-              var mTroops = mq[mi].troops || {};
-              Object.keys(mTroops).forEach(function (k) {
-                // No contar guardiancueva aquí — ya contado via caves
-                if (k === 'guardiancueva') return;
-                if (TROOP_TYPES[k] || CREATURE_TYPES[k]) {
-                  grandTotal += (mTroops[k] || 0);
-                }
-              });
-            }
-          });
-          // ─────────────────────────────────────────────────────────────────
-
-          await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
-        }
+        await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
       } catch (e) { console.warn('refreshMilitaryScore failed', e); }
     }
+
 
     var saveDebounce = null;
     var modalBuildingId = null; // tracks which building is open in modal
