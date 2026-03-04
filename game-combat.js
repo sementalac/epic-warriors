@@ -38,7 +38,7 @@ function createArmy(armyId, troops, troopLevels, weaponLevels, armorLevels) {
       if (TROOP_TYPES[type]) {
         stats = JSON.parse(JSON.stringify(getTroopStatsWithLevel(type, lvl)));
         if (weaponLevels && weaponLevels[type]) stats.weapon = (stats.weapon || 0) + weaponLevels[type];
-        if (armorLevels  && armorLevels[type])  stats.armor  = (stats.armor  || 0) + armorLevels[type];
+        if (armorLevels && armorLevels[type]) stats.armor = (stats.armor || 0) + armorLevels[type];
       } else {
         stats = TROOP_TYPES[type] || CREATURE_TYPES[type];
       }
@@ -204,7 +204,7 @@ function toggleBattleLog(btn) {
 
 function executeTurn(army1, army2, log, wallObj) {
   const all = [];
-  army1.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: true  }); });
+  army1.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: true }); });
   army2.forEach(g => { if (g.count > 0) all.push({ group: g, isAtk: false }); });
   all.sort((a, b) => {
     if (b.group.stats.dexterity !== a.group.stats.dexterity) return b.group.stats.dexterity - a.group.stats.dexterity;
@@ -220,7 +220,7 @@ function executeTurn(army1, army2, log, wallObj) {
       if (item.isAtk && wallObj && wallObj.hp > 0) {
         const dmg = group.count * (group.stats.damage || 0);
         wallObj.hp = Math.max(0, wallObj.hp - dmg);
-        if (log) log.push((item.isAtk ? '⚔' : '🛡') + ' ' + group.stats.icon + ' ' + (group.stats.name||'') + ' G' + group.groupId + ' golpea la muralla: ' + dmg + ' dmg → ' + wallObj.hp + ' HP');
+        if (log) log.push((item.isAtk ? '⚔' : '🛡') + ' ' + group.stats.icon + ' ' + (group.stats.name || '') + ' G' + group.groupId + ' golpea la muralla: ' + dmg + ' dmg → ' + wallObj.hp + ' HP');
         if (wallObj.hp <= 0 && log) log.push('💥 ¡Muralla destruida! Los atacantes avanzan sobre las tropas.');
         continue;
       }
@@ -289,9 +289,9 @@ function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel, 
     var army = [];
     contingents.forEach(function (c) {
       var lvls = (levelsByOwner && levelsByOwner[c.owner_id]) || {};
-      var tl = lvls.troop_levels  || {};
+      var tl = lvls.troop_levels || {};
       var wl = lvls.weapon_levels || {};
-      var al = lvls.armor_levels  || {};
+      var al = lvls.armor_levels || {};
       Object.keys(c.troops || {}).forEach(function (troopKey) {
         var count = c.troops[troopKey] || 0;
         if (count <= 0) return;
@@ -300,7 +300,7 @@ function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel, 
           var lvl = tl[troopKey] || 1;
           stats = JSON.parse(JSON.stringify(getTroopStatsWithLevel(troopKey, lvl)));
           if (wl[troopKey]) stats.weapon = (stats.weapon || 0) + wl[troopKey];
-          if (al[troopKey]) stats.armor  = (stats.armor  || 0) + al[troopKey];
+          if (al[troopKey]) stats.armor = (stats.armor || 0) + al[troopKey];
         } else {
           stats = CREATURE_TYPES[troopKey];
           if (!stats) return;
@@ -345,45 +345,47 @@ function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel, 
         if (lost > 0) cas[k] = lost;
       });
       var rec = wallResisted ? {} : calculateRecovery(cas);
-      return { owner_id: c.owner_id, name: c.name || c.owner_id.slice(0,8),
-               village_name: c.village_name || '', village_id: c.village_id || null,
-               initial: Object.assign({}, c.troops), survivors: surv,
-               casualties: cas, recovered: rec, xp: 0 };
+      return {
+        owner_id: c.owner_id, name: c.name || c.owner_id.slice(0, 8),
+        village_name: c.village_name || '', village_id: c.village_id || null,
+        initial: Object.assign({}, c.troops), survivors: surv,
+        casualties: cas, recovered: rec, xp: 0
+      };
     });
   }
 
   var atkResults = collectResults(attackerContingents, army1);
   var defResults = collectResults(defenderContingents, army2);
 
-  var totalAtkTroops = attackerContingents.reduce(function(s,c){ return s + Object.values(c.troops||{}).reduce(function(a,n){return a+(n||0);},0); }, 0);
+  var totalAtkTroops = attackerContingents.reduce(function (s, c) { return s + Object.values(c.troops || {}).reduce(function (a, n) { return a + (n || 0); }, 0); }, 0);
   var xpForAtk = 0;
-  defResults.forEach(function(dr) {
-    Object.keys(dr.casualties||{}).forEach(function(type) {
+  defResults.forEach(function (dr) {
+    Object.keys(dr.casualties || {}).forEach(function (type) {
       var k = dr.casualties[type] || 0;
       if (k > 0) {
-        if (TROOP_TYPES[type])         xpForAtk += k * (type === 'aldeano' ? 2 : 10);
+        if (TROOP_TYPES[type]) xpForAtk += k * (type === 'aldeano' ? 2 : 10);
         else if (CREATURE_TYPES[type]) xpForAtk += k * 10;
       }
     });
   });
-  atkResults.forEach(function(r, i) {
-    var myTroops = Object.values(attackerContingents[i].troops||{}).reduce(function(a,n){return a+(n||0);},0);
+  atkResults.forEach(function (r, i) {
+    var myTroops = Object.values(attackerContingents[i].troops || {}).reduce(function (a, n) { return a + (n || 0); }, 0);
     r.xp = (totalAtkTroops > 0 && myTroops > 0) ? Math.round(xpForAtk * myTroops / totalAtkTroops) : 0;
   });
 
-  var totalDefTroops = defenderContingents.reduce(function(s,c){ return s + Object.values(c.troops||{}).reduce(function(a,n){return a+(n||0);},0); }, 0);
+  var totalDefTroops = defenderContingents.reduce(function (s, c) { return s + Object.values(c.troops || {}).reduce(function (a, n) { return a + (n || 0); }, 0); }, 0);
   var xpForDef = 0;
-  atkResults.forEach(function(ar) {
-    Object.keys(ar.casualties||{}).forEach(function(type) {
+  atkResults.forEach(function (ar) {
+    Object.keys(ar.casualties || {}).forEach(function (type) {
       var k = ar.casualties[type] || 0;
       if (k > 0) {
-        if (TROOP_TYPES[type])         xpForDef += k * (type === 'aldeano' ? 2 : 10);
+        if (TROOP_TYPES[type]) xpForDef += k * (type === 'aldeano' ? 2 : 10);
         else if (CREATURE_TYPES[type]) xpForDef += k * 10;
       }
     });
   });
-  defResults.forEach(function(r, i) {
-    var myTroops = Object.values(defenderContingents[i].troops||{}).reduce(function(a,n){return a+(n||0);},0);
+  defResults.forEach(function (r, i) {
+    var myTroops = Object.values(defenderContingents[i].troops || {}).reduce(function (a, n) { return a + (n || 0); }, 0);
     r.xp = (totalDefTroops > 0 && myTroops > 0) ? Math.round(xpForDef * myTroops / totalDefTroops) : 0;
   });
 
@@ -396,7 +398,7 @@ function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel, 
 }
 
 function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
-  var winner       = battleResult.winner;
+  var winner = battleResult.winner;
   var wallResisted = battleResult.wallResisted;
   var atkR = battleResult.attackerResults || [];
   var defR = battleResult.defenderResults || [];
@@ -415,16 +417,16 @@ function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
     function row(lbl, clr, vals) {
       return '<tr><td style="padding:4px 8px;border:1px solid var(--border);color:' + clr + ';font-size:.68rem;white-space:nowrap;">' + lbl + '</td>'
         + types.map(function (k) {
-            var v = vals[k] || 0;
-            var c = v === 0 ? 'var(--dim)' : clr;
-            return '<td style="text-align:center;padding:4px 8px;border:1px solid var(--border);color:' + c + ';">' + v + '</td>';
-          }).join('') + '</tr>';
+          var v = vals[k] || 0;
+          var c = v === 0 ? 'var(--dim)' : clr;
+          return '<td style="text-align:center;padding:4px 8px;border:1px solid var(--border);color:' + c + ';">' + v + '</td>';
+        }).join('') + '</tr>';
     }
     return '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:.78rem;margin-bottom:4px;">'
       + '<thead><tr><th style="padding:4px 8px;border:1px solid var(--border);"></th>' + hdr + '</tr></thead><tbody>'
-      + row('INICIALES',    'var(--text)',   result.initial)
-      + row('FINALES',      'var(--accent2)',result.survivors)
-      + row('SE RECUPERAN','var(--accent)',  result.recovered)
+      + row('INICIALES', 'var(--text)', result.initial)
+      + row('FINALES', 'var(--accent2)', result.survivors)
+      + row('SE RECUPERAN', 'var(--accent)', result.recovered)
       + '</tbody></table></div>';
   }
 
@@ -462,7 +464,7 @@ function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
     + '<div style="background:var(--panel2);border:1px solid var(--border);padding:8px 12px;"><div style="font-size:.62rem;color:var(--dim);">XP DEFENSORES</div><div style="font-family:VT323,monospace;font-size:1.1rem;color:#e04040;">' + fmt(totalDefXP) + '</div></div></div>';
 
   if (loot && Object.keys(loot).some(function (k) { return (loot[k] || 0) > 0; })) {
-    var icons = { madera:'🪵', piedra:'🪨', hierro:'⚙️', oro:'🥇' };
+    var icons = { madera: '🪵', piedra: '🪨', hierro: '⚙️', oro: '🥇' };
     html += '<div style="font-family:VT323,monospace;color:#f0c040;font-size:.85rem;margin-bottom:6px;">📦 MATERIAS ROBADAS</div><div style="display:flex;gap:6px;flex-wrap:wrap;">';
     Object.keys(loot).forEach(function (k) {
       if (!(loot[k] > 0)) return;
@@ -502,6 +504,7 @@ function defaultTroops() {
 function defaultCreatures() {
   var cr = {};
   Object.keys(CREATURE_TYPES).forEach(function (k) { cr[k] = 0; });
+  if (!cr.arana_gigante) cr.arana_gigante = 0; // Garantizar consistencia
   return cr;
 }
 
@@ -554,7 +557,7 @@ function cancelSummoningQueue() {
   }
   snapshotResources(vs);
   var refundEsencia = 0;
-  vs.summoning_queue.forEach(function(s) {
+  vs.summoning_queue.forEach(function (s) {
     var cData = CREATURE_TYPES[s.creature];
     if (cData && cData.cost) refundEsencia += cData.cost.esencia || 0;
   });
@@ -598,23 +601,45 @@ function startSummoning(creatureType, amount) {
   var vs = activeVillage.state;
   var cData = CREATURE_TYPES[creatureType];
   if (!cData) return;
+
+  // Verificación rápida masiva
   snapshotResources(vs);
+  var totalEsencia = cData.cost.esencia * amount;
+  if (vs.resources.esencia < totalEsencia) {
+    var maxAfford = Math.floor(vs.resources.esencia / cData.cost.esencia);
+    if (maxAfford <= 0) {
+      showNotif('No tienes suficiente esencia para invocar ' + cData.name, 'err');
+      return;
+    }
+    amount = maxAfford;
+    totalEsencia = cData.cost.esencia * amount;
+  }
+
+  var check = canSummon(creatureType, vs);
+  if (!check.ok) {
+    showNotif(check.reason, 'err');
+    return;
+  }
+
+  // Descontar recursos una sola vez
+  vs.resources.esencia -= totalEsencia;
+
+  var torreLevel = (vs.buildings.torreinvocacion && vs.buildings.torreinvocacion.level) || 0;
+  var creatureLevel = getCreatureLevel(creatureType);
+  var baseTime = cData.time;
+  var torreReduction = torreLevel * 0.05;
+  var creatureReduction = creatureLevel * 0.01;
+  var totalReduction = Math.min(0.9, torreReduction + creatureReduction);
+  var finalTime = Math.floor(baseTime * (1 - totalReduction));
+
+  if (!vs.summoning_queue) vs.summoning_queue = [];
+
+  var now = Date.now();
   for (var i = 0; i < amount; i++) {
-    var check = canSummon(creatureType, vs);
-    if (!check.ok) { showNotif(check.reason, 'err'); break; }
-    vs.resources.esencia -= cData.cost.esencia;
-    var torreLevel = (vs.buildings.torreinvocacion && vs.buildings.torreinvocacion.level) || 0;
-    var creatureLevel = getCreatureLevel(creatureType);
-    var baseTime = cData.time;
-    var torreReduction = torreLevel * 0.05;
-    var creatureReduction = creatureLevel * 0.01;
-    var totalReduction = Math.min(0.9, torreReduction + creatureReduction);
-    var finalTime = Math.floor(baseTime * (1 - totalReduction));
-    if (!vs.summoning_queue) vs.summoning_queue = [];
-    var lastFinish = Date.now();
+    var lastFinish = now;
     if (vs.summoning_queue.length > 0) {
       var lastEntry = vs.summoning_queue[vs.summoning_queue.length - 1];
-      lastFinish = Math.max(lastFinish, new Date(lastEntry.finish_at).getTime());
+      lastFinish = Math.max(now, new Date(lastEntry.finish_at).getTime());
     }
     vs.summoning_queue.push({
       creature: creatureType,
@@ -624,6 +649,7 @@ function startSummoning(creatureType, amount) {
       tierRequired: cData.tier || 1
     });
   }
+
   flushVillage();
   showNotif(amount + ' ' + cData.name + '(s) en cola de invocación', 'ok');
 }
@@ -640,40 +666,70 @@ function _notifyOnce(key, msg, type, intervalMs) {
 function resolveSummoningQueue(vs) {
   if (!vs.summoning_queue || vs.summoning_queue.length === 0) return vs;
   var now = Date.now();
-  var remaining = [];
   var changed = false;
+
   var invEnRefugio = (vs.refugio && vs.refugio.invocador) || 0;
   var invocadoresActuales = Math.max(0, (vs.troops.invocador || 0) - invEnRefugio);
-  var invEnMision = 0;
-  (vs.mission_queue || []).forEach(function(m) { invEnMision += (m.troops && m.troops.invocador) || 0; });
-  var totalInvocadores = invocadoresActuales + invEnMision;
-  var invocadorLevel = getTroopLevel('invocador');
 
-  for (var s of vs.summoning_queue) {
+  // Mientras haya algo en la cola, intentamos procesar el PRIMERO (estricto FIFO)
+  while (vs.summoning_queue.length > 0) {
+    var s = vs.summoning_queue[0];
     var cData = CREATURE_TYPES[s.creature];
-    if (!cData) continue;
+
+    // Si la criatura fue eliminada de constantes (?) simplemente la quitamos para que no bloquee
+    if (!cData) {
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
+    }
+
     var tierRequired = s.tierRequired || cData.tier || 1;
+    var invocadorLevel = getTroopLevel('invocador');
+
+    // Casos de cancelación (eliminación definitiva)
     if (invocadorLevel < tierRequired) {
       _notifyOnce('sum_cancel_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (nivel de invocador insuficiente).', 'err');
-      changed = true; continue;
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
     }
+
+    // El sistema de cancelación por falta de invocadores TOTALES es peligroso si es reactivo,
+    // pero se mantiene según arquitectura v1.40.
+    var invEnMision = 0;
+    (vs.mission_queue || []).forEach(function (m) { invEnMision += (m.troops && m.troops.invocador) || 0; });
+    var totalInvocadores = invocadoresActuales + invEnMision;
+
     if (totalInvocadores < s.summonersNeeded) {
       _notifyOnce('sum_cancel_dead_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (invocadores perdidos).', 'err');
-      changed = true; continue;
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
     }
+
+    // --- LÓGICA FIFO BLOQUEANTE ---
+
+    // Si no hay suficientes invocadores EN LA ALDEA ahora mismo, la cola se bloquea.
+    // No saltamos al siguiente elemento.
     if (invocadoresActuales < s.summonersNeeded) {
-      remaining.push(s); continue;
+      break;
     }
+
     var finishTime = new Date(s.finish_at).getTime();
     if (now >= finishTime && !s.paused) {
+      // Completado exitosamente
       if (!vs.creatures) vs.creatures = defaultCreatures();
       vs.creatures[s.creature] = (vs.creatures[s.creature] || 0) + 1;
       _notifyOnce('sum_done_' + s.creature, '¡' + cData.name + ' invocado!', 'ok', 1000);
+      vs.summoning_queue.shift();
       changed = true;
+      // Seguimos el bucle 'while' para ver si la siguiente unidad en la cola ya terminó también
     } else {
-      remaining.push(s);
+      // El primer elemento no ha terminado su tiempo todavía. 
+      // Siendo FIFO, el resto tampoco puede procesarse.
+      break;
     }
   }
-  if (changed) vs.summoning_queue = remaining;
+
   return vs;
 }

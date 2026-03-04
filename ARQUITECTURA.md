@@ -1,6 +1,6 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 2.2 — Última actualización: v1.49
-> Fuentes de verdad: **Supabase** (datos) · **GitHub Pages** (código)
+> Versión del documento: 2.5 — Última actualización: v1.52 (Fase Robustez)
+> Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
 
@@ -55,28 +55,23 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 | Admin | `game-admin.js` | Panel de administración |
 | Cuevas | `game-caves.js` | Sistema de cuevas: spawn, ataque, captura, muerte del guardián, panel admin |
 
-El juego es **100% serverless**. No hay servidor de aplicación. Toda la lógica reside en el cliente, y Supabase actúa como base de datos remota accesible directamente desde el navegador.
+El juego está evolucionando de un modelo serverless cliente-céntrico a uno **Server-Authoritative (Ogame-style)**. La lógica crítica (recursos, misiones, misiones de fundación) reside ahora en **RPCs de Supabase** para garantizar seguridad, integridad y escalabilidad. El cliente se encarga del renderizado y la interpolación visual.
 
 **Todos los archivos deben estar en el mismo directorio.** Mover a otra carpeta rompe las referencias relativas.
 
----
-
-## ARQUITECTURA DE RED — LEY FUNDAMENTAL
-
-### Modelo: Evento-Reactivo. Cero polling.
+### Modelo: Híbrido Servidor-Autoritativo (v1.50+)
 
 | Cuándo | Qué operación |
 |---|---|
-| Login / carga inicial | `loadMyVillages`, `checkIncomingAttacks`, `updateLastSeen`, `processRecalls` |
-| El jugador hace una acción | `flushVillage` (guardado inmediato) |
-| Un `finish_at` llega a cero en el tick local | `resolveMissions` → `flushVillage` |
-| Cambio de aldea activa | `checkIncomingAttacks` |
-| El jugador minimiza/cierra la pestaña | `flushVillage` (visibilitychange) |
-| Logout | `flushVillage` final |
-
-**No existe ningún `setInterval` que llame a Supabase.**
-
-Todas las colas se guardan con un `finish_at` (timestamp ISO). El cliente calcula el estado actual comparando `finish_at` con `Date.now()`.
+| Login / carga inicial | `loadMyVillages`, `syncVillageResourcesFromServer` |
+| Cada 60 segundos (Tick) | `syncVillageResourcesFromServer` (RPC: `sync_village_resources`) |
+| Lanzar Misión | RPC: `launch_mission_secure` (Valida tropas antes de enviar) |
+| Llegada de tropas | RPC: `finalize_mission_secure` (Resolución atómica en servidor) |
+| Combate (PvP/NPC) | RPC: `execute_attack_secure` / `simulate_battle_server` |
+| Movimiento/Refuerzo | RPC: `execute_move_secure` / `execute_reinforce_secure` |
+| Transporte | RPC: `execute_transport_secure` |
+| Fundación de aldea | RPC: `execute_founding_secure` (Validación de misión en servidor) |
+| Edificios/Training | `flushVillage` (Persistencia del estado para cálculos de servidor) |
 
 ---
 
@@ -86,27 +81,29 @@ Todas las colas se guardan con un `finish_at` (timestamp ISO). El cliente calcul
 setInterval(tick, 1000)  ← único loop del juego
 ```
 
-`tick()` es **solo cálculo local en memoria**:
+`tick()` realiza cálculo local e interpolación, pero sincroniza con el servidor periódicamente:
 
-1. Resolver colas locales: `resolveQueue`, `resolveSummoningQueue`, `resolveTrainingQueue`
+1. Resolver colas locales (UI/Visual): `resolveQueue`, `resolveSummoningQueue`, `resolveTrainingQueue`
 2. Si alguna cola completó → `scheduleSave()`
-3. Detectar misiones con `finish_at <= now` → `resolveMissions` (única llamada de red reactiva)
-4. Actualizar UI: recursos animados, contadores, barras de capacidad
-
-**El tick NO puede llamar a Supabase directamente. Nunca.**
+3. **Sincronización Periódica**: Cada 60 seg llama a `syncVillageResourcesFromServer()`
+4. Detectar misiones terminadas → Llama a RPCs de resolución en servidor.
+5. Actualizar UI: recursos animados (interpolación basada en produccion/capacidad persistida).
 
 ---
 
-## SISTEMA DE GUARDADO
+## SISTEMA DE GUARDADO Y SINCRONIZACIÓN
+
+Con el modelo de robustez, el servidor es quien manda sobre los números reales.
 
 ```
-scheduleSave()
-  → _stateDirty = true
-  → setTimeout(flushVillage, 2000)   ← debounce de 2s
+snapshotResources() 
+  → Congela recursos + PERSISTE producción/capacidad
+  → El servidor usa estos valores para calcular el tiempo transcurrido (Time-Based)
 
-flushVillage()
-  → _stateDirty = false
-  → saveVillage(activeVillage)       ← escribe en Supabase
+syncVillageResourcesFromServer()
+  → Llama a RPC 'sync_village_resources'
+  → Mezcla Inteligente (Smart Merge): Si la diferencia es < 5, mantiene el valor local para evitar flickering visual.
+  → Protección de Colas: Mantiene misiones locales recientes (< 10s) para evitar que desaparezcan antes de que el servidor las reporte.
 ```
 
 - `_stateDirty`: flag de cambios sin guardar
@@ -197,6 +194,7 @@ CREATE TABLE caves (
   cx         INT NOT NULL,
   cy         INT NOT NULL,
   status     TEXT NOT NULL DEFAULT 'wild',  -- 'wild' | 'captured'
+  guardian_type TEXT NOT NULL DEFAULT 'guardiancueva',
   owner_id   UUID REFERENCES profiles(id) ON DELETE SET NULL,
   village_id UUID REFERENCES villages(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -237,18 +235,20 @@ await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id
 
 ---
 
-## SISTEMA DE RECURSOS
+## SISTEMA DE RECURSOS (TIME-BASED)
+
+Desde v1.50, el juego usa un sistema basado en el tiempo transcurrido procesado en servidor:
 
 ```
-recursos_actuales = recursos_en_BD + (produccion_por_hora × horas_transcurridas)
-horas_transcurridas = (Date.now() - last_updated) / 3600000
+recursos_oficiales = resources_base + (produccion_rate × horas_transcurridas)
+(Procesado en Postgres via RPC sync_village_resources)
 ```
 
-- `calcRes(vs)` → solo calcula para UI, **no escribe nada**
-- `snapshotResources(vs)` → congela el valor calculado antes de guardar
-- `saveVillage` llama a `snapshotResources` antes de escribir en Supabase
+- **Cliente**: Interpola visualmente para que el jugador vea los números subir cada segundo.
+- **Servidor**: Calcula el valor exacto SOLO cuando ocurre un evento (clic, llegada de misión, sync).
+- **Consistencia**: `snapshotResources` persiste `production` y `capacity` para que el servidor tenga los datos necesarios.
 
-**Nunca escribir `calcRes()` en `state.resources` fuera de `snapshotResources`.** Causaría duplicación infinita.
+**Nunca intentar "adelantar" recursos en el cliente enviando un valor manual a Supabase.** El servidor ignorará el valor si no coincide con su cálculo de tiempo.
 
 ---
 
@@ -338,6 +338,11 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 19. **`guardiancueva` vive en `state.creatures` dentro del jsonb de `villages`.** Es una criatura normal a efectos de persistencia — no requiere tratamiento especial.
 20. **Espionaje y combate PvP: un solo camino para jugador real y fantasma.** Leer y escribir siempre via `villages.state`. No hay bifurcación `isGhost` para datos de aldea.
 
+21. **Lanzamiento de misiones**: Usar siempre `launch_mission_secure` RPC. Valida tropas en servidor.
+22. **Resolución de misiones**: Usar siempre `finalize_mission_secure` RPC para retornos y retribución atómica de tropas/botín.
+23. **Fundación de aldeas**: Usar siempre `execute_founding_secure` RPC. Valida misión previa en servidor.
+24. **Sincronización**: Llamar a `sync_village_resources` RPC tras acciones críticas para evitar "resource drift".
+
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
 ---
@@ -358,6 +363,7 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 | `game-data.js` | game-data.js | Datos NPC inmutables |
 | `loadAdminCaves` / `executeAttackCave` / `onCaveGuardianDied` | game-caves.js | Sistema de cuevas completo |
 | `simJS_template` (en game-simulator.js) | game-simulator.js | Backticks internos deben estar escapados |
+| RPCs de Seguridad | SQL / Supabase | launch_mission, finalize_mission, sync_resources... |
 
 > Si añades un componente crítico nuevo, añádelo a esta tabla.
 
@@ -366,6 +372,16 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.52 — Fase Robustez (Arquitectura Ogame/Ikariam)
+- **Time-Based Resources**: Recursos calculados en servidor basándose en tasas de producción y tiempo transcurrido.
+- **RPCs Atómicos**: Lanzamiento, retorno, combate, logística y fundación migrados a funciones de base de datos seguras.
+- **Smart Merge**: Sistema de caché en cliente para eliminar el flickering visual de recursos y colas.
+- [Supabase] Nuevos RPCs: `sync_village_resources`, `launch_mission_secure`, `finalize_mission_secure`, `execute_founding_secure`, `execute_attack_secure`, `simulate_battle_server`, `execute_move_secure`, `execute_reinforce_secure`, `execute_transport_secure`.
+- [Regla nueva] El cliente nunca dicta los recursos; el servidor es la autoridad final.
+- [Regla nueva] Validación de tropas mandatoria en servidor antes de enviar misiones.
+- [Eliminado] Lógica de suma de tropas manual en el cliente al procesar retornos.
+- [Eliminado] Lógica de combate PvP/NPC calculada en el cliente.
 
 ### v1.49 — Migración a JSON blob (state jsonb)
 

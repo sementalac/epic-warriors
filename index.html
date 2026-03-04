@@ -149,39 +149,49 @@
         <div class="nav-section">
           <div class="nav-label">Colonia</div>
           <div class="nav-item active" onclick="showPage('overview',this)"><span class="nav-icon">&#x1F310;</span>
-            Vision General</div>
-          <div class="nav-item" onclick="showPage('buildings',this)"><span class="nav-icon">&#x1F3D7;</span> Edificios
+            <span class="nav-text">Vision General</span>
           </div>
-          <div class="nav-item" onclick="showPage('recursos',this)"><span class="nav-icon">&#x1F33E;</span> Recursos
+          <div class="nav-item" onclick="showPage('buildings',this)"><span class="nav-icon">&#x1F3D7;</span> <span
+              class="nav-text">Edificios</span>
+          </div>
+          <div class="nav-item" onclick="showPage('recursos',this)"><span class="nav-icon">&#x1F33E;</span> <span
+              class="nav-text">Recursos</span>
           </div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Mundo</div>
-          <div class="nav-item" onclick="showPage('map',this)"><span class="nav-icon">&#x1F5FA;</span> Mapa</div>
+          <div class="nav-item" onclick="showPage('map',this)"><span class="nav-icon">&#x1F5FA;</span> <span
+              class="nav-text">Mapa</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Militar</div>
-          <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
-          <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
+          <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> <span
+              class="nav-text">Tropas</span></div>
+          <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> <span
+              class="nav-text">Criaturas</span></div>
           <div class="nav-item" onclick="showPage('defense',this);renderRefugio()"><span
-              class="nav-icon">&#x1F6E1;</span> Defensa</div>
+              class="nav-icon">&#x1F6E1;</span> <span class="nav-text">Defensa</span></div>
           <div class="nav-item" onclick="window.open('battle-simulator.html','_blank')"><span
-              class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
+              class="nav-icon">&#x2694;&#xFE0F;</span> <span class="nav-text">Simulador</span></div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Ciencia</div>
           <div class="nav-item" onclick="showPage('research',this)"><span class="nav-icon">&#x1F52C;</span>
-            Investigacion</div>
+            <span class="nav-text">Investigacion</span>
+          </div>
           <div class="nav-item" onclick="showPage('smithy',this);renderSmithy()"><span class="nav-icon">🔨</span>
-            Herrería</div>
+            <span class="nav-text">Herrería</span>
+          </div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Social</div>
-          <div class="nav-item" onclick="showPage('ranking',this)"><span class="nav-icon">&#x1F3C6;</span> Ranking</div>
-          <div class="nav-item" onclick="showPage('alliances',this)"><span class="nav-icon">&#x1F6E1;</span> Alianzas
+          <div class="nav-item" onclick="showPage('ranking',this)"><span class="nav-icon">&#x1F3C6;</span> <span
+              class="nav-text">Ranking</span></div>
+          <div class="nav-item" onclick="showPage('alliances',this)"><span class="nav-icon">&#x1F6E1;</span> <span
+              class="nav-text">Alianzas</span>
           </div>
           <div class="nav-item" id="navMessages" onclick="showPage('messages',this)"><span class="nav-icon">📨</span>
-            Mensajes<span id="msgBadge" class="msg-badge" style="display:none;">0</span>
+            <span class="nav-text">Mensajes</span><span id="msgBadge" class="msg-badge" style="display:none;">0</span>
           </div>
         </div>
       </nav>
@@ -192,7 +202,7 @@
           <!-- Player profile card -->
           <div class="card" style="margin-bottom:14px;">
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
-              <div style="font-size:3.5rem;line-height:1;">👑</div>
+              <div class="profile-crown" style="font-size:3.5rem;line-height:1;">👑</div>
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
                   <span style="font-size:1.5rem;color:var(--accent);font-family:VT323,monospace;" id="ovUser">--</span>
@@ -1413,6 +1423,8 @@
         state: {
           resources: s.resources,
           aldeanos_assigned: s.aldeanos_assigned || {},
+          production: s.production || {},
+          capacity: s.capacity || 0,
           troops: s.troops,
           creatures: s.creatures,
           buildings: s.buildings,
@@ -1686,6 +1698,14 @@
         aldeanos: res.aldeanos,
         capPctMa, capPctPi, capPctHi, capPctPr, capPctEs, capPctAld
       };
+
+      // v1.50: Sincronización periódica con el servidor (cada 60 ticks)
+      var nowT = Date.now();
+      if (!window._lastServerSync) window._lastServerSync = nowT;
+      if (nowT - window._lastServerSync > 60000) {
+        window._lastServerSync = nowT;
+        if (typeof syncVillageResourcesFromServer === 'function') syncVillageResourcesFromServer();
+      }
 
       if (_el('ovVillageName')) _el('ovVillageName').textContent = activeVillage.name;
       if (_el('ovVillageCoords')) _el('ovVillageCoords').textContent = 'Coordenadas: [' + activeVillage.x + ', ' + activeVillage.y + ']';

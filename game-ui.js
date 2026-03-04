@@ -482,34 +482,33 @@ function selectNPC(npc, x, y) {
   var isCleared = obj && obj.status === 'cleared';
   var isSpied = obj && obj.status === 'spied';
 
-  // Fecha de derrota (guardada en last_interaction)
-  var clearDateStr = '';
-  if (isCleared && obj.last_interaction) {
-    var d = new Date(obj.last_interaction);
-    clearDateStr = ' · ' + d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  }
+  // Solo mostrar número del caballero
+  title.innerHTML = (npc.name || 'Caballero');
 
-  var statusTag = isCleared
-    ? ' <span style="color:var(--ok)">[DERROTADO' + clearDateStr + ']</span>'
-    : isSpied ? ' <span style="color:var(--accent)">[ESPIADO]</span>' : '';
-
-  title.innerHTML = npc.name + ' ' + (npc.icon || '🏇') + statusTag;
-
-  // Stats: solo visibles si espiado o derrotado
   if (isCleared || isSpied) {
+    // Fecha de derrota
+    var clearTag = '';
+    if (isCleared && obj.last_interaction) {
+      var d = new Date(obj.last_interaction);
+      clearTag = ' <span style="color:var(--ok);font-size:.65rem;">[DERROTADO]</span>';
+    } else if (isSpied) {
+      clearTag = ' <span style="color:var(--accent);font-size:.65rem;">[ESPIADO]</span>';
+    }
+
+    title.innerHTML += clearTag;
     sub.innerHTML = '[' + x + ', ' + y + '] · '
-      + 'PG: ' + fmt(npc.hp) + ' · CA: ' + npc.defense + ' · XP: ' + fmt(npc.rewards.experience);
+      + '❤️ ' + fmt(npc.hp) + ' · 🛡️ ' + npc.defense + ' · ✨ ' + fmt(npc.rewards.experience) + ' XP';
   } else {
     sub.innerHTML = '[' + x + ', ' + y + '] · <span style="color:var(--dim);font-style:italic;">Stats desconocidos — envía un explorador</span>';
   }
 
   if (isCleared) {
-    actions.innerHTML = '<span style="color:var(--ok);font-size:.72rem;">✅ Ya derrotaste a este caballero.</span>';
+    actions.innerHTML = '<span style="color:var(--ok);font-size:.72rem;">✅ Ya derrotaste a este bando.</span>';
   } else if (inRange) {
-    actions.innerHTML = ''
-      + '<button class="map-action-btn spy" onclick="openMissionModal(\'spy\', \'' + npc.id + '\', ' + x + ', ' + y + ')">🔍 Espiar</button>'
-      + '<button class="map-action-btn atk" onclick="openMissionModal(\'attack\', \'' + npc.id + '\', ' + x + ', ' + y + ')">⚔️ Atacar</button>';
+    actions.innerHTML = '<div style="display:flex;gap:6px;flex-direction:column;">'
+      + '<button class="btn btn-sm" onclick="openMissionModal(\'spy\', \'' + npc.id + '\', ' + x + ', ' + y + ')">🔍 Espiar</button>'
+      + '<button class="btn btn-sm" onclick="openMissionModal(\'attack\', \'' + npc.id + '\', ' + x + ', ' + y + ')">⚔️ Atacar</button>'
+      + '</div>';
   } else {
     actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
   }
@@ -861,48 +860,26 @@ async function executeFounding(m) {
     return;
   }
   try {
-    var newVillageName = 'Aldea ' + (myVillagesList.length + 1);
-    // v1.49: Crear aldea con state jsonb
-    var initialState = typeof defaultState === 'function' ? defaultState() : {
-      resources: { madera: 500, piedra: 300, hierro: 100, provisiones: 200, esencia: 0, aldeanos: 0 },
-      aldeanos_assigned: { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 },
-      troops: {}, creatures: {}, buildings: {
-        aserradero: { level: 1 }, cantera: { level: 1 }, minehierro: { level: 1 },
-        granja: { level: 1 }, almacen: { level: 1 }, torre: { level: 1 },
-        barracas: { level: 1 }, circulo: { level: 1 }, reclutamiento: { level: 1 },
-        muralla: { level: 0 }, lab: { level: 0 }
-      },
-      build_queue: null, mission_queue: [], summoning_queue: [], training_queue: [],
-      last_updated: new Date().toISOString(), refugio: {}, _aldeanos_total_mode: true
-    };
-    var r = await sbClient.from('villages').insert({
-      owner_id: currentUser.id, name: newVillageName,
-      cx: m.tx, cy: m.ty,
-      build_queue: null, mission_queue: [], summoning_queue: [], training_queue: [],
-      state: initialState
-    }).select('id').single();
-    if (r.error) throw r.error;
+    // ── v1.52: FUNDACIÓN AUTORITATIVA EN SERVIDOR ──
+    var { data: newState, error: rpcErr } = await sbClient.rpc('execute_founding_secure', {
+      p_user_id: currentUser.id,
+      p_mission_id: m.mid || m.finish_at
+    });
 
-    var newId = r.data.id;
-    // Tablas legacy
-    await sbClient.from('resources').insert({ village_id: newId, madera: 500, piedra: 300, hierro: 100, prov: 200, esencia: 0 }).catch(function () { });
-    await sbClient.from('buildings').insert({
-      village_id: newId, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1,
-      torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
-    }).catch(function () { });
-    var newTroops = { village_id: newId };
-    Object.keys(TROOP_TYPES).forEach(function (k) { newTroops[k] = k === 'aldeano' ? 50 : 0; });
-    await sbClient.from('troops').insert(newTroops).catch(function () { });
+    if (rpcErr) throw rpcErr;
 
     await sendSystemReport(currentUser.id, '🏠 ¡NUEVA ALDEA FUNDADA!',
-      'Tus colonos han llegado a [' + m.tx + ', ' + m.ty + '] y han fundado ' + newVillageName + '.\n¡Ya puedes seleccionarla en el desplegable de aldeas!');
+      'Tus colonos han llegado a [' + m.tx + ', ' + m.ty + '] y han fundado una nueva aldea.\n¡Ya puedes seleccionarla en el desplegable de aldeas!');
+
     showNotif('¡Nueva aldea fundada en [' + m.tx + ', ' + m.ty + ']!', 'ok');
+
     await loadMyVillages();
     renderMap();
   } catch (e) {
     console.error('executeFounding error:', e);
     await sendSystemReport(currentUser.id, '❌ ERROR AL FUNDAR ALDEA',
       'Los colonos llegaron a [' + m.tx + ', ' + m.ty + '] pero ocurrió un error al crear la aldea: ' + (e.message || e));
+    showNotif('Error al fundar aldea.', 'err');
   }
 }
 
@@ -993,10 +970,14 @@ function selectCell(village, isOwn, isAlly, x, y) {
       actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
     }
   } else {
-    title.innerHTML = (escapeHtml(village.name || 'Aldea enemiga')) + ' <span style="color:var(--danger);">⚔️</span>';
-    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span> · <span style="color:var(--text);">' + escapeHtml(String(ownerName || 'Desconocido')) + '</span>' + rngTag;
     var ownerId = (village.owner_id || village.user_id || '');
     var vid = (village.id || '');
+    var objective = (typeof playerObjectives !== 'undefined') ? playerObjectives.find(o => o.objective_id === vid) : null;
+    var isSpied = objective && objective.status === 'spied';
+
+    title.innerHTML = (isSpied ? escapeHtml(village.name || 'Aldea Enemiga') : 'Aldea') + ' <span style="color:var(--danger);">⚔️</span>';
+    sub.innerHTML = '<span style="font-family:VT323,monospace;color:var(--dim);">[' + x + ', ' + y + ']</span> · <span style="color:var(--text);">' + escapeHtml(String(ownerName || 'Desconocido')) + '</span>' + rngTag;
+
     if (inRange) {
       actions.innerHTML = ''
         + '<button class="map-action-btn atk" onclick="openMissionModal(\'attack\',\'' + vid + '\',' + x + ',' + y + ')">⚔️ Atacar</button>'
@@ -2225,8 +2206,70 @@ function snapshotResources(vs) {
   vs.resources.esencia = res.esencia;
   // Sincronizar resources.aldeanos desde troops.aldeano (fuente de verdad)
   vs.resources.aldeanos = res.aldeanos_total;
+
+  // v1.50: Metadata para optimización en servidor (Ogame-style)
+  vs.production = getProd(vs.buildings, 0, vs.aldeanos_assigned);
+  vs.capacity = getCapacity(vs.buildings);
+
   vs.last_updated = new Date().toISOString();
   return res;
+}
+
+// v1.50: Sincronización PROFESIONAL con el servidor (RPC)
+// v1.52: Sincronización PROFESIONAL con el servidor (RPC) con reducción de flickering
+async function syncVillageResourcesFromServer() {
+  if (!activeVillage || !activeVillage.id) return;
+  try {
+    // 1. Sincronizar rates de producción localmente primero
+    if (activeVillage.state) {
+      activeVillage.state.production = getProd(activeVillage.state.buildings, 0, activeVillage.state.aldeanos_assigned);
+      activeVillage.state.capacity = getCapacity(activeVillage.state.buildings);
+    }
+
+    var { data: newState, error } = await sbClient.rpc('sync_village_resources', {
+      p_village_id: activeVillage.id
+    });
+
+    if (error) throw error;
+    if (newState) {
+      // 2. Mezcla Inteligente (Smart Merge) para evitar saltos visuales
+      var oldState = activeVillage.state;
+      var newRes = newState.resources;
+      var oldRes = oldState.resources;
+
+      // Si la diferencia es pequeña (<5 unidades), mantenemos nuestro valor visual actual
+      // para que el contador fluya suavemente. El servidor mandó el valor "exacto",
+      // pero el cliente es quien anima cada segundo.
+      ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'].forEach(function (k) {
+        var diff = Math.abs((newRes[k] || 0) - (oldRes[k] || 0));
+        if (diff < 5) {
+          newRes[k] = oldRes[k]; // Preservar fluidez local
+        }
+      });
+
+      // 3. Mezcla de Colas (Smart Queue Merge)
+      var newMissions = newState.mission_queue || [];
+      var oldMissions = oldState.mission_queue || [];
+      oldMissions.forEach(function (om) {
+        var isNew = (Date.now() - new Date(om.created_at || Date.now()).getTime()) < 10000;
+        var existsInServer = newMissions.some(m => m.mid === om.mid);
+        if (isNew && !existsInServer) newMissions.push(om);
+      });
+      newState.mission_queue = newMissions;
+
+      var newTrain = newState.training_queue || [];
+      var oldTrain = oldState.training_queue || [];
+      if (oldTrain.length > newTrain.length) newState.training_queue = oldTrain;
+
+      activeVillage.state = newState;
+
+      // Re-renderizar UI
+      if (typeof renderRecursos === 'function') renderRecursos();
+      if (typeof renderTroops === 'function') renderTroops();
+    }
+  } catch (e) {
+    console.warn('[Robustez] Error sincronizando recursos:', e.message || e);
+  }
 }
 
 function debouncedSave() {
@@ -2790,3 +2833,69 @@ function formatNumber(n) {
   if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return num.toLocaleString('es-ES');
 }
+
+// v1.53: IMPLEMENTACIÓN DE NAVEGACIÓN TÁCTIL Y ARRASTRE (DRAG/PAN)
+// Permite arrastrar el mapa con el dedo (móvil) o ratón (PC)
+(function initMapDragSystem() {
+  let isDragging = false;
+  let hasDragged = false;
+  let startX, startY;
+  let sensitivity = 32; // px necesarios para mover 1 casilla
+
+  function onStart(e) {
+    const pageMap = document.getElementById('page-map');
+    if (!pageMap || !pageMap.classList.contains('active')) return;
+
+    // Solo actuar si el toque/click es dentro del grid del mapa
+    const grid = document.getElementById('mapGrid');
+    if (!grid || !grid.contains(e.target)) return;
+
+    isDragging = true;
+    hasDragged = false;
+    const point = e.touches ? e.touches[0] : e;
+    startX = point.clientX;
+    startY = point.clientY;
+  }
+
+  function onMove(e) {
+    if (!isDragging) return;
+
+    const point = e.touches ? e.touches[0] : e;
+    const dx = point.clientX - startX;
+    const dy = point.clientY - startY;
+
+    // Si el movimiento supera un umbral mínimo, marcamos como arrastrado
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasDragged = true;
+
+    // Si el movimiento supera la sensibilidad, desplazamos la cámara
+    if (Math.abs(dx) >= sensitivity || Math.abs(dy) >= sensitivity) {
+      const moveX = dx >= sensitivity ? -1 : (dx <= -sensitivity ? 1 : 0);
+      const moveY = dy >= sensitivity ? -1 : (dy <= -sensitivity ? 1 : 0);
+
+      if (moveX !== 0 || moveY !== 0) {
+        panMap(moveX, moveY);
+        // Reiniciamos el punto base para que el movimiento sea continuo
+        if (moveX !== 0) startX = point.clientX;
+        if (moveY !== 0) startY = point.clientY;
+      }
+    }
+  }
+
+  function onEnd(e) {
+    if (isDragging && hasDragged) {
+      // Si hemos arrastrado, evitamos que el evento de click se propague a las celdas
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    isDragging = false;
+  }
+
+  // Eventos globales para asegurar que el arrastre no se corte al salir del mapa
+  document.addEventListener('mousedown', onStart);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onEnd, true); // Captura para bloquear click
+
+  document.addEventListener('touchstart', onStart, { passive: false });
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onEnd, true);
+})();

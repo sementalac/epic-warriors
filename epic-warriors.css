@@ -62,7 +62,7 @@
     }
 
     .input {
-      background: rgba(255,255,255,.04);
+      background: rgba(255, 255, 255, .04);
       border: 1px solid var(--border);
       border-radius: 4px;
       padding: 8px 12px;
@@ -80,7 +80,7 @@
 
     .btn {
       padding: 8px 16px;
-      background: rgba(0,212,255,.1);
+      background: rgba(0, 212, 255, .1);
       border: 1px solid var(--accent);
       border-radius: 4px;
       color: var(--accent);
@@ -93,7 +93,7 @@
     }
 
     .btn:hover {
-      background: rgba(0,212,255,.22);
+      background: rgba(0, 212, 255, .22);
     }
 
     .btn:disabled {
@@ -674,8 +674,17 @@
     }
 
     @keyframes pulse-badge {
-      0%, 100% { transform: scale(1);   box-shadow: 0 0 8px  rgba(244,196,48,.6); }
-      50%       { transform: scale(1.15); box-shadow: 0 0 16px rgba(244,196,48,.95); }
+
+      0%,
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 8px rgba(244, 196, 48, .6);
+      }
+
+      50% {
+        transform: scale(1.15);
+        box-shadow: 0 0 16px rgba(244, 196, 48, .95);
+      }
     }
 
     .content {
@@ -869,7 +878,8 @@
       color: var(--dim);
       line-height: 1.5;
       margin-bottom: 9px;
-      min-height: 2.5em; /* altura mínima para alinear cards con descripción corta */
+      min-height: 2.5em;
+      /* altura mínima para alinear cards con descripción corta */
     }
 
     .prod-row {
@@ -877,7 +887,8 @@
       gap: 5px;
       margin-bottom: 9px;
       flex-wrap: wrap;
-      min-height: 20px; /* reserva espacio aunque no haya badges */
+      min-height: 20px;
+      /* reserva espacio aunque no haya badges */
     }
 
     .pbadge {
@@ -919,7 +930,8 @@
       gap: 7px;
       margin-bottom: 9px;
       flex-wrap: wrap;
-      min-height: 18px; /* reserva espacio aunque el coste tenga menos recursos */
+      min-height: 18px;
+      /* reserva espacio aunque el coste tenga menos recursos */
     }
 
     .cost-i {
@@ -1114,8 +1126,17 @@
     }
 
     .map-grid-wrap {
-      overflow: auto;
+      overflow: hidden;
+      /* Cambiamos auto por hidden para manejarlo nosotros por drag */
       max-height: 540px;
+      touch-action: none;
+      /* Previene el scroll del body mientras arrastramos el mapa */
+      user-select: none;
+      cursor: grab;
+    }
+
+    .map-grid-wrap:active {
+      cursor: grabbing;
     }
 
     .map-grid {
@@ -2422,7 +2443,7 @@
       align-items: center;
       justify-content: center;
       height: 42px;
-      border: 1px dashed rgba(255,255,255,.08);
+      border: 1px dashed rgba(255, 255, 255, .08);
       border-radius: 5px;
       font-size: .7rem;
       color: var(--dim);
@@ -2472,7 +2493,7 @@
     .training-bar {
       width: 100%;
       height: 3px;
-      background: rgba(255,255,255,.05);
+      background: rgba(255, 255, 255, .05);
       border-radius: 2px;
       margin-top: 5px;
       overflow: hidden;
@@ -2512,7 +2533,7 @@
       align-items: center;
       gap: 5px;
       padding: 4px 9px;
-      background: rgba(255,255,255,.04);
+      background: rgba(255, 255, 255, .04);
       border: 1px solid var(--border);
       border-radius: 20px;
       font-size: .72rem;
@@ -2534,8 +2555,8 @@
     /* Botón "Cancelar todo" */
     .training-cancel-all {
       padding: 5px 12px;
-      background: rgba(224,64,64,.08);
-      border: 1px solid rgba(224,64,64,.35);
+      background: rgba(224, 64, 64, .08);
+      border: 1px solid rgba(224, 64, 64, .35);
       border-radius: 4px;
       color: var(--danger);
       font-family: 'VT323', monospace;
@@ -2548,7 +2569,7 @@
     }
 
     .training-cancel-all:hover {
-      background: rgba(224,64,64,.2);
+      background: rgba(224, 64, 64, .2);
       border-color: var(--danger);
     }
 
@@ -2604,14 +2625,22 @@
       font-size: .62rem;
     }
 
-    .barracas-bar-val.full  { color: var(--danger); }
-    .barracas-bar-val.warn  { color: var(--gold); }
-    .barracas-bar-val.ok    { color: var(--ok); }
+    .barracas-bar-val.full {
+      color: var(--danger);
+    }
+
+    .barracas-bar-val.warn {
+      color: var(--gold);
+    }
+
+    .barracas-bar-val.ok {
+      color: var(--ok);
+    }
 
     .barracas-bar-track {
       width: 100%;
       height: 5px;
-      background: rgba(255,255,255,.06);
+      background: rgba(255, 255, 255, .06);
       border-radius: 3px;
       overflow: hidden;
     }
@@ -2623,16 +2652,29 @@
     }
 
     /* Colores dinámicos según % */
-    .barracas-bar-fill.ok   { background: var(--ok); }
-    .barracas-bar-fill.warn { background: var(--gold); }
+    .barracas-bar-fill.ok {
+      background: var(--ok);
+    }
+
+    .barracas-bar-fill.warn {
+      background: var(--gold);
+    }
+
     .barracas-bar-fill.full {
       background: var(--danger);
       animation: barrPulse 1.4s ease-in-out infinite;
     }
 
     @keyframes barrPulse {
-      0%,100% { opacity: 1; }
-      50%      { opacity: .6; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: .6;
+      }
     }
 
     /* Cuarteles bonus tag */
@@ -2642,8 +2684,8 @@
       gap: 5px;
       font-size: .62rem;
       color: var(--gold);
-      background: rgba(240,192,64,.08);
-      border: 1px solid rgba(240,192,64,.2);
+      background: rgba(240, 192, 64, .08);
+      border: 1px solid rgba(240, 192, 64, .2);
       border-radius: 3px;
       padding: 2px 8px;
       margin-bottom: 12px;
@@ -2656,7 +2698,7 @@
       text-transform: uppercase;
       color: var(--dim);
       padding: 10px 0 5px;
-      border-bottom: 1px solid rgba(255,255,255,.04);
+      border-bottom: 1px solid rgba(255, 255, 255, .04);
       margin-bottom: 8px;
     }
 
@@ -2666,8 +2708,8 @@
       align-items: center;
       gap: 12px;
       padding: 10px 12px;
-      background: rgba(255,255,255,.02);
-      border: 1px solid rgba(255,255,255,.05);
+      background: rgba(255, 255, 255, .02);
+      border: 1px solid rgba(255, 255, 255, .05);
       border-radius: 6px;
       margin-bottom: 6px;
       transition: background .15s, border-color .15s;
@@ -2675,8 +2717,8 @@
     }
 
     .troop-row:hover {
-      background: rgba(0,212,255,.04);
-      border-color: rgba(0,212,255,.18);
+      background: rgba(0, 212, 255, .04);
+      border-color: rgba(0, 212, 255, .18);
     }
 
     .troop-row-icon {
@@ -2686,7 +2728,7 @@
       align-items: center;
       justify-content: center;
       font-size: 1.6rem;
-      background: rgba(255,255,255,.04);
+      background: rgba(255, 255, 255, .04);
       border: 1px solid var(--border);
       border-radius: 6px;
       flex-shrink: 0;
@@ -2747,7 +2789,7 @@
 
     .troop-recruit-input {
       width: 48px;
-      background: rgba(255,255,255,.05);
+      background: rgba(255, 255, 255, .05);
       border: 1px solid var(--border);
       border-radius: 4px;
       padding: 6px 4px;
@@ -2765,7 +2807,7 @@
 
     .troop-recruit-btn {
       padding: 7px 14px;
-      background: rgba(240,192,64,.12);
+      background: rgba(240, 192, 64, .12);
       border: 1px solid var(--gold);
       border-radius: 4px;
       color: var(--gold);
@@ -2778,8 +2820,8 @@
     }
 
     .troop-recruit-btn:hover {
-      background: rgba(240,192,64,.25);
-      box-shadow: 0 0 10px rgba(240,192,64,.2);
+      background: rgba(240, 192, 64, .25);
+      box-shadow: 0 0 10px rgba(240, 192, 64, .2);
     }
 
     .troop-recruit-btn:disabled {
@@ -2790,13 +2832,13 @@
 
     /* Aldeano — fila especial, sin controles de reclutamiento */
     .troop-row.aldeano {
-      background: rgba(255,221,96,.03);
-      border-color: rgba(255,221,96,.1);
+      background: rgba(255, 221, 96, .03);
+      border-color: rgba(255, 221, 96, .1);
     }
 
     .troop-row.aldeano:hover {
-      background: rgba(255,221,96,.06);
-      border-color: rgba(255,221,96,.22);
+      background: rgba(255, 221, 96, .06);
+      border-color: rgba(255, 221, 96, .22);
     }
 
     .troop-row.aldeano .troop-count-val {
@@ -2820,7 +2862,7 @@
       align-items: center;
       justify-content: center;
       min-height: 56px;
-      border: 1px dashed rgba(255,255,255,.07);
+      border: 1px dashed rgba(255, 255, 255, .07);
       border-radius: 6px;
       font-size: .72rem;
       color: var(--dim);
@@ -2845,8 +2887,8 @@
 
     .tq-cancel-btn {
       padding: 3px 10px;
-      background: rgba(224,64,64,.08);
-      border: 1px solid rgba(224,64,64,.3);
+      background: rgba(224, 64, 64, .08);
+      border: 1px solid rgba(224, 64, 64, .3);
       border-radius: 4px;
       color: var(--danger);
       font-family: 'VT323', monospace;
@@ -2859,7 +2901,7 @@
     }
 
     .tq-cancel-btn:hover {
-      background: rgba(224,64,64,.2);
+      background: rgba(224, 64, 64, .2);
       border-color: var(--danger);
     }
 
@@ -2869,8 +2911,8 @@
       align-items: center;
       gap: 10px;
       padding: 9px 12px;
-      background: rgba(96,208,96,.05);
-      border: 1px solid rgba(96,208,96,.15);
+      background: rgba(96, 208, 96, .05);
+      border: 1px solid rgba(96, 208, 96, .15);
       border-radius: 6px;
       margin-bottom: 8px;
     }
@@ -2897,7 +2939,7 @@
     .tq-bar {
       width: 100%;
       height: 4px;
-      background: rgba(255,255,255,.06);
+      background: rgba(255, 255, 255, .06);
       border-radius: 2px;
       overflow: hidden;
       margin-bottom: 5px;
@@ -2950,7 +2992,7 @@
       align-items: center;
       gap: 5px;
       padding: 4px 10px;
-      background: rgba(255,255,255,.04);
+      background: rgba(255, 255, 255, .04);
       border: 1px solid var(--border);
       border-radius: 20px;
       font-size: .75rem;
@@ -2965,9 +3007,167 @@
       line-height: 1;
     }
 
+    /* ============================================================ */
+    /* v1.54: DISEÑO RESPONSIVO (MOBILE-FIRST LOGIC)               */
+    /* ============================================================ */
+    @media (max-width: 768px) {
+      .main-layout {
+        display: block;
+        /* Adiós al grid lateral */
+      }
+
+      .sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: var(--panel);
+        border-right: none;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 0;
+        z-index: 200;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      .nav-section {
+        display: contents;
+        /* Aplana la estructura para el flex de la sidebar */
+      }
+
+      .nav-label {
+        display: none;
+        /* Ocultamos etiquetas de sección en móvil */
+      }
+
+      .nav-item {
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        padding: 4px 0;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+        font-size: .65rem;
+      }
+
+      .nav-item.active {
+        border-left-color: transparent;
+        border-bottom-color: var(--accent);
+        background: rgba(0, 212, 255, .1);
+      }
+
+      .nav-icon {
+        font-size: 1.2rem;
+        width: auto;
+      }
+
+      .content {
+        padding: 12px;
+        padding-bottom: 80px;
+        /* Espacio para que la barra inferior no tape el contenido */
+      }
+
+      .topbar {
+        height: 52px;
+        padding: 0 10px;
+      }
+
+      .logo {
+        display: none;
+        /* Ganamos espacio para los recursos */
+      }
+
+      .res-bar {
+        gap: 2px;
+      }
+
+      .res-chip {
+        min-width: 70px;
+        padding: 4px 6px;
+      }
+
+      .res-icon {
+        font-size: 1rem;
+      }
+
+      .res-val {
+        font-size: .85rem;
+      }
+
+      .res-rate {
+        font-size: .7rem;
+      }
+
+      .profile-crown {
+        font-size: 2rem !important;
+      }
+
+      /* Modales Full Screen */
+      .bld-modal {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+      }
+
+      .bld-modal-head {
+        padding: 12px 16px;
+      }
+
+      .bld-modal-title {
+        font-size: .75rem;
+      }
+
+      /* Grid de edificios a 2 columnas máximo */
+      .bld-grid {
+        grid-template-columns: 1fr;
+      }
+
+      /* Ajuste de tarjetas de misiones en móvil */
+      .queue-item {
+        padding: 6px;
+      }
+
+      /* Ranking y otros paneles */
+      .grid2 {
+        display: flex;
+        flex-direction: column;
+      }
+    }
+
+    /* Pantallas extra pequeñas (iPhone 5, etc.) */
+    @media (max-width: 400px) {
+      .res-name {
+        display: none;
+        /* Mostramos solo icono + valor */
+      }
+
+      .res-chip {
+        min-width: 60px;
+      }
+
+      .nav-text {
+        display: none;
+        /* Solo iconos en el menu inferior si la pantalla es enana */
+      }
+
+      .nav-icon {
+        font-size: 1.4rem;
+        margin-bottom: 0;
+      }
+
+      .nav-item {
+        padding: 8px 0;
+      }
+    }
+
     .tq-chip-count {
       font-family: 'Press Start 2P', cursive;
       font-size: .52rem;
       color: var(--gold);
     }
-

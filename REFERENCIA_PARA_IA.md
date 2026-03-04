@@ -28,19 +28,34 @@
 
 ---
 
-## Estado del proyecto: Epic Warriors v1.51
+## Estado del proyecto: Epic Warriors v1.52 (Fase Robustez)
 
 | Archivo | Versión | Notas |
 |---------|---------|-------|
-| index.html | **v1.51** | ✅ |
-| game-ui.js | v1.50 | ✅ |
-| game-engine.js | **v1.51** | ✅ fix botín PvP provisiones + defRefugio |
+| index.html | **v1.52** | ✅ Sincronización periódica de recursos |
+| game-ui.js | **v1.52** | ✅ RPC `syncVillageResourcesFromServer` |
+| game-engine.js | **v1.52** | ✅ RPCs `launch_mission` / `finalize_mission` |
 | game-admin.js | v1.49 | ✅ |
 | game-caves.js | v1.49 | ✅ |
-| game-troops.js | v1.47 | ✅ sin cambios |
-| game-combat.js | v1.46 | ✅ sin cambios |
-| game-social.js | v1.45 | ✅ sin cambios |
-| game-smithy.js | v1.44 | ✅ sin cambios |
+| game-troops.js | v1.47 | ✅ |
+| game-combat.js | v1.46 | ✅ |
+
+---
+
+## v1.52 — Fase Robustez y Seguridad (RPC-centric)
+
+**Cambio de paradigma:** La lógica crítica de recursos y misiones ya no se calcula solo en el cliente. El servidor (Supabase RPC) es la autoridad final.
+
+1. **Recursos Transcurridos**: Calculados en servidor via `sync_village_resources`. El cliente interpola para suavidad visual pero sincroniza cada 60s.
+2. **Smart Merge (Anti-Flickering)**: `syncVillageResourcesFromServer` mezcla el estado del servidor con el local. Si la diferencia es < 5, mantiene el valor local para evitar "saltos" en los contadores.
+3. **Misiones Seguras**:
+   - Salida: `launch_mission_secure` (valida disponibilidad de tropas).
+   - Combate: `execute_attack_secure` / `simulate_battle_server` (Motor PL/pgSQL).
+   - Logística: `execute_move_secure`, `execute_reinforce_secure`, `execute_transport_secure`.
+   - Regreso: `finalize_mission_secure` (suma atómica de tropas y botín).
+4. **Fundación Segura**: `execute_founding_secure` evita creación ilegal de aldeas.
+
+**Regla de Oro v1.52:** Si vas a modificar tropas, recursos o misiones, hazlo mediante un RPC que garantice la integridad de los datos. Nunca confíes en el estado del cliente como fuente de verdad única para mutaciones.
 
 ---
 
