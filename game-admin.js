@@ -586,13 +586,10 @@ async function ghostDelete(id, name) {
   if (!isAdmin()) return;
   if (!confirm('¿Borrar aldea fantasma "' + name + '"?')) return;
 
-  // Intentar RPC primero, con fallback a borrado directo
+  // RPC con SECURITY DEFINER — bypasea RLS (admin no es owner de aldeas fantasma)
   var r = await sbClient.rpc('admin_ghost_delete', { p_id: id });
-  if (r.error) {
-    console.warn('RPC admin_ghost_delete falló, intentando DELETE directo:', r.error.message);
-    var r2 = await sbClient.from('villages').delete().eq('id', id);
-    if (r2.error) { showNotif('Error borrando: ' + r2.error.message, 'err'); return; }
-  }
+  if (r.error) { showNotif('Error borrando: ' + r.error.message, 'err'); return; }
+
   showNotif('🗑️ Aldea "' + name + '" eliminada', 'ok');
   loadGhostList();
   if (typeof loadAllVillages === 'function') loadAllVillages();
@@ -1497,13 +1494,15 @@ async function adminLaunchHunt() {
       else if (CREATURE_TYPES[k]) s.creatures[k] = Math.max(0, (s.creatures[k] || 0) - troops[k]);
     });
 
-    s.mission_queue.push(missionEntry);
+    // v1.62c: Usar RPC SECURITY DEFINER para persistir en aldeas fantasma (bypass RLS)
+    var { error: upErr } = await sbClient.rpc('admin_ghost_sync_hunt', {
+      p_id: originId,
+      p_state: s,
+      p_mission_queue: s.mission_queue || []
+    });
 
-    // v1.62: Actualizar AMBAS columnas (state y mission_queue) porque la DB las tiene separadas
-    var { error: upErr } = await sbClient.from('villages').update({
-      state: s,
-      mission_queue: s.mission_queue || []
-    }).eq('id', originId);
+    // v1.62d: Asegurar que is_temp también se guarde en la columna por si acaso
+    // ELIMINADO en v1.63 - Ya se guarda dentro del .state unificado
 
     if (upErr) throw upErr;
 

@@ -356,21 +356,8 @@ async function doDeleteVillage() {
 
   var vid = activeVillage.id;
   try {
-    // Borrar tablas hijas en orden correcto (FK a villages.id)
-    var errs = [];
-    var r1 = await sbClient.from('resources').delete().eq('village_id', vid);
-    if (r1.error) errs.push('resources: ' + r1.error.message);
-    var r2 = await sbClient.from('buildings').delete().eq('village_id', vid);
-    if (r2.error) errs.push('buildings: ' + r2.error.message);
-    var r3 = await sbClient.from('troops').delete().eq('village_id', vid);
-    if (r3.error) errs.push('troops: ' + r3.error.message);
-    var r4 = await sbClient.from('creatures').delete().eq('village_id', vid);
-    if (r4.error) errs.push('creatures: ' + r4.error.message);
-
-    if (errs.length > 0) {
-      // Avisar pero intentar borrar la aldea igualmente
-      console.warn('[doDeleteVillage] Errores en tablas hijas:', errs.join(' | '));
-    }
+    // v1.65: Removed legacy table deletes (resources, buildings, troops, creatures)
+    // since they are now part of the villages.state JSONB.
 
     // Finalmente borrar la aldea principal
     var r5 = await sbClient.from('villages').delete().eq('id', vid);
@@ -418,15 +405,8 @@ async function doDeleteAccount() {
 
   try {
     // Obtener IDs de todas mis aldeas
-    var vilR = await sbClient.from('villages').select('id').eq('owner_id', currentUser.id);
-    if (!vilR.error && vilR.data && vilR.data.length > 0) {
-      var vids = vilR.data.map(function (v) { return v.id; });
-      // Borrar tablas hijas de todas las aldeas
-      await sbClient.from('resources').delete().in('village_id', vids);
-      await sbClient.from('buildings').delete().in('village_id', vids);
-      await sbClient.from('troops').delete().in('village_id', vids);
-      await sbClient.from('creatures').delete().in('village_id', vids);
-    }
+    // v1.65: Removed legacy table deletes. Everything is inside villages.state now.
+
     // Borrar aldeas (columna correcta: owner_id)
     await sbClient.from('villages').delete().eq('owner_id', currentUser.id);
     // Borrar perfil

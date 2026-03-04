@@ -1070,9 +1070,14 @@
 
       var now = Date.now();
       var html = '';
+      var renderedMids = new Set(); // v1.65: Deduplicación de misiones en UI
 
       // ── 1. Ataques entrantes ───────────────────────────────────
       (_incomingAttacks || []).forEach(function (a) {
+        var mid = a.mid || a.finish_at;
+        if (renderedMids.has(mid)) return;
+        renderedMids.add(mid);
+
         var eta = Math.max(0, Math.ceil((new Date(a.finish_at).getTime() - now) / 1000));
         html += _missionRow({
           icon: '🚨', color: 'var(--danger)',
@@ -1091,6 +1096,11 @@
         ((v.state && v.state.mission_queue) || []).forEach(function (m) {
           var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
           if (!ft) return;
+
+          var mid = m.mid || m.finish_at;
+          if (renderedMids.has(mid)) return;
+          renderedMids.add(mid);
+
           var eta = Math.max(0, Math.ceil((ft - now) / 1000));
           // Ocultar retornos ya resueltos (>5s pasados)
           if (eta === 0 && (now - ft) > 5000) return;
@@ -1101,7 +1111,6 @@
           var pct = Math.min(100, Math.round((elapsed / total) * 100));
 
           var cfg = _missionTypeCfg(m.type);
-          var mid = m.mid || m.finish_at;
           var canCancel = (m.type !== 'return' && m.type !== 'found' && m.type !== 'return_reinforce');
           var hasTroops = m.troops && Object.keys(m.troops).some(function (k) { return (m.troops[k] || 0) > 0; });
 
@@ -1133,7 +1142,7 @@
       // Botones de acción — los chips de tropa NO se muestran en el panel (usar "Ver tropas")
       var troopChips = ''; // siempre vacío — el usuario usa el botón para ver detalles
       var btns = '';
-      if (o.troops && !o.isIncoming) {
+      if (o.troops) {
         btns += '<button onclick="showMissionTroops(\'' + escapeJs(o.mid || '') + '\')" '
           + 'style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);'
           + 'padding:3px 10px;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:VT323,monospace;">👁 Ver tropas</button>';
@@ -1253,10 +1262,19 @@
       }
 
       clearInterval(uiTimer);
-      uiTimer = setInterval(tick, 1000);
-      clearInterval(autoSaveTimer);
+uiTimer = setInterval(tick, 1000);
+clearInterval(autoSaveTimer);
 
-      if (typeof resetUiAnimation === 'function') resetUiAnimation();
+// v1.67: Boot sync — recursos reales del servidor + colas offline resueltas antes del primer frame
+      try {
+        clearTimeout(saveDebounce); // cancelar saves pendientes antes de sync
+        await syncVillageResourcesFromServer();
+        tick(); // tick scheduleará su propio save si hay colas que resolver
+      } catch (bootErr) {
+  console.warn('[v1.67] Boot sync error (no crítico):', bootErr);
+}
+
+if (typeof resetUiAnimation === 'function') resetUiAnimation();
       if (typeof ensureUiAnim === 'function') ensureUiAnim();
 
       if (typeof loadAllVillages === 'function') loadAllVillages();
@@ -1313,7 +1331,9 @@
       try {
         const { data } = await sbClient.from('player_objectives').select('*').eq('user_id', currentUser.id);
         if (data) playerObjectives = data;
-      } catch (e) { }
+      } catch (e) {
+        console.warn('loadPlayerObjectives error:', e);
+      }
     }
 
     async function updateObjective(id, status) {
@@ -1322,7 +1342,9 @@
         await sbClient.from('player_objectives').upsert({ user_id: currentUser.id, objective_id: id, status: status, last_interaction: new Date().toISOString() });
         await loadPlayerObjectives();
         renderMap();
-      } catch (e) { }
+      } catch (e) {
+        console.warn('updateObjective error:', e);
+      }
     }
 
     // ============================================================
@@ -1347,9 +1369,11 @@
         var s = typeof v.state === 'string' ? JSON.parse(v.state) : v.state;
 
         if (!s) {
+          console.error('[CRÍTICO] La aldea ' + v.id + ' (' + v.name + ') no tiene estado en la DB. Usando valores por defecto temporales (SIN GUARDAR) para evitar reset permanente.', v);
           s = defaultState();
-          s.last_updated = new Date().toISOString();
-          await sbClient.from('villages').update({ state: s }).eq('id', v.id);
+          // v1.62d: NO guardamos el s = defaultState() en la DB automáticamente.
+          // Esto evita que un error temporal borre la aldea para siempre.
+          // El usuario verá nivel 1, pero si recarga y la DB se arregla, recuperará sus datos.
         }
 
         s.build_queue = v.build_queue || null;
@@ -1439,6 +1463,18 @@
       var v = myVillages.find(function (v) { return v.id === id; });
       if (v) {
         activeVillage = v;
+        // v1.66: sincronizar contadores globales de batallas al cambiar de aldea
+        if (window._profileBattles && v.state) {
+          v.state.battles_won_pvp  = window._profileBattles.battles_won_pvp  || 0;
+          v.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp || 0;
+          v.state.battles_won_npc  = window._profileBattles.battles_won_npc  || 0;
+        }
+        // v1.65: sincronizar contadores globales de batallas en cada cambio de aldea
+        if (window._profileBattles && v.state) {
+          v.state.battles_won_pvp  = window._profileBattles.battles_won_pvp  || 0;
+          v.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp || 0;
+          v.state.battles_won_npc  = window._profileBattles.battles_won_npc  || 0;
+        }
         mapCamX = null;
         mapCamY = null;
         resetUiAnimation();
@@ -1486,20 +1522,15 @@
         name: vName,
         cx: cx,
         cy: cy,
-        build_queue: null,
         state: initialState
       }).select().single();
 
-      if (err) { throw new Error(err.message); }
+      if (err) {
+        console.error('CRITICAL: Failed to create first village:', err);
+        throw new Error(err.message);
+      }
 
-      await sbClient.from('resources').insert({ village_id: v.id }).catch(function () { });
-      await sbClient.from('buildings').insert({
-        village_id: v.id,
-        aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
-      }).catch(function () { });
-      var initialTroops = { village_id: v.id };
-      Object.keys(TROOP_TYPES).forEach(function (k) { initialTroops[k] = (k === 'aldeano' ? 50 : 0); });
-      await sbClient.from('troops').insert(initialTroops).catch(function () { });
+      showNotif('¡Aldea base establecida!', 'ok');
     }
 
     // ── v1.49: Escribe state jsonb en villages (1 write en vez de 5) ──
@@ -1511,33 +1542,30 @@
       snapshotResources(v.state);
 
       const s = v.state;
+      // v1.65: Validación de integridad del estado para evitar pérdidas de datos
+      if (!s || !s.buildings || !s.resources || !s.troops) {
+        console.error('CRITICAL: Intento de guardado de estado corrupto abortado.', v);
+        return;
+      }
 
-      s.troops.aldeano = (s.resources.aldeanos !== undefined && s.resources.aldeanos !== null)
-        ? Math.max(0, Math.floor(s.resources.aldeanos))
-        : (s.troops.aldeano || 0);
-
+      // v1.65: troops.aldeano y resources son autoridad del servidor (secure_village_tick).
+      // El cliente ya NO escribe esos campos. Solo persiste campos seguros via RPC.
       s.last_updated = new Date().toISOString();
 
-      const { error } = await sbClient.from('villages').update({
-        state: {
-          resources: s.resources,
-          aldeanos_assigned: s.aldeanos_assigned || {},
-          production: s.production || {},
-          capacity: s.capacity || 0,
-          troops: s.troops,
-          creatures: s.creatures,
-          buildings: s.buildings,
-          last_updated: s.last_updated,
-          refugio: s.refugio || {},
-          _aldeanos_total_mode: true
-        },
-        build_queue: s.build_queue,
-        mission_queue: s.mission_queue || [],
-        summoning_queue: s.summoning_queue || [],
-        training_queue: s.training_queue || [],
-        name: v.name,
-        last_aldeano_at: s.last_aldeano_at || null
-      }).eq('id', v.id);
+      var { error } = await sbClient.rpc('save_village_client', {
+        p_village_id:        v.id,
+        p_name:              v.name,
+        p_aldeanos_assigned: s.aldeanos_assigned || defaultAssignments(),
+        p_refugio:           s.refugio || {},
+        p_mission_queue:     v.state.mission_queue    || [],
+        p_build_queue:       v.state.build_queue      || null,
+        p_training_queue:    v.state.training_queue   || [],
+        p_summoning_queue:   v.state.summoning_queue  || [],
+        p_resources:         s.resources  || {},
+        p_troops:            s.troops     || {},
+        p_creatures:         s.creatures  || {},
+        p_buildings:         s.buildings  || {}
+      });
 
       if (error) {
         console.error('Save error:', error);
@@ -1712,6 +1740,9 @@
       if (!activeVillage.state.summoning_queue) activeVillage.state.summoning_queue = [];
       var oldS = JSON.stringify(activeVillage.state.summoning_queue);
 
+      if (!activeVillage.state.training_queue) activeVillage.state.training_queue = [];
+      var oldT = JSON.stringify(activeVillage.state.training_queue);
+
       activeVillage.state = resolveQueue(activeVillage.state);
       activeVillage.state = resolveSummoningQueue(activeVillage.state);
       activeVillage.state = resolveTrainingQueue(activeVillage.state);
@@ -1719,7 +1750,9 @@
       var newQ2 = activeVillage.state.build_queue ? JSON.stringify(activeVillage.state.build_queue) : null;
       var newM2 = JSON.stringify(activeVillage.state.mission_queue || []);
       var newS2 = JSON.stringify(activeVillage.state.summoning_queue || []);
-      if ((oldQ && !newQ2) || (oldM !== newM2) || (oldS !== newS2)) {
+      var newT2 = JSON.stringify(activeVillage.state.training_queue || []);
+
+      if ((oldQ && !newQ2) || (oldM !== newM2) || (oldS !== newS2) || (oldT !== newT2)) {
         scheduleSave();
         if (oldS !== newS2 && document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
           renderCreatures();
@@ -1731,34 +1764,30 @@
       }
 
       var _nowMs2 = Date.now();
-      var hasMissionDue = (activeVillage.state.mission_queue || []).some(function (m) {
-        return m.finish_at && new Date(m.finish_at).getTime() <= _nowMs2;
-      });
-      if (hasMissionDue && !_missionWatchScheduled) {
-        _missionWatchScheduled = true;
-        resolveMissions(activeVillage.state).then(function (updated) {
-          activeVillage.state = updated;
-          _missionWatchScheduled = false;
-          scheduleSave();
-          updateUnreadCount && updateUnreadCount();
-          if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
-            renderTroops();
-          }
-          if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
-            renderCreatures();
-          }
-          if (document.getElementById('page-defense') && document.getElementById('page-defense').classList.contains('active')) {
-            renderRefugio();
-          }
-          if (document.getElementById('page-research') && document.getElementById('page-research').classList.contains('active')) {
-            var xpEl = document.getElementById('researchXPDisplay');
-            if (xpEl && typeof _researchData !== 'undefined' && _researchData) {
-              xpEl.textContent = formatNumber(_researchData.experience) + ' XP';
+      // v1.65: Resolver misiones en TODAS las aldeas (Solución Bug 0s)
+      (myVillages || []).forEach(function (v) {
+        var hasMissionDue = (v.state.mission_queue || []).some(function (m) {
+          return m.finish_at && new Date(m.finish_at).getTime() <= _nowMs2;
+        });
+        if (hasMissionDue && !_missionWatchScheduled) {
+          _missionWatchScheduled = true;
+          resolveMissions(v).then(function (updated) {
+            v.state = updated;
+            _missionWatchScheduled = false;
+            saveVillage(v); // Guardado inmediato tras resolución
+            updateUnreadCount && updateUnreadCount();
+            if (v.id === activeVillage.id) {
+              if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) renderTroops();
+              if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) renderCreatures();
+              if (document.getElementById('page-defense') && document.getElementById('page-defense').classList.contains('active')) renderRefugio();
             }
-          }
-          refreshMilitaryScore && refreshMilitaryScore();
-        }).catch(function () { _missionWatchScheduled = false; });
-      }
+            refreshMilitaryScore && refreshMilitaryScore();
+          }).catch(function (e) {
+            console.error('Resolution tick error:', e);
+            _missionWatchScheduled = false;
+          });
+        }
+      });
 
       var vs = activeVillage.state;
       var w = vs.aldeanos_assigned || defaultAssignments();
@@ -1801,31 +1830,34 @@
       // v1.62c: Procesador Global de Misiones Admin (DIRECTO — sin resolveMissions)
       if (typeof isAdmin === 'function' && isAdmin()) {
         if (!window._lastGlobalTick) window._lastGlobalTick = 0;
-        if (!window._globalTickRunning && (Date.now() - window._lastGlobalTick) > 5000) {
+        if (!window._globalTickRunning && (Date.now() - window._lastGlobalTick) > 3000) {
           window._lastGlobalTick = Date.now();
           window._globalTickRunning = true;
           (async function () {
             try {
               var now2 = Date.now();
-              // Buscar aldeas temporales con misiones admin pendientes directo de la DB
+              // Buscar todas las misiones admin pendientes en cualquier aldea que NO sea del jugador actual
               var { data: gVills } = await sbClient
                 .from('villages')
                 .select('id, name, cx, cy, state, mission_queue')
-                .not('mission_queue', 'is', null);
+                .neq('owner_id', currentUser.id)
+                .neq('mission_queue', '[]');
 
               for (var gv of (gVills || [])) {
-                var gs = typeof gv.state === 'string' ? JSON.parse(gv.state) : gv.state;
-                if (!gs || !gs.is_temp) continue;
                 var mq = Array.isArray(gv.mission_queue) ? gv.mission_queue : [];
+                // Identificamos como temporal si tiene el flag JSON, la columna DB, o el nombre característico
+                var gs = typeof gv.state === 'string' ? JSON.parse(gv.state) : gv.state;
+                var isTemp = (gs && gs.is_temp) || (gv.name === 'Punto de Invasión Admin');
+
                 var toProcess = mq.filter(function (m2) {
-                  return m2.admin_test && m2.type === 'attack' && m2.finish_at && new Date(m2.finish_at).getTime() <= now2;
+                  return m2.admin_test && m2.finish_at && new Date(m2.finish_at).getTime() <= now2;
                 });
+
                 if (toProcess.length === 0) continue;
 
-                console.log('⚡ Admin Hunt: Procesando ataque desde', gv.name || gv.id);
+                console.log('⚡ Admin Hunt: Resolviendo desde', gv.name || gv.id);
                 for (var hm of toProcess) {
                   try {
-                    // Llamar directamente a la rama admin de executeAttackPvP
                     await executeAttackPvP(hm);
                   } catch (he) { console.error('Hunt mission error:', he); }
                   mq = mq.filter(function (x) { return x.mid !== hm.mid; });
@@ -1834,15 +1866,15 @@
                 // Guardar queue actualizado
                 await sbClient.from('villages').update({ mission_queue: mq }).eq('id', gv.id);
 
-                // Autodestrucción si ya no quedan misiones
-                if (mq.length === 0) {
+                // Autodestrucción si ya no quedan misiones y es temporal
+                if (isTemp && mq.length === 0) {
                   await sbClient.from('villages').delete().eq('id', gv.id);
-                  showNotif('🧹 Base temporal eliminada.', 'ok');
+                  showNotif('🧹 Base de invasión retirada.', 'ok');
                   if (typeof loadAllVillages === 'function') loadAllVillages();
                   if (typeof renderMap === 'function') renderMap();
                 }
               }
-            } catch (ge) { console.error('Admin Global Tick:', ge); }
+            } catch (ge) { console.error('Admin Global Tick Exception:', ge); }
             window._globalTickRunning = false;
           })();
         }
@@ -1961,6 +1993,7 @@
         if (error || !data) return;
 
         var attacks = [];
+        var midSet = new Set(); // v1.65: Deduplicación alertas
         var now = Date.now();
 
         data.forEach(function (village) {
@@ -1970,15 +2003,22 @@
             if (m.type !== 'attack') return;
             var target = myCoords.find(function (c) { return c.x === m.tx && c.y === m.ty; });
             if (!target) return;
+
+            var mid = m.mid || m.finish_at;
+            if (midSet.has(mid)) return;
+            midSet.add(mid);
+
             var finish = new Date(m.finish_at).getTime();
-            if (finish <= now) return;
+            if (finish <= now - 5000) return; // Limpieza pasados 5s
             attacks.push({
+              mid: mid,
               fromName: village.name || '[' + village.cx + ',' + village.cy + ']',
               fromCoords: [village.cx, village.cy],
               toName: target.name,
               toCoords: [m.tx, m.ty],
               finish_at: m.finish_at,
-              secsLeft: Math.ceil((finish - now) / 1000)
+              secsLeft: Math.ceil((finish - now) / 1000),
+              troops: m.troops
             });
           });
         });

@@ -9,34 +9,76 @@
 // Utilidades: escapeHtml, escapeJs, fmt, fmtTime, showNotif, createStars, formatNumber
 // ============================================================
 
-function startBuild(id) {
+// v1.67: server-authoritative — sincroniza snapshot antes de validar en servidor
+async function startBuild(id) {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   if (vs.build_queue) { showNotif('Ya hay una construccion en curso.', 'err'); return; }
-  var def = BUILDINGS.find(function (b) { return b.id === id; });
-  var lvl = (vs.buildings[id] && vs.buildings[id].level) || 0;
-  var cost = def.cost(lvl);
-  var res = calcRes(vs);
-  if (!canAfford(cost, res)) { showNotif('Recursos insuficientes.', 'err'); return; }
 
-  // Snapshot primero (fija last_updated = ahora y escribe valores reales)
-  // Luego resta el coste — nunca puede quedar negativo porque canAfford ya lo comprobó
-  snapshotResources(vs);
-  vs.resources.madera = Math.max(0, vs.resources.madera - (cost.madera || 0));
-  vs.resources.piedra = Math.max(0, vs.resources.piedra - (cost.piedra || 0));
-  vs.resources.hierro = Math.max(0, vs.resources.hierro - (cost.hierro || 0));
-  vs.resources.provisiones = Math.max(0, vs.resources.provisiones - (cost.provisiones || 0));
-  vs.resources.esencia = Math.max(0, vs.resources.esencia - (cost.esencia || 0));
-  // last_updated ya lo fijó snapshotResources()
+  setSave('saving');
+  try {
+    // v1.67: Sincronizar con servidor antes de validar recursos
+    clearTimeout(saveDebounce); // v1.67: cancelar autosave pendiente antes de sync
+    snapshotResources(vs);
+    await syncVillageResourcesFromServer();
+    vs = activeVillage.state; // re-leer referencia tras el sync
 
-  // Store finish timestamp — this is what makes offline work
-  var secs = def.time(lvl);
-  vs.build_queue = { id: id, finish_at: new Date(Date.now() + secs * 1000).toISOString() };
+    var { data: newState, error } = await sbClient.rpc('start_build_secure', {
+      p_village_id:  activeVillage.id,
+      p_building_id: id
+    });
+    if (error) throw error;
 
-  showNotif('Construyendo ' + def.name + ' nivel ' + (lvl + 1) + '...', 'ok');
-  flushVillage(); // save immediately to Supabase
-  tick();
-  renderBuildings(calcRes(vs));
+    if (newState) {
+      activeVillage.state.resources    = newState.resources    || vs.resources;
+      activeVillage.state.build_queue  = newState.build_queue  || null;
+      activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
+    }
+
+    var def = BUILDINGS.find(function (b) { return b.id === id; });
+    var lvl = (vs.buildings[id] && vs.buildings[id].level) || 0;
+    showNotif('Construyendo ' + (def ? def.name : id) + ' nivel ' + (lvl + 1) + '...', 'ok');
+    setSave('saved');
+    tick();
+    renderBuildings(calcRes(activeVillage.state));
+    renderQueue(activeVillage.state);
+  } catch (e) {
+    setSave('error');
+    showNotif('Error: ' + (e.message || 'No se pudo iniciar construcción'), 'err');
+  console.error('startBuild error:', e.message, e.details, e.hint, e);
+    showNotif('Error: ' + (e.message || e.details || e.hint || 'Sin recursos o cola ocupada'), 'err');
+  }
+}
+
+// v1.66: cancelar construcción con devolución de recursos via servidor
+async function cancelBuild() {
+  if (!activeVillage) return;
+  var vs = activeVillage.state;
+  if (!vs.build_queue) { showNotif('No hay construcción en curso.', 'err'); return; }
+
+  setSave('saving');
+  try {
+    var { data: newState, error } = await sbClient.rpc('cancel_build_secure', {
+      p_village_id: activeVillage.id
+    });
+    if (error) throw error;
+
+    if (newState) {
+      activeVillage.state.resources    = newState.resources    || vs.resources;
+      activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
+    }
+    activeVillage.state.build_queue = null;
+
+    showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
+    setSave('saved');
+    tick();
+    renderBuildings(calcRes(activeVillage.state));
+    renderQueue(activeVillage.state);
+  } catch (e) {
+    setSave('error');
+    showNotif('Error cancelando: ' + (e.message || ''), 'err');
+    console.error('cancelBuild error:', e);
+  }
 }
 
 function canAfford(cost, res, cap, blds) {
@@ -121,7 +163,16 @@ function renderBuildings(res) {
 function showMissionTroops(missionRef) {
   var vs = activeVillage && activeVillage.state;
   if (!vs) return;
+  // Buscar en activeVillage primero, luego en todas las aldeas del jugador
   var m = (vs.mission_queue || []).find(function (q) { return q.mid === missionRef || q.finish_at === missionRef; });
+  if (!m && typeof myVillages !== 'undefined') {
+    for (var i = 0; i < myVillages.length; i++) {
+      var vs2 = myVillages[i].state;
+      if (!vs2) continue;
+      m = (vs2.mission_queue || []).find(function (q) { return q.mid === missionRef || q.finish_at === missionRef; });
+      if (m) break;
+    }
+  }
   if (!m) { showNotif('Misión no encontrada', 'err'); return; }
 
   var troops = m.troops || {};
@@ -249,10 +300,14 @@ function renderQueue(vs) {
     var total = def ? def.time(lvl) : 60;
     var pct = Math.min(100, Math.round(((total - tl) / total) * 100));
     var icon = def ? def.icon : '🏗️';
-    el.innerHTML = '<div class="queue-item"><div class="queue-icon">' + icon + '</div>'
-      + '<div class="queue-info"><div class="queue-name">' + (def ? def.name : q.id) + ' -> Nivel ' + (lvl + 1) + '</div>'
+    el.innerHTML = '<div class="queue-item" style="display:flex;align-items:center;gap:8px;">'
+      + '<div class="queue-icon">' + icon + '</div>'
+      + '<div class="queue-info" style="flex:1;">'
+      + '<div class="queue-name">' + (def ? def.name : q.id) + ' -> Nivel ' + (lvl + 1) + '</div>'
       + '<div class="queue-time">' + tl + 's restantes</div>'
-      + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div></div>';
+      + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div>'
+      + '<button onclick="cancelBuild()" style="background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.3);color:#ff6b6b;border-radius:4px;padding:3px 8px;font-size:.7rem;cursor:pointer;flex-shrink:0;">✕</button>'
+      + '</div>';
   });
 }
 
@@ -469,8 +524,8 @@ function renderMap() {
     }
   }
 
-  // v1.62: Dibujar misiones en movimiento
-  renderMissions(cx, cy);
+  // v1.62: Dibujar misiones en movimiento (DESACTIVADO POR PETICIÓN ADMIN)
+  // renderMissions(cx, cy);
 }
 
 function renderMissions(cx, cy) {
@@ -881,14 +936,19 @@ async function foundVillage(x, y) {
   var origAldeanos = aldeanos;
   var origAssigned = vs.aldeanos_assigned ? JSON.parse(JSON.stringify(vs.aldeanos_assigned)) : null;
 
-  // Consumir tropas
+  // Snapshot + consumir tropas y provisiones
+  snapshotResources(vs);
   vs.troops.explorador = Math.max(0, exploradores - 1);
   consumeAldeanos(vs, 50);
+  // 1 explorador + 50 aldeanos = 51 unidades → 51 provisiones
+  vs.resources.provisiones = Math.max(0, vs.resources.provisiones - 51);
 
-  // Añadir misión de fundación al queue
+  // Añadir misión de fundación al queue (con mid obligatorio para execute_founding_secure)
   var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
+  var foundMid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   if (!vs.mission_queue) vs.mission_queue = [];
   vs.mission_queue.push({
+    mid: foundMid,
     type: 'found',
     tx: x,
     ty: y,
@@ -907,7 +967,7 @@ async function foundVillage(x, y) {
     vs.troops.explorador = origExploradores;
     vs.troops.aldeano = origAldeanos;
     if (origAssigned) vs.aldeanos_assigned = origAssigned;
-    vs.mission_queue = vs.mission_queue.filter(function (m) { return m.finish_at !== finishAt; });
+    vs.mission_queue = vs.mission_queue.filter(function (m) { return m.mid !== foundMid; });
     showNotif('Error al enviar colonos: ' + (e.message || e), 'err');
     console.error('foundVillage error:', e);
   }
@@ -2307,7 +2367,7 @@ async function syncVillageResourcesFromServer() {
       activeVillage.state.capacity = getCapacity(activeVillage.state.buildings);
     }
 
-    var { data: newState, error } = await sbClient.rpc('sync_village_resources', {
+    var { data: newState, error } = await sbClient.rpc('secure_village_tick', {
       p_village_id: activeVillage.id
     });
 
@@ -2338,10 +2398,13 @@ async function syncVillageResourcesFromServer() {
       });
       newState.mission_queue = newMissions;
 
-      var newTrain = newState.training_queue || [];
-      var oldTrain = oldState.training_queue || [];
-      if (oldTrain.length > newTrain.length) newState.training_queue = oldTrain;
-
+      // v1.63: Removed training queue override to trust server authority.
+      // If a troop completes on server, client should accept it.
+      // (Removed oldTrain.length > newTrain.length logic)
+      // v1.66: preservar build_queue local — secure_village_tick no la devuelve
+      if (newState && !newState.build_queue && oldState.build_queue) {
+        newState.build_queue = oldState.build_queue;
+      }
       activeVillage.state = newState;
 
       // Re-renderizar UI

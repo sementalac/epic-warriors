@@ -31,47 +31,16 @@ async function renderRanking() {
   if (!v.error && v.data && v.data.length > 0) {
     rows = v.data;
   } else {
+    // Fallback: Si la vista ranking fallara, usamos profiles directamente
     const p = await sbClient.from('profiles')
-      .select('id, username')
-      .limit(500);
+      .select('username, military_score, alliance_tag')
+      .order('military_score', { ascending: false })
+      .limit(200);
     if (p.error || !p.data) {
       box.innerHTML = '<div class="muted">Error cargando ranking.</div>';
       return;
     }
-
-    const t = await sbClient.from('troops')
-      .select('*, villages(owner_id)')
-      .limit(5000);
-
-    const scoreMap = {};
-    if (!t.error && t.data) {
-      t.data.forEach(tr => {
-        const uid = tr.villages && tr.villages.owner_id;
-        if (!uid) return;
-        let playerTotalTroops = 0;
-        Object.keys(TROOP_TYPES).forEach(k => {
-          playerTotalTroops += (Number(tr[k]) || 0);
-        });
-        scoreMap[uid] = (scoreMap[uid] || 0) + playerTotalTroops;
-      });
-    }
-
-    const am = await sbClient.from('alliance_members')
-      .select('user_id, status, alliances(tag)')
-      .eq('status', 'active')
-      .limit(500);
-    const allianceTagMap = {};
-    if (!am.error && am.data) {
-      am.data.forEach(r => {
-        allianceTagMap[r.user_id] = r.alliances ? r.alliances.tag : null;
-      });
-    }
-
-    rows = p.data.map(u => ({
-      username: u.username,
-      military_score: scoreMap[u.id] || 0,
-      alliance_tag: allianceTagMap[u.id] || null
-    })).sort((a, b) => b.military_score - a.military_score);
+    rows = p.data;
   }
 
   rankingCache = { data: rows, fetchedAt: Date.now() };

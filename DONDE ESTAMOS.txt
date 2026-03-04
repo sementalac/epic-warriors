@@ -1,0 +1,22 @@
+Dónde estamos — v1.67 en progreso
+Lo que hicimos hoy:
+
+index.html — Boot sync tras loadMyVillages():
+
+jsclearTimeout(saveDebounce);
+await syncVillageResourcesFromServer();
+tick();
+```
+
+2. `game-ui.js` — `startBuild`: añadido `clearTimeout(saveDebounce)` antes del sync para evitar race condition donde el autosave pendiente bajaba recursos con `LEAST()` justo después del tick del servidor.
+
+3. **Supabase** — Drop del trigger `trg_validate_village` (función `validate_village_buildings`) que disparaba "Manipulación de edificios detectada" como falso positivo en cualquier UPDATE a `villages.state`.
+
+**Bug crítico NUEVO — pendiente de resolver:**
+
+Tras el F5, las aldeas aparecen con `state = NULL` en la DB. Error en consola:
+```
+[CRÍTICO] La aldea XXX no tiene estado en la DB
+Hipótesis principal: save_village_client hace state = state || jsonb_build_object(...). En PostgreSQL, NULL || anything = NULL. Si el estado llegó a ser NULL en algún momento (posiblemente durante la race condition que estábamos arreglando), cada save posterior lo deja NULL permanentemente.
+Siguiente paso: Arreglar save_village_client en Supabase para que use COALESCE(state, '{}') || ... en lugar de state || ..., y recuperar los datos de las aldeas afectadas.
+Adjunto: ARQUITECTURA.md y REFERENCIA_PARA_IA.md para contexto completo.

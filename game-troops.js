@@ -164,7 +164,7 @@ function renderCreaturesList() {
   Object.keys(CREATURE_TYPES).forEach(function (key) {
     // ⛏️ v1.47: Excluir guardiancueva — se renderiza en apartado separado
     if (key === 'guardiancueva') return;
-    
+
     var count = creatures[key] || 0;
     if (count === 0) return;
     hasAny = true;
@@ -252,7 +252,7 @@ function renderCaughtCreatures() {
 
   var cData = CREATURE_TYPES.guardiancueva || {};
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">';
-  
+
   html += '<div style="background:linear-gradient(135deg,rgba(255,215,0,.15),rgba(184,134,11,.1));border:2px solid rgba(255,215,0,.4);padding:10px;border-radius:6px;text-align:center;position:relative;box-shadow:0 0 12px rgba(255,215,0,.1);">';
   html += '<div style="position:absolute;top:6px;left:6px;font-size:.55rem;color:var(--gold);letter-spacing:.08em;background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.4);border-radius:3px;padding:1px 4px;font-weight:bold;">⛏️ CAPTURADO</div>';
   html += '<button onclick="showCreatureStats(\'guardiancueva\')" title="Ver estadísticas" style="background:none;border:none;cursor:pointer;font-size:2.2rem;padding:0;line-height:1;margin-top:6px;display:block;width:100%;">' + cData.icon + '</button>';
@@ -374,6 +374,42 @@ function renderSummonOptions() {
   box.innerHTML = html;
 }
 
+// v1.66: invocar criatura via servidor
+function startSummoningFromInput(key) {
+  startSummoning(key);
+}
+
+async function startSummoning(key) {
+  if (!activeVillage) return;
+
+  setSave('saving');
+  try {
+    var { data: newState, error } = await sbClient.rpc('start_summoning_secure', {
+      p_village_id:   activeVillage.id,
+      p_creature_key: key
+    });
+    if (error) throw error;
+
+    if (newState) {
+      var vs = activeVillage.state;
+      vs.resources        = newState.resources        || vs.resources;
+      vs.summoning_queue  = newState.summoning_queue  || [];
+      vs.last_updated     = newState.last_updated     || vs.last_updated;
+    }
+
+    var c = typeof CREATURE_TYPES !== 'undefined' ? CREATURE_TYPES[key] : null;
+    showNotif((c ? c.name : key) + ' añadido a la cola de invocación', 'ok');
+    setSave('saved');
+    tick();
+    if (typeof renderCreatures === 'function') renderCreatures();
+    renderSummoningQueue();
+  } catch (e) {
+    setSave('error');
+    showNotif('Error: ' + (e.message || 'No se pudo iniciar invocación'), 'err');
+    console.error('startSummoning error:', e);
+  }
+}
+
 function showBarracasModal() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -427,100 +463,73 @@ function startRecruitmentFromInput(type) {
   startRecruitment(type, amount);
 }
 
-function startRecruitment(type, amount) {
+// v1.66: server-authoritative — valida barracas, recursos y aldeanos en servidor
+async function startRecruitment(type, amount) {
   if (!activeVillage) return;
   if (!amount || amount <= 0) return;
 
-  var vs = activeVillage.state;
-  var res = calcRes(vs);
-  var stats = getTroopStatsWithLevel(type, 1);
-  var costTotal = {};
-  Object.keys(stats.cost).forEach(k => costTotal[k] = stats.cost[k] * amount);
-
-  if (!canAfford(costTotal, res)) { showNotif('No tienes recursos suficientes.', 'err'); return; }
-
-  var barrCap = getBarracksCapacity(vs.buildings);
-  var usedSlots = getBarracksUsed(vs);
-  var slotsFreed = amount * (TROOP_TYPES['aldeano'].barracasSlots || 1);
-  var slotsNeeded = amount * (stats.barracasSlots || 1);
-  if (usedSlots - slotsFreed + slotsNeeded > barrCap) {
-    showNotif('No hay espacio suficiente en las barracas.', 'err'); return;
-  }
-
-  var aldLibres = res.aldeanos_libres || 0;
-  if (aldLibres < amount) {
-    showNotif('Necesitas ' + amount + ' aldeanos LIBRES. Tienes ' + aldLibres + '.', 'err'); return;
-  }
-
-  snapshotResources(vs);
-
-  Object.keys(costTotal).forEach(k => {
-    if (k === 'prov') vs.resources.provisiones = Math.max(0, vs.resources.provisiones - costTotal[k]);
-    else if (vs.resources[k] !== undefined) vs.resources[k] = Math.max(0, vs.resources[k] - costTotal[k]);
-  });
-  if (!vs.troops) vs.troops = {};
-  consumeAldeanos(vs, amount);
-
-  if (!vs.training_queue) vs.training_queue = [];
-  var cuartRed = getCuartelesReduction(vs.buildings);
-  var baseTime = stats.time || 180;
-  var finalTime = Math.max(30, Math.floor(baseTime * (1 - cuartRed)));
-
-  for (var i = 0; i < amount; i++) {
-    var lastFinish = Date.now();
-    if (vs.training_queue.length > 0) {
-      lastFinish = Math.max(lastFinish, new Date(vs.training_queue[vs.training_queue.length - 1].finish_at).getTime());
-    }
-    vs.training_queue.push({
-      type: type,
-      finish_at: new Date(lastFinish + finalTime * 1000).toISOString(),
-      start_at: new Date(lastFinish).toISOString()
+  setSave('saving');
+  try {
+    var { data: newState, error } = await sbClient.rpc('start_training_secure', {
+      p_village_id: activeVillage.id,
+      p_troop_type: type,
+      p_amount:     amount
     });
-  }
+    if (error) throw error;
 
-  showNotif(amount + ' ' + stats.name + ' en cola de entrenamiento', 'ok');
-  flushVillage();
-  tick();
-  renderTroops();
+    if (newState) {
+      var vs = activeVillage.state;
+      vs.resources      = newState.resources      || vs.resources;
+      vs.troops         = newState.troops          || vs.troops;
+      vs.training_queue = newState.training_queue  || [];
+      vs.last_updated   = newState.last_updated    || vs.last_updated;
+    }
+
+    var stats = getTroopStatsWithLevel(type, 1);
+    showNotif(amount + ' ' + (stats ? stats.name : type) + ' en cola de entrenamiento', 'ok');
+    setSave('saved');
+    tick();
+    renderTroops();
+    renderTrainingQueue();
+  } catch (e) {
+    setSave('error');
+    showNotif('Error: ' + (e.message || 'No se pudo iniciar entrenamiento'), 'err');
+    console.error('startRecruitment error:', e);
+  }
 }
 
-function cancelTrainingQueue() {
+// v1.66: server-authoritative — devuelve recursos y aldeanos via servidor
+async function cancelTrainingQueue() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   if (!vs.training_queue || vs.training_queue.length === 0) {
     showNotif('No hay tropas en entrenamiento.', 'err'); return;
   }
-  snapshotResources(vs);
-  var refund = {};
-  var refundAld = 0;
-  vs.training_queue.forEach(function(t) {
-    var stats = getTroopStatsWithLevel(t.type, 1);
-    if (stats && stats.cost) {
-      Object.keys(stats.cost).forEach(function(k) {
-        var resKey = (k === 'prov') ? 'provisiones' : k;
-        refund[resKey] = (refund[resKey] || 0) + stats.cost[k];
-      });
+
+  setSave('saving');
+  try {
+    var { data: newState, error } = await sbClient.rpc('cancel_training_secure', {
+      p_village_id: activeVillage.id
+    });
+    if (error) throw error;
+
+    if (newState) {
+      vs.resources      = newState.resources  || vs.resources;
+      vs.troops         = newState.troops      || vs.troops;
+      vs.last_updated   = newState.last_updated || vs.last_updated;
     }
-    refundAld++;
-  });
-  Object.keys(refund).forEach(function(k) {
-    if (vs.resources[k] !== undefined) vs.resources[k] += refund[k];
-  });
+    vs.training_queue = [];
 
-  vs.training_queue = [];
-  var barrCap = getBarracksCapacity(vs.buildings);
-  var usedAfterClear = getBarracksUsed(vs);
-  var freeSlots = Math.max(0, barrCap - usedAfterClear);
-  var toRefund = Math.min(refundAld, freeSlots);
-  vs.troops.aldeano = (vs.troops.aldeano || 0) + toRefund;
-
-  flushVillage();
-  if (toRefund < refundAld) {
-    showNotif('Cola cancelada. ' + toRefund + ' aldeanos devueltos (' + (refundAld - toRefund) + ' no cabían en barracas).', 'ok');
-  } else {
-    showNotif('Cola cancelada. ' + toRefund + ' aldeanos y recursos devueltos.', 'ok');
+    showNotif('Cola cancelada. Recursos y aldeanos devueltos.', 'ok');
+    setSave('saved');
+    tick();
+    renderTroops();
+    renderTrainingQueue();
+  } catch (e) {
+    setSave('error');
+    showNotif('Error cancelando: ' + (e.message || ''), 'err');
+    console.error('cancelTrainingQueue error:', e);
   }
-  renderTroops();
 }
 
 // ============================================================
@@ -535,26 +544,26 @@ function showTroopStats(key) {
 
   // Niveles de equipamiento desde herrería
   var wLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.weapon_levels && _researchData.weapon_levels[key]) || 0;
-  var aLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.armor_levels  && _researchData.armor_levels[key])  || 0;
+  var aLvl = (typeof _researchData !== 'undefined' && _researchData && _researchData.armor_levels && _researchData.armor_levels[key]) || 0;
 
   // Stats REALES: nivel de investigación aplicado + bonuses de herrería
   var troopLvl = (typeof getTroopLevel === 'function') ? getTroopLevel(key) : 1;
   var s = (typeof getTroopStatsWithLevel === 'function') ? getTroopStatsWithLevel(key, troopLvl) : t;
 
   // Aplicar bonificaciones de herrería (igual que createArmy en game-combat.js)
-  var realDamage  = (s.damage  || t.damage)  + (wLvl > 0 ? wLvl : 0);
+  var realDamage = (s.damage || t.damage) + (wLvl > 0 ? wLvl : 0);
   var realDefense = (s.defense || t.defense) + (aLvl > 0 ? aLvl : 0);
-  var realHp      = s.hp      || t.hp;
-  var realAtk     = s.attacksPerTurn || t.attacksPerTurn;
-  var realChance  = s.attackChance   || t.attackChance;
-  var realDex     = s.dexterity      || t.dexterity;
-  var realSpeed   = s.speed          || t.speed;
-  var realCap     = s.capacity       || t.capacity;
+  var realHp = s.hp || t.hp;
+  var realAtk = s.attacksPerTurn || t.attacksPerTurn;
+  var realChance = s.attackChance || t.attackChance;
+  var realDex = s.dexterity || t.dexterity;
+  var realSpeed = s.speed || t.speed;
+  var realCap = s.capacity || t.capacity;
 
   // helpers para mostrar delta
   var dmgBonus = realDamage - t.damage;
   var defBonus = realDefense - t.defense;
-  var hpBonus  = realHp - t.hp;
+  var hpBonus = realHp - t.hp;
 
   var overlay = document.createElement('div');
   overlay.id = 'troopStatsModal';
@@ -720,6 +729,77 @@ function resolveTrainingQueue(vs) {
   return vs;
 }
 
+function resolveSummoningQueue(vs) {
+  if (!vs.summoning_queue || vs.summoning_queue.length === 0) return vs;
+  var now = Date.now();
+  var changed = false;
+
+  var invEnRefugio = (vs.refugio && vs.refugio.invocador) || 0;
+  var invocadoresActuales = Math.max(0, (vs.troops.invocador || 0) - invEnRefugio);
+
+  // Mientras haya algo en la cola, intentamos procesar el PRIMERO (estricto FIFO)
+  while (vs.summoning_queue.length > 0) {
+    var s = vs.summoning_queue[0];
+    var cData = CREATURE_TYPES[s.creature];
+
+    // Si la criatura fue eliminada de constantes (?) simplemente la quitamos para que no bloquee
+    if (!cData) {
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
+    }
+
+    var tierRequired = s.tierRequired || cData.tier || 1;
+    var invocadorLevel = getTroopLevel('invocador');
+
+    // Casos de cancelación (eliminación definitiva)
+    if (invocadorLevel < tierRequired) {
+      _notifyOnce('sum_cancel_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (nivel de invocador insuficiente).', 'err');
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
+    }
+
+    // El sistema de cancelación por falta de invocadores TOTALES es peligroso si es reactivo,
+    // pero se mantiene según arquitectura v1.40.
+    var invEnMision = 0;
+    (vs.mission_queue || []).forEach(function (m) { invEnMision += (m.troops && m.troops.invocador) || 0; });
+    var totalInvocadores = invocadoresActuales + invEnMision;
+
+    if (totalInvocadores < s.summonersNeeded) {
+      _notifyOnce('sum_cancel_dead_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (invocadores perdidos).', 'err');
+      vs.summoning_queue.shift();
+      changed = true;
+      continue;
+    }
+
+    // --- LÓGICA FIFO BLOQUEANTE ---
+
+    // Si no hay suficientes invocadores EN LA ALDEA ahora mismo, la cola se bloquea.
+    // No saltamos al siguiente elemento.
+    if (invocadoresActuales < s.summonersNeeded) {
+      break;
+    }
+
+    var finishTime = new Date(s.finish_at).getTime();
+    if (now >= finishTime && !s.paused) {
+      // Completado exitosamente
+      if (!vs.creatures) vs.creatures = defaultCreatures();
+      vs.creatures[s.creature] = (vs.creatures[s.creature] || 0) + 1;
+      _notifyOnce('sum_done_' + s.creature, '¡' + cData.name + ' invocado!', 'ok', 1000);
+      vs.summoning_queue.shift();
+      changed = true;
+      // Seguimos el bucle 'while' para ver si la siguiente unidad en la cola ya terminó también
+    } else {
+      // El primer elemento no ha terminado su tiempo todavía. 
+      // Siendo FIFO, el resto tampoco puede procesarse.
+      break;
+    }
+  }
+
+  return vs;
+}
+
 function renderTrainingQueue() {
   var box = document.getElementById('trainingQueueBox');
   if (!box || !activeVillage) return;
@@ -843,7 +923,7 @@ function renderRefugio() {
   html += '</div></div>';
 
   html += '<div class="card"><div style="display:grid;gap:10px;">';
-  var troopOrder = ['aldeano'].concat(Object.keys(TROOP_TYPES).filter(function(k){ return k !== 'aldeano'; }));
+  var troopOrder = ['aldeano'].concat(Object.keys(TROOP_TYPES).filter(function (k) { return k !== 'aldeano'; }));
   var shownCivil = false, shownMilitar = false;
   troopOrder.forEach(function (key) {
     if (key === 'aldeano' && !shownCivil) {

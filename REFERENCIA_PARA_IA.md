@@ -1,4 +1,4 @@
-# REFERENCIA PARA IA — Epic Warriors v1.51
+# REFERENCIA PARA IA — Epic Warriors v1.66
 
 ---
 
@@ -28,14 +28,115 @@
 
 ---
 
-## Estado del proyecto: Epic Warriors v1.52 (Fase Robustez)
+---
+
+## v1.66 — Modelo Ogame: acciones server-authoritative
+
+### Regla de oro v1.66
+**El cliente NUNCA descuenta recursos localmente para construir, entrenar ni invocar.** Solo llama al RPC correspondiente, espera la respuesta y aplica el state devuelto.
+
+### Nuevas RPCs (pegar `ogame_secure_rpcs_v166.sql` en Supabase)
+| RPC | Qué hace |
+|---|---|
+| `start_build_secure(village_id, building_id)` | Valida recursos, descuenta, crea build_queue → devuelve state |
+| `cancel_build_secure(village_id)` | Devuelve recursos, limpia build_queue → devuelve state |
+| `start_training_secure(village_id, type, amount)` | Valida aldeanos+recursos+barracas, encola → devuelve state+training_queue |
+| `cancel_training_secure(village_id)` | Devuelve recursos+aldeanos de toda la cola → devuelve state |
+| `start_summoning_secure(village_id, creature_key)` | Valida esencia+invocadores, encola → devuelve state+summoning_queue |
+| `update_battle_stats(won_npc, won_pvp, lost_pvp)` | Incrementa contadores en profiles |
+
+### Funciones JS modificadas v1.66
+| Función | Archivo | Cambio |
+|---|---|---|
+| `startBuild` | game-ui.js | async → `start_build_secure` |
+| `cancelBuild` | game-ui.js | Nueva → `cancel_build_secure` |
+| `renderQueue` | game-ui.js | Botón ✕ cancelar construcción |
+| `syncVillageResourcesFromServer` | game-ui.js | Corregido a `secure_village_tick`; preserva build_queue local |
+| `startRecruitment` | game-troops.js | async → `start_training_secure` |
+| `cancelTrainingQueue` | game-troops.js | async → `cancel_training_secure` |
+| `startSummoningFromInput` | game-troops.js | Nueva → `start_summoning_secure` |
+| `startSummoning` | game-troops.js | Nueva async |
+| `switchVillage` | index.html | Inyecta `_profileBattles` al cambiar aldea |
+| `save_village_client` call | index.html | Ahora envía troops, creatures, buildings |
+
+### Estado de archivos v1.66
+| Archivo | Versión | Estado |
+|---|---|---|
+| index.html | **v1.66** | ✅ save_village_client completo + switchVillage battles |
+| game-ui.js | **v1.66** | ✅ startBuild/cancelBuild async + sync corregido |
+| game-engine.js | **v1.66** | ✅ update_battle_stats + execute_founding_secure fix |
+| game-troops.js | **v1.66** | ✅ startRecruitment/cancel/summon async |
+| game-constants.js | **v1.65** | Sin cambios |
+| game-admin.js | **v1.63** | Sin cambios |
+
+## v1.64 — Seguridad de Colas y Anti-Bloat
+**Reglas críticas:**
+1. **Source of Truth**: Las colas (`build_queue`, `training_queue`, `mission_queue`, `summoning_queue`) deben ser eliminadas del objeto `state` JSON antes de persistir (`saveVillage`). Su fuente de verdad son sus respectivas columnas en la DB.
+2. **Tick Save**: El `tick()` debe comparar el estado de todas las colas (usando strings JSON) y disparar `scheduleSave()` si hay cualquier cambio (completado o cancelación).
+3. **Training Authority**: Nunca sobreescribir la cola de entrenamiento del servidor con la del cliente en `syncVillageResourcesFromServer`. El servidor manda.
+
+---
+
+## v1.63 — Audit de Robustez y Guardado Autorritativo
+**Cambios clave:** El sistema de guardado ha sido simplificado y blindado. El cliente ahora es solo un intermediario que persiste el objeto `state` completo.
+
+### Reglas de Solidez (v1.63)
+1. **Guardado Total**: `saveVillage` envía el objeto `s` completo a Supabase. No filtrar claves manualmente (evita borrar datos nuevos).
+2. **Autoridad Server-Side**: Las colas y misiones se resuelven validando `newState.state || newState` para ser compatibles con cualquier cambio en RPCs.
+3. **No Legacy**: No escribir en las tablas `resources`, `buildings` o `troops`. Ya no existen.
+4. **Admin Hunt**: Resolución cada 3 segundos. Autodestrucción si `is_temp` es true y no hay misiones.
+5. **Visibilidad**: La UX de misiones en el mapa ha sido desactivada para mejorar el rendimiento y la claridad.
+
+---
+
+## v1.62 — Simulador de Ataques Admin ("Día de Caza") y Global Admin Tick
+
+**Nuevo módulo:** El panel de admin (`game-admin.js`) incluye un simulador de ataques fantasma para testear batallas, mensajes y velocidades de tropas.
+
+### Flujo de un ataque Admin
+1. `adminLaunchHunt()` — lanza el ataque desde el formulario del panel admin.
+2. Si el origen está vacío, se crea una aldea temporal via RPC `admin_ghost_create` y se marca con `state.is_temp = true`.
+3. Las tropas se inyectan en `state.troops`/`state.creatures` de la aldea fantasma ("magia admin") y se descuentan de vuelta inmediatamente para que queden en misión.
+4. La misión se guarda con el flag `admin_test: true` y los niveles de God Mode en `god_levels: { troop, weapon, armor }`.
+5. **CRÍTICO:** La misión se escribe en **DOS sitios**: `state` (JSON) Y la columna separada `mission_queue` de la tabla `villages`. Si no se escribe en ambos, se pierde al recargar.
+6. El **Global Admin Tick** (`index.html`, dentro de `tick()`) se ejecuta cada 5 segundos cuando el usuario es admin. Consulta la DB directamente buscando aldeas con `is_temp: true` y misiones `admin_test` cuyo `finish_at` ya pasó. Llama a `executeAttackPvP(m)` directamente (SIN PASAR por `resolveMissions`, que depende de `activeVillage`).
+7. `executeAttackPvP` detecta `m.admin_test === true` y usa `simulateBattle()` local con niveles God Mode. Envía el reporte a AMBOS: atacante (admin) y defensor.
+8. Tras procesar, la aldea temporal se borra automáticamente si no quedan misiones (`is_temp` + `mission_queue` vacía).
+
+### Flags especiales en misiones admin
+```json
+{
+  "admin_test": true,
+  "god_levels": { "troop": 50, "weapon": 25, "armor": 25 },
+  "origin_village_id": "uuid-de-la-aldea-fantasma"
+}
+```
+
+### Flags especiales en aldeas temporales
+```json
+{ "is_temp": true }  ← dentro de villages.state jsonb
+```
+
+### ⚠️ CRÍTICO — Columna `mission_queue` separada
+Desde v1.62, `mission_queue` es una **columna independiente** en la tabla `villages`, NO solo dentro del JSON `state`. El cliente las fusiona al cargar:
+```js
+// En loadMyVillages:
+s.mission_queue = (v.mission_queue || []).filter(...);
+// En saveVillage: se escriben AMBAS (state + columna)
+sbClient.from('villages').update({ state: ..., mission_queue: s.mission_queue || [] })
+```
+Lo mismo aplica a `build_queue`, `summoning_queue`, `training_queue`.
+
+---
+
+## Estado del proyecto: Epic Warriors v1.62
 
 | Archivo | Versión | Notas |
 |---------|---------|-------|
-| index.html | **v1.52** | ✅ Sincronización periódica de recursos |
-| game-ui.js | **v1.52** | ✅ RPC `syncVillageResourcesFromServer` |
-| game-engine.js | **v1.52** | ✅ RPCs `launch_mission` / `finalize_mission` |
-| game-admin.js | v1.49 | ✅ |
+| index.html | **v1.66** | ✅ save_village_client completo + switchVillage battles |
+| game-ui.js | **v1.66** | ✅ startBuild/cancelBuild async + sync corregido |
+| game-engine.js | **v1.63** | ✅ Red de seguridad v2 (sNextFinal) |
+| game-admin.js | **v1.63** | ✅ Fix duplicación + clean sync |
 | game-caves.js | v1.49 | ✅ |
 | game-troops.js | v1.47 | ✅ |
 | game-combat.js | v1.46 | ✅ |
@@ -146,9 +247,20 @@ alliance_members → messages → thread_members → player_objectives
 
 ---
 
-## Modelo de datos v1.49 — JSON blob único
+## Modelo de datos v1.62 — Columnas separadas en `villages`
 
-Todos los datos de aldea en `villages.state` jsonb:
+⚠️ Desde v1.62: `mission_queue`, `build_queue`, `summoning_queue`, `training_queue` son **columnas reales** de la tabla `villages`, NO solo propiedades del JSON `state`.
+
+El cliente las fusiona al leer:
+```js
+s.mission_queue = (v.mission_queue || []).filter(...);
+```
+Y las escribe en AMBOS sitios al guardar:
+```js
+sbClient.from('villages').update({ state: {...sin colas...}, mission_queue: [...] })
+```
+
+El JSON `state` en la columna `state` de Supabase **NO contiene** `mission_queue` (se strip en `saveVillage`):
 ```json
 {
   "resources":         { "madera": 0, "piedra": 0, "hierro": 0, "provisiones": 0, "esencia": 0, "aldeanos": 0 },
@@ -156,19 +268,13 @@ Todos los datos de aldea en `villages.state` jsonb:
   "troops":            { "aldeano": 0, "soldado": 0 },
   "creatures":         { "dragon": 0, "guardiancueva": 0 },
   "buildings":         { "aserradero": { "level": 0 }, "muralla": { "level": 0 } },
-  "build_queue":       null,
-  "mission_queue":     [],
-  "summoning_queue":   [],
-  "training_queue":    [],
   "last_updated":      "ISO string",
   "last_aldeano_at":   null,
-  "refugio":           {}
+  "refugio":           {},
+  "is_temp":           false
 }
 ```
-
-- Tablas `troops`, `creatures`, `buildings`, `resources` → **eliminadas en v1.49**
-- Trigger `trigger_create_creatures` → **eliminado en v1.49**
-- RPC `admin_ghost_create` → crea fantasmas con `state` jsonb directamente
+`is_temp: true` → aldea temporal de admin, se autodestruye cuando `mission_queue` queda vacía.
 
 ---
 

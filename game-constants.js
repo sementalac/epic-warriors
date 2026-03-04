@@ -949,29 +949,9 @@ function getAldeanosIntervalMs(blds) {
 }
 
 function calcAndApplyAldeanos(vs) {
-  var barrCap = getBarracksCapacity(vs.buildings);
-  if (!vs.troops) vs.troops = {};
-
-  var intervalMs = getAldeanosIntervalMs(vs.buildings);
-  if (intervalMs === Infinity) return;
-
-  var now = Date.now();
-  var lastAld = vs.last_aldeano_at ? new Date(vs.last_aldeano_at).getTime() : now;
-  var elapsed = now - lastAld;
-
-  var newAldeanos = Math.floor(elapsed / intervalMs);
-  if (newAldeanos <= 0) return;
-
-  var remainder = elapsed - (newAldeanos * intervalMs);
-  vs.last_aldeano_at = new Date(now - remainder).toISOString();
-
-  var used = getBarracksUsed(vs);
-  var free = Math.max(0, barrCap - used);
-
-  if (free <= 0) return;
-
-  var toAdd = Math.min(newAldeanos, free);
-  vs.troops.aldeano = (vs.troops.aldeano || 0) + toAdd;
+  // v1.65: El servidor es la autoridad (secure_village_tick).
+  // Esta función ya no modifica troops.aldeano en el cliente.
+  // El contador visual se actualiza desde syncVillageResourcesFromServer cada 60s.
 }
 
 function almacenCapForLevel(l) {

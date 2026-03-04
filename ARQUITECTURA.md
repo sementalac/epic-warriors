@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 2.5 — Última actualización: v1.52 (Fase Robustez)
+> Versión del documento: 3.0 — Última actualización: v1.66 (Modelo Ogame — Acciones server-authoritative)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -116,7 +116,7 @@ syncVillageResourcesFromServer()
 
 | Tabla | Contenido | Cuándo se escribe |
 |---|---|---|
-| `villages` | `state` jsonb completo (troops+creatures+buildings+resources+colas), nombre, coords | En cada `saveVillage` |
+| `villages` | `state` jsonb (troops+creatures+buildings+resources+flags), nombre, coords + columnas separadas: `mission_queue`, `build_queue`, `summoning_queue`, `training_queue` | En cada `saveVillage` — **v1.63: Persistencia total del objeto .state** para asegurar integridad de nuevos campos. |
 | `profiles` | username, XP, military_score, last_seen, victorias PvP/NPC | Al login, al ganar/perder batallas, al cambiar XP |
 > Las tablas `troops`, `creatures`, `buildings` y `resources` fueron **eliminadas en v1.49**. Todo su contenido vive ahora en `villages.state` jsonb.
 | `guest_troops` | Tropas de refuerzo en aldeas ajenas | `processRecalls` al login |
@@ -178,7 +178,46 @@ Admin hace acción
 
 **Nunca usar `.from('tabla').update()` para modificar datos de otro usuario desde el cliente.**
 
+**Excepción: Día de Caza (admin_test)** — ver sección siguiente.
+
 El archivo define su propia función `escapeAttr(s)` al inicio — no depende del HTML principal para esto.
+
+---
+
+## SIMULADOR DE ATAQUES ADMIN — "Día de Caza" (v1.62)
+
+Permite al admin lanzar ataques de prueba desde cualquier punto del mapa para testear batallas, mensajes y velocidades.
+
+### Arquitectura de procesamiento
+```
+adminLaunchHunt()
+  → Si origen vacío: admin_ghost_create (RPC) → state.is_temp = true
+  → Inyectar tropas en state (magia admin) + decontarlas (quedan en misión)
+  → Escribir en DB: state + mission_queue (columna separada)
+  → loadAllVillages() → refreshMap()
+
+tick() [Global Admin Tick — solo si isAdmin()]
+  → Cada 3s (v1.63): sbClient.from('villages').select(...).neq('owner_id', currentUser.id).not('mission_queue', 'is', null)
+  → Analiza todas las misiones admin (admin_test:true) en aldeas ajenas.
+  → Si finish_at <= Date.now() → executeAttackPvP(m) directo.
+  → Autodestrucción mejorada: borra la aldea si es temporal (is_temp o Punto de Invasión) y no quedan misiones.
+  → sendSystemReport a admin (atacante) y defensor
+  → Actualizar mission_queue en DB (quitar misión procesada)
+  → Si mission_queue vacía → DELETE villages donde id = gv.id (autodestrucción)
+```
+
+### ⚠️ Por qué NO se usa resolveMissions() para las misiones admin
+`resolveMissions(vs)` usa `activeVillage` globalmente (coordenadas, `flushVillage`, etc.).
+Llamarla para una aldea fantasma machacaría el contexto del jugador. Por eso el Global Admin Tick llama a `executeAttackPvP(m)` directamente, que tiene una rama específica para `admin_test`.
+
+### Flags de misión admin
+```json
+{ "admin_test": true, "god_levels": { "troop": N, "weapon": N, "armor": N } }
+```
+### Flag de aldea temporal
+```json
+{ "is_temp": true }  ← dentro de state jsonb
+```
 
 ---
 
@@ -373,7 +412,14 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
 
-### v1.52 — Fase Robustez (Arquitectura Ogame/Ikariam)
+### v1.64 — Seguridad de Colas y Anti-Bloat
+- **State Striping**: `saveVillage` ahora limpia el JSON de `state` eliminando las colas (`build_queue`, `training_queue`, etc.) antes de guardar, garantizando que las columnas especializadas sean la única fuente de verdad y evitando el crecimiento infinito del JSON.
+- **Tick Master**: Añadidos triggers de guardado en el `tick()` para todas las colas (Entrenamiento e Invocación), eliminando la posibilidad de "tropas fantasma" al refrescar.
+- **Autoridad Suprema**: El cliente ya no intenta "corregir" al servidor en la cola de entrenamiento; si el servidor dice que ha terminado, se acepta.
+
+### v1.63 — Audit de Robustez y Limpieza General
+
+### v1.62 — Fase Robustez (Arquitectura Ogame/Ikariam)
 - **Time-Based Resources**: Recursos calculados en servidor basándose en tasas de producción y tiempo transcurrido.
 - **RPCs Atómicos**: Lanzamiento, retorno, combate, logística y fundación migrados a funciones de base de datos seguras.
 - **Smart Merge**: Sistema de caché en cliente para eliminar el flickering visual de recursos y colas.
@@ -485,6 +531,43 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - Tiempos de invocación reescalados: T1=5min, T5=50min, T10=5h, T15=24h, T22=72h, T30=144h (sin torre)
 - 50 nuevas criaturas añadidas (mitología clásica y medieval): Kobold, Sílfide, Troll, Banshee, Quimera, Cíclope, Basilisco, Valquiria, Minotauro, Salamandra, Manticora, Ondina, Centauro, Medusa, Wyvern, Nereida, Gigante, Harpía, Cerbero, Quetzal, Leviatán, Serafín, Titán, Lich, Pegaso, Naga, Yeti, Sátiro, Simurgh, Gorgona, Kraken, Ángel Caído, Ammit, Roc, Coloso, Sleipnir, Abismo, Nemea, Tifón, Equidna, Tarasca, Garuda, Jörmungandr, Valquiria Oscura, Primordio, Azrael, Ignis Rex, Fenrir, Moloch, Metatrón
 - [Supabase] Tabla `creatures` necesita 50 columnas nuevas (ALTER TABLE — ver propuesta_criaturas.html)
+
+### v1.66 — Modelo Ogame: acciones server-authoritative
+- **Filosofía**: el cliente ya NO descuenta recursos localmente para construir/entrenar/invocar. Solo manda intenciones al servidor. El servidor valida, descuenta y devuelve el estado actualizado.
+- [Supabase] Nuevas RPCs SECURITY DEFINER:
+  - `phased_val(l, base, m1, e1, m2, e2, m3)` — helper, réplica exacta de `phasedVal` JS
+  - `get_building_cost(building_id, next_lvl)` → jsonb con coste y tiempo de todos los edificios
+  - `start_build_secure(village_id, building_id)` → valida recursos, descuenta, crea build_queue, devuelve state
+  - `cancel_build_secure(village_id)` → devuelve recursos del edificio en cola, limpia build_queue
+  - `get_troop_cost(type)` → jsonb coste de las 9 tropas
+  - `get_creature_cost(key)` → tabla de costes de las 60 criaturas (30 tiers)
+  - `start_training_secure(village_id, troop_type, amount)` → valida aldeanos+recursos+barracas, encola, devuelve state+training_queue
+  - `cancel_training_secure(village_id)` → devuelve todos los recursos y aldeanos de la cola
+  - `start_summoning_secure(village_id, creature_key)` → valida esencia+invocadores, encola criatura, devuelve state+summoning_queue
+  - `update_battle_stats(won_npc, won_pvp, lost_pvp)` → incrementa contadores en profiles
+  - `execute_founding_secure` — corregido: ahora busca misión en columna `mission_queue` (no en `state`)
+- [JS] `startBuild` en game-ui.js → async, llama `start_build_secure`, aplica state devuelto
+- [JS] `cancelBuild` nuevo en game-ui.js → async, llama `cancel_build_secure`
+- [JS] `renderQueue` → añadido botón ✕ cancelar construcción
+- [JS] `startRecruitment` en game-troops.js → async, llama `start_training_secure`
+- [JS] `cancelTrainingQueue` en game-troops.js → async, llama `cancel_training_secure`
+- [JS] `startSummoningFromInput` + `startSummoning` nuevas en game-troops.js → async, llama `start_summoning_secure`
+- [JS] `syncVillageResourcesFromServer` → corregido a `secure_village_tick` (antes llamaba `sync_village_resources`)
+- [JS] `syncVillageResourcesFromServer` → preserva `build_queue` local durante el merge de estado
+- [JS] `switchVillage` → inyecta `_profileBattles` en cada aldea al activarla (batallas globales correctas)
+- [JS] `save_village_client` → ahora persiste troops, creatures y buildings además de resources
+- [Regla nueva] El cliente NUNCA modifica `resources`, `troops` ni `buildings` directamente antes de confirmación del servidor para acciones de gasto (construir, entrenar, invocar).
+- [Regla nueva] `save_village_client` sigue siendo necesario para: completions client-side (build/train/summon finish), misiones (provisiones), workers, refugio.
+- [Eliminado] Lógica client-side de descuento de recursos en startBuild, startRecruitment, startSummoningFromInput.
+
+### v1.65 — Arquitectura de seguridad server-authoritative (recursos, aldeas)
+- `secure_village_tick` RPC: calcula recursos Y aldeanos en servidor, reemplaza `sync_village_resources`
+- `save_village_client` RPC: solo acepta campos seguros (aldeanos_assigned, refugio, colas). Resources protegidos con LEAST anti-hack.
+- RLS: UPDATE/DELETE bloqueados para usuarios normales. Admin (sementalac@gmail.com) tiene acceso directo.
+- `apply_mission_arrival` RPC: maneja llegadas de misiones (recursos, tropas) sin exponer UPDATE directo.
+- Bug foundVillage: misión sin `mid` → RPC no la encontraba. Fix: generar `mid` al crear la misión.
+- Bug provisiones: `foundVillage` no descontaba provisiones. Fix: `snapshotResources` + descuento antes de crear misión.
+- `battles_won_npc` movido de `state` a `profiles` (fuente de verdad global). RPC `update_battle_stats`.
 
 ### vX.XX — [Plantilla para nuevas versiones]
 - descripción del cambio principal

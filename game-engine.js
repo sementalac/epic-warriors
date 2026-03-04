@@ -261,9 +261,15 @@ async function startMission(type, tx, ty, targetId, troops, guestContingents) {
 
     if (rpcErr) throw rpcErr;
 
-    // Sincronizar estado local con el devuelto por el servidor
+    // Sincronizar estado local con el devuelto por el servidor (con red de seguridad)
     if (newState) {
-      activeVillage.state = newState;
+      var sNext = newState.state || newState;
+      if (sNext && sNext.buildings) {
+        activeVillage.state = sNext;
+        // v1.65: Re-aplicar descuento de provisiones — el servidor aún no lo refleja
+        // hasta el próximo secure_village_tick. Evita que el jugador vea provisiones sin descontar.
+        activeVillage.state.resources.provisiones = Math.max(0, (activeVillage.state.resources.provisiones || 0) - totalUnits);
+      }
     }
 
     // Registrar en active_missions para visibilidad de aliados (retrocompatibilidad)
@@ -275,7 +281,7 @@ async function startMission(type, tx, ty, targetId, troops, guestContingents) {
     tick();
   } catch (e) {
     showNotif('Error al lanzar misión: ' + (e.message || e), 'err');
-    console.error('startMission error:', e);
+    console.error('startMission error:', e.message, e.details, e.hint, e);
   }
 }
 
@@ -301,25 +307,9 @@ async function sendSystemReport(userId, title, body) {
   }
 }
 
-async function resolveMissions(vs) {
+async function resolveMissions(v) {
+  var vs = v.state;
   if (!vs.mission_queue || vs.mission_queue.length === 0) return vs;
-
-  // ── v1.48: Fallback robusto para guardiancueva ──────────────
-  // Si game-caves.js no ha cargado aún, CREATURE_TYPES.guardiancueva
-  // podría no existir → el guardián se perdería al regresar de misión.
-  if (typeof CREATURE_TYPES !== 'undefined' && !CREATURE_TYPES.guardiancueva) {
-    CREATURE_TYPES.guardiancueva = {
-      name: 'Guardián de la Cueva', icon: '🧿', tier: 5,
-      isCaveGuardian: true,
-      attackChance: 17, hp: 200, attacksPerTurn: 2, damage: 38,
-      defense: 17, armor: 0, weapon: 0, dexterity: 17,
-      speed: 140, capacity: 0,
-      summonersNeeded: 0,
-      cost: { esencia: 0 }, time: 0,
-      desc: 'Guardián ancestral de una cueva mágica.'
-    };
-  }
-  // ────────────────────────────────────────────────────────────
 
   var now = Date.now();
   var remaining = [];
@@ -332,29 +322,29 @@ async function resolveMissions(vs) {
       // EXECUTE MISSION — wrapped in try/catch para que un error no atasque la misión
       try {
         if (m.type === 'spy') {
-          await executeSpyMission(m);
+          await executeSpyMission(m, v);
         } else if (m.type === 'cave_attack') {
           // ── Ataque a cueva NPC especial ──
           if (typeof executeAttackCave === 'function') {
-            await executeAttackCave(m);
+            await executeAttackCave(m, v);
           }
         } else if (m.type === 'attack') {
-          await executeAttackMission(m);
+          await executeAttackMission(m, v);
         } else if (m.type === 'found') {
-          await executeFounding(m);
+          await executeFounding(m, v);
           continue;
         } else if (m.type === 'move') {
-          await executeMove(m);
+          await executeMove(m, v);
           continue; // tropas quedan en destino permanentemente
         } else if (m.type === 'reinforce') {
-          await executeReinforce(m);
+          await executeReinforce(m, v);
           continue; // tropas quedan en guest_troops
         } else if (m.type === 'transport') {
-          await executeTransport(m);
+          await executeTransport(m, v);
           // NO hacer continue - permitir que las tropas vuelvan
         } else if (m.type === 'return_reinforce') {
           // Tropas volviendo de refuerzo a su aldea origen
-          // Se añaden a las tropas del activeVillage (que es el origen)
+          // Se añaden a las tropas del village origen
           Object.keys(m.troops || {}).forEach(function (k) {
             if ((m.troops[k] || 0) <= 0) return;
             if (TROOP_TYPES[k]) vs.troops[k] = (vs.troops[k] || 0) + m.troops[k];
@@ -366,25 +356,29 @@ async function resolveMissions(vs) {
           // ── TROPAS REGRESAN (v1.50: RESOLUCIÓN EN SERVIDOR) ──
           try {
             var { data: newState, error: rpcErr } = await sbClient.rpc('finalize_mission_secure', {
-              p_village_id: activeVillage.id,
+              p_village_id: v.id,
               p_mission_id: m.mid || m.finish_at
             });
 
             if (rpcErr) throw rpcErr;
 
-            if (newState) {
-              activeVillage.state = newState;
-              vs = activeVillage.state;
+            // v1.62d/1.63: Red de seguridad - Validar que el nuevo estado sea válido antes de asignar
+            var sNextFinal = newState.state || newState;
+            if (sNextFinal && sNextFinal.buildings && Object.keys(sNextFinal.buildings).length > 0) {
+              v.state = sNextFinal;
+              vs = v.state;
+            } else if (newState) {
+              console.error('[CRÍTICO] Misión devuelta sin edificios. Ignorando para evitar reset a Nivel 1.', newState);
             }
 
             // ── v1.61: MÓDULO AUTODESTRUCCIÓN (Día de Caza) ──
             if (vs.is_temp && vs.mission_queue.length === 0) {
               console.log('🧹 Limpieza Admin: Autodestruyendo punto de invasión temporal.');
               if (typeof ghostDelete === 'function') {
-                ghostDelete(activeVillage.id);
+                ghostDelete(v.id);
               } else {
                 // Fallback directo si ghostDelete no está accesible (ej: en game-engine puro)
-                sbClient.from('villages').delete().eq('id', activeVillage.id).then(() => {
+                sbClient.from('villages').delete().eq('id', v.id).then(() => {
                   showNotif('Base de invasión eliminada automáticamente.', 'ok');
                   if (typeof renderMap === 'function') renderMap();
                 });
@@ -419,8 +413,8 @@ async function resolveMissions(vs) {
           if (minSpeed === 999) minSpeed = 1;
 
           // Misma distancia que la ida
-          var dx = Math.abs(m.tx - activeVillage.x);
-          var dy = Math.abs(m.ty - activeVillage.y);
+          var dx = Math.abs(m.tx - v.x);
+          var dy = Math.abs(m.ty - v.y);
           var dist = Math.max(dx, dy);
           var returnSecs = (dist / minSpeed) * MISSION_FACTOR;
           var returnAt = new Date(Date.now() + returnSecs * 1000).toISOString();
@@ -429,8 +423,8 @@ async function resolveMissions(vs) {
           remaining.push({
             mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
             type: 'return',
-            tx: activeVillage.x,
-            ty: activeVillage.y,
+            tx: v.x,
+            ty: v.y,
             troops: survivors,
             finish_at: returnAt,
             start_at: new Date().toISOString(),
@@ -461,7 +455,7 @@ async function resolveMissions(vs) {
   return vs;
 }
 
-async function executeSpyMission(m) {
+async function executeSpyMission(m, v) {
   // ── Buscar el objetivo: NPC, Aldea o Cueva ──
   var targetNPC = (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).find(c => c.id === m.targetId);
   var targetCave = (typeof _cavesCache !== 'undefined' ? _cavesCache : []).find(c => c.id === m.targetId);
@@ -691,10 +685,10 @@ async function executeSpyMission(m) {
 }
 
 
-async function executeAttackMission(m) {
+async function executeAttackMission(m, v) {
   var target = (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).find(c => c.id === m.targetId);
   if (!target) {
-    await executeAttackPvP(m);
+    await executeAttackPvP(m, v);
     return;
   }
 
@@ -749,10 +743,13 @@ async function executeAttackMission(m) {
       await updateObjective(target.id, 'cleared');
       showNotif('¡' + target.name + ' derrotado! +' + fmt(attackerXP) + ' XP', 'ok');
 
-      // Actualizar contador en aldea activa
-      if (activeVillage && activeVillage.state) {
-        activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
-        scheduleSave();
+      // v1.65: contador global en profiles (no en state de aldea)
+      await sbClient.rpc('update_battle_stats', { p_won_npc: 1 });
+      if (window._profileBattles) {
+        window._profileBattles.battles_won_npc = (window._profileBattles.battles_won_npc || 0) + 1;
+        if (activeVillage && activeVillage.state) {
+          activeVillage.state.battles_won_npc = window._profileBattles.battles_won_npc;
+        }
       }
     } else {
       await updateObjective(target.id, 'attacked');
@@ -777,7 +774,7 @@ async function executeAttackMission(m) {
 // ============================================================
 // PvP — Ataque entre jugadores (v1.52: Servidor Autoritativo)
 // ============================================================
-async function executeAttackPvP(m) {
+async function executeAttackPvP(m, v) {
   // ── v1.60: INTERCEPTACIÓN ADMIN (DÍA DE CAZA) ──
   if (m.admin_test) {
     try {
@@ -819,7 +816,7 @@ async function executeAttackPvP(m) {
       return;
     } catch (e) {
       console.error("Admin Hunt Error:", e);
-      _returnTroopsHome(m);
+      _returnTroopsHome(m, v);
       return;
     }
   }
@@ -827,20 +824,20 @@ async function executeAttackPvP(m) {
   try {
     // ── v1.52: ATAQUE SEGURO EN SERVIDOR ──
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_attack_secure', {
-      p_attacker_village_id: activeVillage.id,
+      p_attacker_village_id: v.id,
       p_mission_id: m.mid || m.finish_at
     });
 
     if (rpcErr || !res) {
       console.error('RPC Attack Error:', rpcErr);
       showNotif('Error en resolución de ataque: ' + (rpcErr?.message || 'Servidor no responde'), 'err');
-      _returnTroopsHome(m);
+      _returnTroopsHome(m, v);
       return;
     }
 
     if (res.error) {
       showNotif(res.error, 'err');
-      _returnTroopsHome(m);
+      _returnTroopsHome(m, v);
       return;
     }
 
@@ -851,7 +848,7 @@ async function executeAttackPvP(m) {
 
     // 2. Generar Reporte Visual (Usamos el log del servidor)
     // Nota: generateBattleReport espera contingentes, adaptamos o creamos uno nuevo simplificado
-    var leaderName = (profileCache[currentUser.id] && profileCache[currentUser.id].username) || activeVillage.name || 'Atacante';
+    var leaderName = (profileCache[currentUser.id] && profileCache[currentUser.id].username) || v.name || 'Atacante';
 
     // Simular estructura para el generador de reportes legacy si es necesario, 
     // o usar el log textual directamente.
@@ -882,22 +879,28 @@ async function executeAttackPvP(m) {
     await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' ATAQUE: ' + (m.targetName || 'PvP'), reportHTML);
     showNotif(victoria ? '¡Victoria! Tropas regresando con botín.' : 'Derrota en combate.', victoria ? 'ok' : 'err');
 
-    // Sincronizar estado local si es la aldea activa
-    if (activeVillage && activeVillage.id === res.attacker_village_state.id) {
-      activeVillage.state = res.attacker_village_state;
-      updateResourceUI();
+    // Sincronizar estado local si es la aldea activa (Con red de seguridad anti-reset)
+    // v1.62d: IMPORTANTE - Extraer .state del objeto devuelto por el RPC
+    if (v && res.attacker_village_state && res.attacker_village_state.id === v.id) {
+      var sNext = res.attacker_village_state.state || res.attacker_village_state;
+      if (sNext && sNext.buildings && Object.keys(sNext.buildings).length > 0) {
+        v.state = sNext;
+        if (v.id === activeVillage.id && typeof updateResourceUI === 'function') updateResourceUI();
+      } else {
+        console.error('[CRÍTICO] El servidor devolvió un estado de aldea inválido. Ignorando para evitar reset.', sNext);
+      }
     }
 
   } catch (e) {
     console.error('Attack refactor error:', e);
     showNotif('Fallo crítico en ataque PvP.', 'err');
-    _returnTroopsHome(m);
+    _returnTroopsHome(m, v);
   }
 }
 
 // ── v1.52: misiones autoritativas (continuación) ──
 
-async function executeFounding(m) {
+async function executeFounding(m, v) {
   try {
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_founding_secure', {
       p_user_id: currentUser.id,
@@ -916,11 +919,11 @@ async function executeFounding(m) {
   } catch (e) {
     console.error('Founding error:', e);
     showNotif('Fallo al fundar colonia: ' + e.message, 'err');
-    _returnTroopsHome(m);
+    _returnTroopsHome(m, v);
   }
 }
 
-async function executeMove(m) {
+async function executeMove(m, v) {
   try {
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_move_secure', {
       p_user_id: currentUser.id,
@@ -933,11 +936,11 @@ async function executeMove(m) {
   } catch (e) {
     console.error('Move error:', e);
     showNotif('Error en movimiento de tropas.', 'err');
-    _returnTroopsHome(m);
+    _returnTroopsHome(m, v);
   }
 }
 
-async function executeReinforce(m) {
+async function executeReinforce(m, v) {
   try {
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_reinforce_secure', {
       p_user_id: currentUser.id,
@@ -950,11 +953,11 @@ async function executeReinforce(m) {
   } catch (e) {
     console.error('Reinforce error:', e);
     showNotif('Error en envío de refuerzos.', 'err');
-    _returnTroopsHome(m);
+    _returnTroopsHome(m, v);
   }
 }
 
-async function executeTransport(m) {
+async function executeTransport(m, v) {
   try {
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_transport_secure', {
       p_user_id: currentUser.id,
@@ -971,7 +974,7 @@ async function executeTransport(m) {
   } catch (e) {
     console.error('Transport error:', e);
     showNotif('Error en transporte de recursos.', 'err');
-    _returnTroopsHome(m);
+    _returnTroopsHome(m, v);
   }
 }
 
@@ -1097,18 +1100,19 @@ async function cancelAlliedMission(missionId, leaderVillageId) {
   }
 }
 
-function _returnTroopsHome(m) {
+function _returnTroopsHome(m, v) {
   // Encola retorno inmediato de las tropas
-  if (!activeVillage) return;
-  var dist = Math.max(Math.abs((m.tx || 0) - activeVillage.x), Math.abs((m.ty || 0) - activeVillage.y));
+  if (!v) return;
+  var dist = Math.max(Math.abs((m.tx || 0) - v.x), Math.abs((m.ty || 0) - v.y));
   var minSpeed = 1;
   Object.keys(m.troops || {}).forEach(function (k) {
     var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
     if ((m.troops[k] || 0) > 0 && td) minSpeed = Math.min(minSpeed, td.speed || 1);
   });
   var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
-  activeVillage.state.mission_queue.push({
-    type: 'return', tx: activeVillage.x, ty: activeVillage.y,
+  if (!v.state.mission_queue) v.state.mission_queue = [];
+  v.state.mission_queue.push({
+    type: 'return', tx: v.x, ty: v.y,
     troops: m.troops, loot: {},
     finish_at: new Date(Date.now() + secs * 1000).toISOString(),
     start_at: new Date().toISOString()
