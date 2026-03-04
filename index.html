@@ -1798,44 +1798,51 @@
         capPctMa, capPctPi, capPctHi, capPctPr, capPctEs, capPctAld
       };
 
-      // v1.62b: Procesador Global de Misiones (Modo Dios — CORREGIDO)
-      // Para las aldeas fantasma del Admin, el motor necesita activeVillage = fantasma
-      // cuando procesa la misión. Lo intercambiamos temporalmente.
-      if (typeof isAdmin === 'function' && isAdmin() && allVillages && allVillages.length > 0) {
-        if (!window._lastGlobalTick) window._lastGlobalTick = Date.now();
-        if (!window._globalTickRunning && Date.now() - window._lastGlobalTick > 5000) {
+      // v1.62c: Procesador Global de Misiones Admin (DIRECTO — sin resolveMissions)
+      if (typeof isAdmin === 'function' && isAdmin()) {
+        if (!window._lastGlobalTick) window._lastGlobalTick = 0;
+        if (!window._globalTickRunning && (Date.now() - window._lastGlobalTick) > 5000) {
           window._lastGlobalTick = Date.now();
           window._globalTickRunning = true;
           (async function () {
             try {
-              var savedActiveVillage = activeVillage; // Guardar referencia a nuestra aldea real
-              for (var gv of allVillages) {
-                if (!gv.state || !gv.state.mission_queue || gv.state.mission_queue.length === 0) continue;
-                // Solo aldeas temporales de Admin (is_temp) con misiones vencidas
-                if (!gv.state.is_temp) continue;
-                var hasFinished = gv.state.mission_queue.some(function (m) {
-                  return m.finish_at && new Date(m.finish_at).getTime() <= Date.now();
+              var now2 = Date.now();
+              // Buscar aldeas temporales con misiones admin pendientes directo de la DB
+              var { data: gVills } = await sbClient
+                .from('villages')
+                .select('id, name, cx, cy, state, mission_queue')
+                .not('mission_queue', 'is', null);
+
+              for (var gv of (gVills || [])) {
+                var gs = typeof gv.state === 'string' ? JSON.parse(gv.state) : gv.state;
+                if (!gs || !gs.is_temp) continue;
+                var mq = Array.isArray(gv.mission_queue) ? gv.mission_queue : [];
+                var toProcess = mq.filter(function (m2) {
+                  return m2.admin_test && m2.type === 'attack' && m2.finish_at && new Date(m2.finish_at).getTime() <= now2;
                 });
-                if (!hasFinished) continue;
+                if (toProcess.length === 0) continue;
 
-                console.log('⚡ Admin Tick: Resolviendo misión desde ' + (gv.name || gv.id));
-                // Intercambio temporal de contexto
-                activeVillage = { id: gv.id, x: Number(gv.cx || gv.x), y: Number(gv.cy || gv.y), name: gv.name, state: gv.state };
-                var updatedState = await resolveMissions(gv.state);
-                activeVillage = savedActiveVillage; // Restaurar inmediatamente
+                console.log('⚡ Admin Hunt: Procesando ataque desde', gv.name || gv.id);
+                for (var hm of toProcess) {
+                  try {
+                    // Llamar directamente a la rama admin de executeAttackPvP
+                    await executeAttackPvP(hm);
+                  } catch (he) { console.error('Hunt mission error:', he); }
+                  mq = mq.filter(function (x) { return x.mid !== hm.mid; });
+                }
 
-                if (updatedState) {
-                  gv.state = updatedState;
-                  await sbClient.from('villages').update({
-                    state: gv.state,
-                    mission_queue: gv.state.mission_queue || []
-                  }).eq('id', gv.id);
+                // Guardar queue actualizado
+                await sbClient.from('villages').update({ mission_queue: mq }).eq('id', gv.id);
+
+                // Autodestrucción si ya no quedan misiones
+                if (mq.length === 0) {
+                  await sbClient.from('villages').delete().eq('id', gv.id);
+                  showNotif('🧹 Base temporal eliminada.', 'ok');
+                  if (typeof loadAllVillages === 'function') loadAllVillages();
+                  if (typeof renderMap === 'function') renderMap();
                 }
               }
-              activeVillage = savedActiveVillage; // Asegurar restauración incluso con error
-            } catch (e) {
-              console.error('Admin Global Tick error:', e);
-            }
+            } catch (ge) { console.error('Admin Global Tick:', ge); }
             window._globalTickRunning = false;
           })();
         }

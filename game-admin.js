@@ -585,10 +585,17 @@ async function loadGhostList() {
 async function ghostDelete(id, name) {
   if (!isAdmin()) return;
   if (!confirm('¿Borrar aldea fantasma "' + name + '"?')) return;
+
+  // Intentar RPC primero, con fallback a borrado directo
   var r = await sbClient.rpc('admin_ghost_delete', { p_id: id });
-  if (r.error) { showNotif('Error borrando: ' + r.error.message, 'err'); return; }
+  if (r.error) {
+    console.warn('RPC admin_ghost_delete falló, intentando DELETE directo:', r.error.message);
+    var r2 = await sbClient.from('villages').delete().eq('id', id);
+    if (r2.error) { showNotif('Error borrando: ' + r2.error.message, 'err'); return; }
+  }
   showNotif('🗑️ Aldea "' + name + '" eliminada', 'ok');
   loadGhostList();
+  if (typeof loadAllVillages === 'function') loadAllVillages();
   if (typeof renderMap === 'function') setTimeout(renderMap, 300);
 }
 
