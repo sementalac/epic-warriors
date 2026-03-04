@@ -1406,11 +1406,17 @@
     }
 
     async function loadAllVillages() {
-      var r = await sbClient.from('villages').select('id, owner_id, name, cx, cy');
+      // v1.62: Cargamos también state y mission_queue para ver movimientos en el mapa
+      var r = await sbClient.from('villages').select('id, owner_id, name, cx, cy, state, mission_queue');
       if (r.error) { console.error('Error loading world:', r.error); return; }
       if (r.data) {
         allVillages = r.data.map(function (v) {
           v.x = Number(v.cx); v.y = Number(v.cy);
+          var s = typeof v.state === 'string' ? JSON.parse(v.state) : v.state;
+          if (s) {
+            s.mission_queue = v.mission_queue || [];
+            v.state = s;
+          }
           return v;
         });
       }
@@ -1792,12 +1798,47 @@
         capPctMa, capPctPi, capPctHi, capPctPr, capPctEs, capPctAld
       };
 
-      // v1.50: Sincronización periódica con el servidor (cada 60 ticks)
-      var nowT = Date.now();
-      if (!window._lastServerSync) window._lastServerSync = nowT;
-      if (nowT - window._lastServerSync > 60000) {
-        window._lastServerSync = nowT;
-        if (typeof syncVillageResourcesFromServer === 'function') syncVillageResourcesFromServer();
+      // v1.62b: Procesador Global de Misiones (Modo Dios — CORREGIDO)
+      // Para las aldeas fantasma del Admin, el motor necesita activeVillage = fantasma
+      // cuando procesa la misión. Lo intercambiamos temporalmente.
+      if (typeof isAdmin === 'function' && isAdmin() && allVillages && allVillages.length > 0) {
+        if (!window._lastGlobalTick) window._lastGlobalTick = Date.now();
+        if (!window._globalTickRunning && Date.now() - window._lastGlobalTick > 5000) {
+          window._lastGlobalTick = Date.now();
+          window._globalTickRunning = true;
+          (async function () {
+            try {
+              var savedActiveVillage = activeVillage; // Guardar referencia a nuestra aldea real
+              for (var gv of allVillages) {
+                if (!gv.state || !gv.state.mission_queue || gv.state.mission_queue.length === 0) continue;
+                // Solo aldeas temporales de Admin (is_temp) con misiones vencidas
+                if (!gv.state.is_temp) continue;
+                var hasFinished = gv.state.mission_queue.some(function (m) {
+                  return m.finish_at && new Date(m.finish_at).getTime() <= Date.now();
+                });
+                if (!hasFinished) continue;
+
+                console.log('⚡ Admin Tick: Resolviendo misión desde ' + (gv.name || gv.id));
+                // Intercambio temporal de contexto
+                activeVillage = { id: gv.id, x: Number(gv.cx || gv.x), y: Number(gv.cy || gv.y), name: gv.name, state: gv.state };
+                var updatedState = await resolveMissions(gv.state);
+                activeVillage = savedActiveVillage; // Restaurar inmediatamente
+
+                if (updatedState) {
+                  gv.state = updatedState;
+                  await sbClient.from('villages').update({
+                    state: gv.state,
+                    mission_queue: gv.state.mission_queue || []
+                  }).eq('id', gv.id);
+                }
+              }
+              activeVillage = savedActiveVillage; // Asegurar restauración incluso con error
+            } catch (e) {
+              console.error('Admin Global Tick error:', e);
+            }
+            window._globalTickRunning = false;
+          })();
+        }
       }
 
       if (_el('ovVillageName')) _el('ovVillageName').textContent = activeVillage.name;

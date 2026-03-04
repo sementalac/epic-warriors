@@ -1598,7 +1598,45 @@
     }
 
     .pl.e {
-      color: var(--energy);
+      color: var(--esencia);
+    }
+
+    /* ============================================================ */
+    /* MISSION OVERLAY (MAP VISUALIZATION)                          */
+    /* ============================================================ */
+    .mission-overlay {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      /* Dejar pasar clics al mapa */
+      z-index: 10;
+      transition: all 0.5s linear;
+    }
+
+    .mission-icon {
+      font-size: 1.2rem;
+      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+      animation: missionPulse 1.5s infinite alternate;
+      z-index: 11;
+    }
+
+    @keyframes missionPulse {
+      from {
+        transform: scale(0.9) translateY(0);
+        opacity: 0.8;
+      }
+
+      to {
+        transform: scale(1.1) translateY(-3px);
+        opacity: 1;
+      }
+    }
+
+    color: var(--energy);
     }
 
     .pl.none {

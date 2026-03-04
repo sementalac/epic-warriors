@@ -1076,9 +1076,15 @@ async function cancelAlliedMission(missionId, leaderVillageId) {
             type: 'return_reinforce', tx: ov.x, ty: ov.y, troops: c.troops,
             finish_at: new Date(Date.now() + aSecs * 1000).toISOString(), start_at: new Date().toISOString()
           });
-          await sbClient.from('villages').update({ state: JSON.stringify(ovState) }).eq('id', ov.id);
+          await sbClient.from('villages').update({
+            state: JSON.stringify(ovState),
+            mission_queue: ovState.mission_queue || []
+          }).eq('id', ov.id);
         }
-        await sbClient.from('villages').update({ state: JSON.stringify(lvState) }).eq('id', lvr.data.id);
+        await sbClient.from('villages').update({
+          state: JSON.stringify(lvState),
+          mission_queue: lvState.mission_queue || []
+        }).eq('id', lvr.data.id);
       }
     }
     await sbClient.from('active_missions').delete().eq('mission_id', missionId);

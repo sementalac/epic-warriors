@@ -1452,14 +1452,31 @@ async function adminLaunchHunt() {
     var seconds = (dist / minSpeed) * (typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 3600);
     var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
 
-    // 3. Inyectar misión
+    // 3. Preparar estado completo del origen
+    var { data: oStateData } = await sbClient.from('villages').select('state').eq('id', originId).single();
+    if (!oStateData) throw new Error('No se pudo acceder al estado del origen.');
+
+    var s = typeof oStateData.state === 'string' ? JSON.parse(oStateData.state) : oStateData.state;
+    if (!s) s = {};
+    if (!s.troops) s.troops = {};
+    if (!s.creatures) s.creatures = {};
+    if (!s.mission_queue) s.mission_queue = [];
+    if (!s.resources) s.resources = { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 };
+
+    // Inyectar magicamente las tropas en la base para que sean "válidas" antes de mandarlas
+    Object.keys(troops).forEach(k => {
+      if (TROOP_TYPES[k]) s.troops[k] = (s.troops[k] || 0) + troops[k];
+      else if (CREATURE_TYPES[k]) s.creatures[k] = (s.creatures[k] || 0) + troops[k];
+    });
+
+    // Crear la misión
     var missionEntry = {
       mid: 'hunt_' + Math.random().toString(36).slice(2, 6) + Date.now().toString(36),
       type: 'attack',
       tx: dx, ty: dy,
       targetId: targetId,
       targetName: targetName,
-      troops: troops,
+      troops: JSON.parse(JSON.stringify(troops)), // Evitar referencias
       finish_at: finishAt,
       start_at: new Date().toISOString(),
       admin_test: true,
@@ -1467,26 +1484,39 @@ async function adminLaunchHunt() {
       origin_village_id: originId // Para rastreo
     };
 
-    var { data: oStateData } = await sbClient.from('villages').select('state').eq('id', originId).single();
-    if (!oStateData) throw new Error('No se pudo acceder al estado del origen.');
+    // Descontar inmediatamente las tropas (porque se van de misión)
+    Object.keys(troops).forEach(k => {
+      if (TROOP_TYPES[k]) s.troops[k] = Math.max(0, (s.troops[k] || 0) - troops[k]);
+      else if (CREATURE_TYPES[k]) s.creatures[k] = Math.max(0, (s.creatures[k] || 0) - troops[k]);
+    });
 
-    var s = typeof oStateData.state === 'string' ? JSON.parse(oStateData.state) : oStateData.state;
-    if (!s) s = { mission_queue: [] };
-    if (!s.mission_queue) s.mission_queue = [];
     s.mission_queue.push(missionEntry);
 
-    var { error: upErr } = await sbClient.from('villages').update({ state: s }).eq('id', originId);
+    // v1.62: Actualizar AMBAS columnas (state y mission_queue) porque la DB las tiene separadas
+    var { error: upErr } = await sbClient.from('villages').update({
+      state: s,
+      mission_queue: s.mission_queue || []
+    }).eq('id', originId);
+
     if (upErr) throw upErr;
 
     showNotif('🚀 Invasión lanzada contra ' + targetName + '. Llegada en ' + fmtTime(Math.ceil(seconds)), 'ok');
 
+    // Si somos nosotros mismos o estamos viendo, forzar actualización
+    if (activeVillage && activeVillage.id === originId) {
+      activeVillage.state = s;
+      if (typeof updateResourceUI === 'function') updateResourceUI();
+    }
+    if (typeof loadMyVillages === 'function') await loadMyVillages();
+    // v1.62b: Recargar allVillages para que el Global Admin Tick pueda encontrar el nuevo fantasma
+    if (typeof loadAllVillages === 'function') await loadAllVillages();
     if (typeof renderMap === 'function') renderMap();
+
     // No cerramos el formulario para que pueda lanzar más ataques
   } catch (e) {
     showNotif('Error: ' + (e.message || e), 'err');
   }
 }
-
 
 async function adminFastBuildAll() {
   if (!isAdmin()) return;

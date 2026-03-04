@@ -468,6 +468,66 @@ function renderMap() {
       grid.appendChild(cell);
     }
   }
+
+  // v1.62: Dibujar misiones en movimiento
+  renderMissions(cx, cy);
+}
+
+function renderMissions(cx, cy) {
+  var existing = document.querySelectorAll('.mission-overlay');
+  existing.forEach(el => el.remove());
+
+  var r = MAP_VIEW;
+  var grid = document.getElementById('mapGrid');
+  if (!grid) return;
+
+  var now = Date.now();
+
+  allVillages.forEach(function (v) {
+    if (!v.state || !v.state.mission_queue) return;
+
+    v.state.mission_queue.forEach(function (m) {
+      if (m.status === 'completed' || !m.finish_at || !m.start_at) return;
+
+      var startT = new Date(m.start_at).getTime();
+      var endT = new Date(m.finish_at).getTime();
+      if (now >= endT) return; // Ya llegó (será procesada por tick)
+
+      var pct = (now - startT) / (endT - startT);
+      pct = Math.max(0, Math.min(1, pct));
+
+      // Origen y Destino
+      var ox = v.x, oy = v.y;
+      var dx = m.tx, dy = m.ty;
+
+      // Interpolar posición actual
+      var curX = ox + (dx - ox) * pct;
+      var curY = oy + (dy - oy) * pct;
+
+      // ¿Está en el área visible?
+      if (curX < cx - r - 1 || curX > cx + r + 1 || curY < cy - r - 1 || curY > cy + r + 1) return;
+
+      // Calcular offset en píxeles relativo al grid (celdas de 28px)
+      // La celda [cx-r, cy-r] es el top-left
+      var relX = curX - (cx - r);
+      var relY = curY - (cy - r);
+
+      var missionEl = document.createElement('div');
+      missionEl.className = 'mission-overlay';
+
+      var icon = '⚔️';
+      if (m.type === 'spy') icon = '🏹';
+      if (m.type === 'return' || m.type === 'return_reinforce') icon = '🛡️';
+      if (m.type === 'transport') icon = '📦';
+
+      missionEl.innerHTML = '<div class="mission-icon">' + icon + '</div>';
+      missionEl.style.left = (relX * 28) + 'px';
+      missionEl.style.top = (relY * 28) + 'px';
+      missionEl.title = (m.type === 'attack' ? 'Ataque' : 'Misión') + ' de ' + (v.name || 'Admin') + ' [' + ox + ',' + oy + '] a [' + dx + ',' + dy + ']';
+
+      grid.appendChild(missionEl);
+    });
+  });
 }
 
 function selectNPC(npc, x, y) {
