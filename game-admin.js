@@ -1386,20 +1386,60 @@ async function adminLaunchHunt() {
   if (!confirm('¿Lanzar invasión de ' + total + ' unidades desde [' + ox + ',' + oy + '] hacia [' + dx + ',' + dy + ']?')) return;
 
   try {
-    // 1. Verificar que el destino existe
-    var { data: destVill, error: dErr } = await sbClient.from('villages').select('id,name,owner_id').eq('cx', dx).eq('cy', dy).maybeSingle();
-    if (dErr || !destVill) {
-      showNotif('No hay una aldea en la coordenadas de destino [' + dx + ',' + dy + '].', 'err');
+    // 1. Verificar DESTINO (Prioridad: Jugador/Fantasma > Cueva > NPC)
+    var targetId = null;
+    var targetName = 'Objetivo Desconocido';
+
+    // Buscar en villages
+    var { data: destVill } = await sbClient.from('villages').select('id,name').eq('cx', dx).eq('cy', dy).maybeSingle();
+    if (destVill) {
+      targetId = destVill.id;
+      targetName = destVill.name;
+    } else {
+      // Buscar en caves
+      var { data: destCave } = await sbClient.from('caves').select('id,cx,cy').eq('cx', dx).eq('cy', dy).maybeSingle();
+      if (destCave) {
+        targetId = destCave.id;
+        targetName = 'Cueva Salvaje [' + dx + ',' + dy + ']';
+      } else {
+        // Buscar en NPC_CASTLES (si está cargado en el cliente)
+        var npcList = (typeof NPC_CASTLES !== 'undefined') ? NPC_CASTLES : [];
+        var targetNPC = npcList.find(c => c.cx === dx && c.cy === dy);
+        if (targetNPC) {
+          targetId = targetNPC.id;
+          targetName = targetNPC.name;
+        }
+      }
+    }
+
+    if (!targetId) {
+      showNotif('No hay un objetivo válido en [' + dx + ',' + dy + '].', 'err');
       return;
     }
 
-    // 2. Verificar o buscar origen
-    var { data: origVill, error: oErr } = await sbClient.from('villages').select('id,name').eq('cx', ox).eq('cy', oy).maybeSingle();
+    // 2. Verificar o crear ORIGEN
+    var { data: origVill } = await sbClient.from('villages').select('id,name').eq('cx', ox).eq('cy', oy).maybeSingle();
     var originId = origVill ? origVill.id : null;
 
     if (!originId) {
-      showNotif('No hay una aldea en el origen. Crea un Fantasma allí primero.', 'err');
-      return;
+      showNotif('Creando punto de invasión en [' + ox + ',' + oy + ']...', 'ok');
+      var ir = await sbClient.rpc('admin_ghost_create', {
+        p_name: 'Punto de Invasión Admin',
+        p_cx: ox, p_cy: oy,
+        p_wall: 1, p_troops: {}, p_creatures: {}
+      });
+      if (ir.error) throw ir.error;
+
+      // Intentar obtener el ID de nuevo
+      var { data: newOrig } = await sbClient.from('villages').select('id,state').eq('cx', ox).eq('cy', oy).maybeSingle();
+      if (!newOrig) throw new Error('Error al generar la base de invasión.');
+      originId = newOrig.id;
+
+      // Marcar como temporal
+      var sTmp = typeof newOrig.state === 'string' ? JSON.parse(newOrig.state) : newOrig.state;
+      if (!sTmp) sTmp = {};
+      sTmp.is_temp = true;
+      await sbClient.from('villages').update({ state: sTmp }).eq('id', originId);
     }
 
     // Calcular velocidad y llegada
@@ -1409,40 +1449,39 @@ async function adminLaunchHunt() {
       if (td && td.speed < minSpeed) minSpeed = td.speed;
     });
     var dist = Math.max(Math.abs(dx - ox), Math.abs(dy - oy));
-    var seconds = (dist / minSpeed) * (typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 60);
+    var seconds = (dist / minSpeed) * (typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 3600);
     var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
 
-    // 3. Inyectar misión tipo 'attack' con modificadores de nivel (God Mode)
+    // 3. Inyectar misión
     var missionEntry = {
       mid: 'hunt_' + Math.random().toString(36).slice(2, 6) + Date.now().toString(36),
       type: 'attack',
       tx: dx, ty: dy,
-      targetId: destVill.id,
+      targetId: targetId,
+      targetName: targetName,
       troops: troops,
       finish_at: finishAt,
       start_at: new Date().toISOString(),
-      admin_test: true, // Flag para identificar
-      god_levels: { troop: lvlTroop, weapon: lvlWeapon, armor: lvlArmor }
+      admin_test: true,
+      god_levels: { troop: lvlTroop, weapon: lvlWeapon, armor: lvlArmor },
+      origin_village_id: originId // Para rastreo
     };
 
-    // Usar RPC de administración si existe, o intentar inserción directa en el origen si es posible
-    // Dado que somos admin sementalac, podemos usar rpc 'admin_ghost_create' para inspirarnos, 
-    // pero aquí necesitamos inyectar en mission_queue de la aldea origen.
-
-    // Obtenemos el estado actual del origen
     var { data: oStateData } = await sbClient.from('villages').select('state').eq('id', originId).single();
+    if (!oStateData) throw new Error('No se pudo acceder al estado del origen.');
+
     var s = typeof oStateData.state === 'string' ? JSON.parse(oStateData.state) : oStateData.state;
+    if (!s) s = { mission_queue: [] };
     if (!s.mission_queue) s.mission_queue = [];
     s.mission_queue.push(missionEntry);
 
     var { error: upErr } = await sbClient.from('villages').update({ state: s }).eq('id', originId);
     if (upErr) throw upErr;
 
-    showNotif('🚀 ¡Invasión lanzada! Las tropas llegarán en ' + Math.ceil(seconds) + 's.', 'ok');
+    showNotif('🚀 Invasión lanzada contra ' + targetName + '. Llegada en ' + fmtTime(Math.ceil(seconds)), 'ok');
 
     if (typeof renderMap === 'function') renderMap();
-    if (typeof loadMyVillages === 'function' && originId === (activeVillage && activeVillage.id)) loadMyVillages();
-
+    // No cerramos el formulario para que pueda lanzar más ataques
   } catch (e) {
     showNotif('Error: ' + (e.message || e), 'err');
   }

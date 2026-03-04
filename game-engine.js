@@ -377,6 +377,21 @@ async function resolveMissions(vs) {
               vs = activeVillage.state;
             }
 
+            // ── v1.61: MÓDULO AUTODESTRUCCIÓN (Día de Caza) ──
+            if (vs.is_temp && vs.mission_queue.length === 0) {
+              console.log('🧹 Limpieza Admin: Autodestruyendo punto de invasión temporal.');
+              if (typeof ghostDelete === 'function') {
+                ghostDelete(activeVillage.id);
+              } else {
+                // Fallback directo si ghostDelete no está accesible (ej: en game-engine puro)
+                sbClient.from('villages').delete().eq('id', activeVillage.id).then(() => {
+                  showNotif('Base de invasión eliminada automáticamente.', 'ok');
+                  if (typeof renderMap === 'function') renderMap();
+                });
+              }
+            }
+            // ────────────────────────────────────────────────
+
             showNotif('¡Tropas han regresado a casa!', 'ok');
           } catch (e) {
             console.error('[Robustez] Error finalizing mission:', e);
