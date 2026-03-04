@@ -130,19 +130,19 @@ function showMissionTroops(missionRef) {
 
   // Determinar nombre e icono de la misión
   var missionName, missionIcon;
-  if (m.type === 'spy')              { missionIcon = '🏹'; missionName = 'Espionaje → [' + m.tx + ',' + m.ty + ']'; }
-  else if (m.type === 'return')      { missionIcon = '🏠'; missionName = 'Tropas regresando a casa'; }
+  if (m.type === 'spy') { missionIcon = '🏹'; missionName = 'Espionaje → [' + m.tx + ',' + m.ty + ']'; }
+  else if (m.type === 'return') { missionIcon = '🏠'; missionName = 'Tropas regresando a casa'; }
   else if (m.type === 'return_reinforce') { missionIcon = '↩️'; missionName = 'Tropas volviendo a casa'; }
-  else if (m.type === 'reinforce')   { missionIcon = '🛡️'; missionName = 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; }
-  else if (m.type === 'transport')   { missionIcon = '📦'; missionName = 'Caravana → [' + m.tx + ',' + m.ty + ']'; }
-  else if (m.type === 'move')        { missionIcon = '⚔️'; missionName = 'Tropas → [' + m.tx + ',' + m.ty + ']'; }
-  else                               { missionIcon = '⚔️'; missionName = 'Ataque → [' + m.tx + ',' + m.ty + ']'; }
+  else if (m.type === 'reinforce') { missionIcon = '🛡️'; missionName = 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; }
+  else if (m.type === 'transport') { missionIcon = '📦'; missionName = 'Caravana → [' + m.tx + ',' + m.ty + ']'; }
+  else if (m.type === 'move') { missionIcon = '⚔️'; missionName = 'Tropas → [' + m.tx + ',' + m.ty + ']'; }
+  else { missionIcon = '⚔️'; missionName = 'Ataque → [' + m.tx + ',' + m.ty + ']'; }
 
   // Tiempo restante
   var tl = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
-  var timeStr = tl > 3600 ? Math.floor(tl/3600) + 'h ' + Math.floor((tl%3600)/60) + 'm ' + (tl%60) + 's'
-              : tl > 60  ? Math.floor(tl/60) + 'm ' + (tl%60) + 's'
-              : tl + 's';
+  var timeStr = tl > 3600 ? Math.floor(tl / 3600) + 'h ' + Math.floor((tl % 3600) / 60) + 'm ' + (tl % 60) + 's'
+    : tl > 60 ? Math.floor(tl / 60) + 'm ' + (tl % 60) + 's'
+      : tl + 's';
 
   // Separar tropas y criaturas
   var troopRows = '', creatureRows = '', totalUnits = 0;
@@ -179,13 +179,13 @@ function showMissionTroops(missionRef) {
   var guestHTML = '';
   if (m.guest_contingents && m.guest_contingents.length > 0) {
     m.guest_contingents.forEach(function (gc) {
-      if (!gc.troops || !Object.values(gc.troops).some(function(n){return n>0;})) return;
-      var gName = (profileCache[gc.owner_id] && profileCache[gc.owner_id].username) || gc.owner_id.slice(0,8);
+      if (!gc.troops || !Object.values(gc.troops).some(function (n) { return n > 0; })) return;
+      var gName = (profileCache[gc.owner_id] && profileCache[gc.owner_id].username) || gc.owner_id.slice(0, 8);
       var gRows = '';
-      Object.keys(gc.troops).forEach(function(k){
-        var qty2 = gc.troops[k]||0; if(!qty2) return;
+      Object.keys(gc.troops).forEach(function (k) {
+        var qty2 = gc.troops[k] || 0; if (!qty2) return;
         var td2 = TROOP_TYPES[k]; var cd2 = CREATURE_TYPES[k];
-        var info = td2||cd2; if(!info) return;
+        var info = td2 || cd2; if (!info) return;
         gRows += '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">'
           + '<span style="font-size:1.1rem;">' + info.icon + '</span>'
           + '<span style="flex:1;color:var(--dim);font-size:.82rem;">' + info.name + '</span>'
@@ -223,14 +223,24 @@ function showMissionTroops(missionRef) {
   document.body.appendChild(overlay);
 }
 
+// ============================================================
+// renderQueue — construye cola de CONSTRUCCIÓN (qItems/qItemsOv)
+// Las misiones van a su propio panel (movItems/movItemsOv)
+// ============================================================
 function renderQueue(vs) {
+  // ── 1. CONSTRUCCIÓN → contenedores qItems / qItemsOv ──────
   var ids = ['qItems', 'qItemsOv'];
   ids.forEach(function (elId) {
     var el = document.getElementById(elId);
+    if (!el) return;
     var emId = elId === 'qItems' ? 'qEmpty' : 'qEmptyOv';
     var em = document.getElementById(emId);
-    if (!vs.build_queue) { em.style.display = 'block'; el.innerHTML = ''; return; }
-    em.style.display = 'none';
+    if (!vs.build_queue) {
+      if (em) em.style.display = 'block';
+      el.innerHTML = '';
+      return;
+    }
+    if (em) em.style.display = 'none';
     var q = vs.build_queue;
     var def = BUILDINGS.find(function (b) { return b.id === q.id; });
     var finish = new Date(q.finish_at).getTime();
@@ -243,100 +253,6 @@ function renderQueue(vs) {
       + '<div class="queue-info"><div class="queue-name">' + (def ? def.name : q.id) + ' -> Nivel ' + (lvl + 1) + '</div>'
       + '<div class="queue-time">' + tl + 's restantes</div>'
       + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div></div>';
-  });
-
-  var mIds = ['qItems', 'qItemsOv']; // We use the same containers or add specific ones
-  mIds.forEach(function (elId) {
-    var el = document.getElementById(elId);
-    if (!vs.mission_queue || vs.mission_queue.length === 0) return;
-
-    vs.mission_queue.forEach(m => {
-      var finish = new Date(m.finish_at).getTime();
-      var now = Date.now();
-      var tl = Math.max(0, Math.ceil((finish - now) / 1000));
-
-      // FILTRO MEJORADO: No mostrar misiones completadas
-      // Si ya terminó (tl=0) y es una misión de retorno, no mostrar (será procesada en resolveMissions)
-      if (tl <= 0 && m.type === 'return') return;
-      // Para otras misiones, dar 5 segundos de gracia antes de ocultar
-      if (tl <= 0 && now - finish > 5000) return;
-
-      var start = m.start_at ? new Date(m.start_at).getTime() : (finish - 60000);
-      var total = Math.max(1, Math.ceil((finish - start) / 1000));
-      var pct = Math.min(100, Math.round(((total - tl) / total) * 100));
-
-      var icon, name, color;
-      if (m.type === 'spy') { icon = '🏹'; name = 'Espionaje a [' + m.tx + ',' + m.ty + ']'; color = 'var(--accent)'; }
-      else if (m.type === 'return') { icon = '🏠'; name = 'Tropas regresando'; color = 'var(--ok)'; }
-      else if (m.type === 'found') { icon = '🏘️'; name = 'Colonos hacia [' + m.tx + ',' + m.ty + ']'; color = 'var(--gold)'; }
-      else if (m.type === 'move') { icon = '⚔'; name = 'Tropas → [' + m.tx + ',' + m.ty + ']'; color = 'var(--accent)'; }
-      else if (m.type === 'reinforce') { icon = '🛡️'; name = 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; color = 'var(--accent2)'; }
-      else if (m.type === 'transport') { icon = '📦'; name = 'Caravana → [' + m.tx + ',' + m.ty + ']'; color = 'var(--madera)'; }
-      else if (m.type === 'return_reinforce') { icon = '↩'; name = 'Tropas volviendo a casa'; color = 'var(--ok)'; }
-      else { icon = '⚔️'; name = 'Ataque a [' + m.tx + ',' + m.ty + ']'; color = 'var(--danger)'; }
-
-      var timeStr = tl > 3600 ? Math.floor(tl / 3600) + 'h ' + Math.floor((tl % 3600) / 60) + 'm'
-        : tl > 60 ? Math.floor(tl / 60) + 'm ' + (tl % 60) + 's'
-          : tl + 's';
-
-      var div = document.createElement('div');
-      div.className = 'queue-item mission';
-      div.style.borderLeftColor = color;
-      var cancelBtn = (m.type !== 'return' && m.type !== 'found' && m.type !== 'return_reinforce')
-        ? '<button onclick="cancelMission(\'' + (m.mid || m.finish_at) + '\')" style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar</button>'
-        : '';
-      var hasTroopsInMission = m.troops && Object.keys(m.troops).some(function(k){return (m.troops[k]||0)>0;});
-      var viewBtn = hasTroopsInMission
-        ? '<button onclick="showMissionTroops(\'' + escapeJs(m.mid || m.finish_at) + '\')" style="background:rgba(100,180,255,.08);border:1px solid rgba(100,180,255,.25);color:var(--accent);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;margin-right:4px;">👁 Ver tropas</button>'
-        : '';
-      div.innerHTML = '<div class="queue-icon">' + icon + '</div>'
-        + '<div class="queue-info"><div class="queue-name">' + name + '</div>'
-        + '<div class="queue-time">' + timeStr + '</div>'
-        + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%; background:' + color + '"></div></div>'
-        + '<div style="display:flex;flex-wrap:wrap;gap:2px;">' + viewBtn + cancelBtn + '</div>'
-        + '</div>';
-      el.appendChild(div);
-    });
-
-    // Misiones aliadas — ataques conjuntos donde YO participo pero no soy el líder
-    if (_activeMissionsTableExists !== false && currentUser) {
-      sbClient.from('active_missions')
-        .select('*')
-        .eq('participant_id', currentUser.id)
-        .eq('status', 'active')
-        .then(function (amr) {
-          if (amr.error || !amr.data) return;
-          amr.data.forEach(function (am) {
-            if (am.leader_id === currentUser.id) return; // ya visible en mi propia queue
-            var finish = new Date(am.finish_at).getTime();
-            var now2 = Date.now();
-            var tl2 = Math.max(0, Math.ceil((finish - now2) / 1000));
-            var timeStr2 = tl2 > 3600 ? Math.floor(tl2/3600) + 'h ' + Math.floor((tl2%3600)/60) + 'm'
-              : tl2 > 60 ? Math.floor(tl2/60) + 'm ' + (tl2%60) + 's' : tl2 + 's';
-            var start2 = new Date(am.created_at || am.finish_at).getTime();
-            var total2 = Math.max(1, Math.ceil((finish - start2) / 1000));
-            var pct2 = Math.min(100, Math.round(((total2 - tl2) / total2) * 100));
-            var leaderName = (profileCache[am.leader_id] && profileCache[am.leader_id].username) || am.leader_id.slice(0,8);
-            var aDiv = document.createElement('div');
-            aDiv.className = 'queue-item mission';
-            aDiv.style.borderLeftColor = '#e87030';
-            aDiv.style.opacity = '0.85';
-            aDiv.innerHTML = '<div class="queue-icon">⚔️</div>'
-              + '<div class="queue-info">'
-              + '<div class="queue-name" style="color:#e87030;">Ataque conjunto [' + am.target_x + ',' + am.target_y + ']</div>'
-              + '<div style="font-size:.62rem;color:var(--dim);">Liderado por ' + escapeHtml(leaderName) + '</div>'
-              + '<div class="queue-time">' + timeStr2 + '</div>'
-              + '<div class="qbar"><div class="qbar-fill" style="width:' + pct2 + '%;background:#e87030;"></div></div>'
-              + '<button onclick="cancelAlliedMission(\'' + am.mission_id + '\',\'' + am.host_village_id + '\')" '
-              + 'style="background:rgba(255,61,90,.1);border:1px solid rgba(255,61,90,.3);color:var(--danger);padding:3px 8px;border-radius:3px;font-size:.62rem;cursor:pointer;margin-top:4px;">✗ Cancelar (todos)</button>'
-              + '</div>';
-            el.appendChild(aDiv);
-          });
-          if (_activeMissionsTableExists === null) _activeMissionsTableExists = true;
-        }).catch(function (e) {
-          if (e && e.code === '42P01') _activeMissionsTableExists = false;
-        });
-    }
   });
 }
 
@@ -508,7 +424,7 @@ function renderMap() {
     '<span style="font-family:VT323,monospace;color:var(--accent);">[' + cx + ', ' + cy + ']</span>' +
     (isOffCenter
       ? ' <span style="color:var(--dim);">·</span> Tu aldea: <span style="color:var(--gold);">[' + activeVillage.x + ', ' + activeVillage.y + ']</span> <span style="color:var(--dim);font-size:.75em;">⌂ para centrar</span>'
-      : ' <span style="color:var(--dim);font-size:.8em;">· ' + (r*2+1) + '×' + (r*2+1) + ' casillas visibles</span>');
+      : ' <span style="color:var(--dim);font-size:.8em;">· ' + (r * 2 + 1) + '×' + (r * 2 + 1) + ' casillas visibles</span>');
 
   renderMinimap(cx, cy);
 
@@ -969,14 +885,14 @@ async function executeFounding(m) {
 
     var newId = r.data.id;
     // Tablas legacy
-    await sbClient.from('resources').insert({ village_id: newId, madera: 500, piedra: 300, hierro: 100, prov: 200, esencia: 0 }).catch(function () {});
+    await sbClient.from('resources').insert({ village_id: newId, madera: 500, piedra: 300, hierro: 100, prov: 200, esencia: 0 }).catch(function () { });
     await sbClient.from('buildings').insert({
       village_id: newId, aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1,
       torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
-    }).catch(function () {});
+    }).catch(function () { });
     var newTroops = { village_id: newId };
     Object.keys(TROOP_TYPES).forEach(function (k) { newTroops[k] = k === 'aldeano' ? 50 : 0; });
-    await sbClient.from('troops').insert(newTroops).catch(function () {});
+    await sbClient.from('troops').insert(newTroops).catch(function () { });
 
     await sendSystemReport(currentUser.id, '🏠 ¡NUEVA ALDEA FUNDADA!',
       'Tus colonos han llegado a [' + m.tx + ', ' + m.ty + '] y han fundado ' + newVillageName + '.\n¡Ya puedes seleccionarla en el desplegable de aldeas!');
@@ -1783,12 +1699,18 @@ async function executeMove(m) {
       }
     }
 
-    // Bug B fix: criaturas no ocupan plazas de barracas — calcular slots solo para tropas normales
-    var freeSlots = Math.max(0, getBarracksCapacity(dvs.buildings) - getBarracksUsed(dvs));
+    // Leer state fresco de destino para no pisar cambios concurrentes
+    var freshDestR = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
+    var freshDestState = (!freshDestR.error && freshDestR.data && freshDestR.data.state)
+      ? (typeof freshDestR.data.state === 'string' ? JSON.parse(freshDestR.data.state) : freshDestR.data.state)
+      : dvs;
+
+    // Calcular barracas sobre el state fresco
+    var freeSlots = Math.max(0, getBarracksCapacity(freshDestState.buildings) - getBarracksUsed(freshDestState));
     var slotsNeeded = 0;
     Object.keys(m.troops).forEach(function (k) {
       var count = m.troops[k] || 0;
-      if (count > 0 && TROOP_TYPES[k]) {  // solo tropas, no criaturas
+      if (count > 0 && TROOP_TYPES[k]) {
         slotsNeeded += (k === 'aldeano') ? count : count * (TROOP_TYPES[k].barracasSlots || 1);
       }
     });
@@ -1798,20 +1720,47 @@ async function executeMove(m) {
       var count = m.troops[k] || 0;
       if (count <= 0) { accepted[k] = 0; return; }
       if (CREATURE_TYPES[k]) {
-        // Las criaturas siempre se aceptan todas (no ocupan barracas)
-        accepted[k] = count;
+        accepted[k] = count; // criaturas siempre aceptadas (no ocupan barracas)
       } else {
         var toAccept = Math.floor(count * pct);
         accepted[k] = toAccept;
         if (toAccept < count) { rejected[k] = count - toAccept; anyRejected = true; }
       }
     });
+
+    // Aplicar sobre el state fresco
+    if (!freshDestState.troops) freshDestState.troops = {};
+    if (!freshDestState.creatures) freshDestState.creatures = defaultCreatures();
     Object.keys(accepted).forEach(function (k) {
       if ((accepted[k] || 0) <= 0) return;
-      if (TROOP_TYPES[k]) dvs.troops[k] = (dvs.troops[k] || 0) + accepted[k];
-      else if (CREATURE_TYPES[k]) { if (!dvs.creatures) dvs.creatures = defaultCreatures(); dvs.creatures[k] = (dvs.creatures[k] || 0) + accepted[k]; }
+      if (TROOP_TYPES[k]) freshDestState.troops[k] = (freshDestState.troops[k] || 0) + accepted[k];
+      else if (CREATURE_TYPES[k]) freshDestState.creatures[k] = (freshDestState.creatures[k] || 0) + accepted[k];
     });
-    await saveVillage(destVillage);
+
+    // ── v1.51 BUGFIX: Reasignar cuevas si se mudaron guardianes permanentemente ──
+    if (accepted.guardiancueva && accepted.guardiancueva > 0) {
+      try {
+        var cavesR = await sbClient.from('caves').select('id').eq('village_id', m.origin_village_id).limit(accepted.guardiancueva);
+        if (cavesR.data && cavesR.data.length > 0) {
+          var caveIds = cavesR.data.map(function (c) { return c.id; });
+          await sbClient.from('caves').update({ village_id: m.targetId }).in('id', caveIds);
+          // Actualizar caché en tiempo real para q la UI no los "mate"
+          if (typeof _cavesCache !== 'undefined') {
+            _cavesCache.forEach(function (c) {
+              if (caveIds.includes(c.id)) c.village_id = m.targetId;
+            });
+          }
+        }
+      } catch (ce) { console.warn('Error reasignando cuevas al mover:', ce); }
+    }
+    // ─────────────────────────────────────────────────────────
+
+    freshDestState.last_updated = new Date().toISOString();
+    // Guardar directamente via sbClient para evitar race conditions con saveVillage
+    await sbClient.from('villages').update({ state: JSON.stringify(freshDestState) }).eq('id', m.targetId);
+    // Sincronizar objeto local
+    dvs.troops = freshDestState.troops;
+    dvs.creatures = freshDestState.creatures;
     if (anyRejected) {
       var origV = myVillages.find(function (v) { return v.id === m.origin_village_id; });
       if (origV) {
@@ -1824,8 +1773,22 @@ async function executeMove(m) {
       }
     }
     var rejMsg = anyRejected ? '\n⚠️ Algunas tropas volvieron (barracas llenas en destino).' : '';
+    // Tabla de tropas
+    var troopLines = '';
+    Object.keys(m.troops || {}).forEach(function (k) {
+      var qty = m.troops[k] || 0;
+      if (qty <= 0) return;
+      var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
+      if (td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(qty);
+    });
+    var origV2 = myVillages.find(function (v) { return v.id === m.origin_village_id; }) || activeVillage;
+    var origName2 = origV2 ? (origV2.name || 'Origen') : 'Origen';
+    var origCoords2 = origV2 ? '[' + origV2.x + ', ' + origV2.y + ']' : '';
     await sendSystemReport(currentUser.id, '⚔ TROPAS TRASLADADAS',
-      'Tropas llegaron a ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + '] y ya son de esa aldea.' + cargoMsg + rejMsg);
+      '📍 Origen: ' + origName2 + ' ' + origCoords2 + '\n'
+      + '🏠 Destino: ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + ']\n\n'
+      + '⚔ Tropas trasladadas:' + troopLines
+      + cargoMsg + rejMsg);
     renderMap();
   } catch (e) { console.error('executeMove error:', e); }
 }
@@ -2148,7 +2111,7 @@ async function syncResourcesFromDB() {
 
 // ============================================================
 // ALDEANOS — asignar / desasignar de granja
-// Guardado INMEDIATO al pulsar (no espera al timer)
+// Guardado INMEDIATO al pulsar (no bloqueante).
 // ============================================================
 function updateGranjaPanel() {
   if (!activeVillage) return;
@@ -2266,8 +2229,6 @@ function snapshotResources(vs) {
   return res;
 }
 
-// Problema 6 fix: debouncedSave era un wrapper vacío sin debounce real.
-// scheduleSave() ya hace el debounce de 2s internamente — debouncedSave es ahora un alias directo.
 function debouncedSave() {
   scheduleSave();
 }
@@ -2280,11 +2241,9 @@ function assignWorker(resource, amount) {
   var res = calcRes(vs);
   amount = Math.max(0, Math.min(amount, res.aldeanos));
   if (amount <= 0) { showNotif('No hay aldeanos libres.', 'err'); return; }
-  // Snapshot recursos materiales; aldeanos NO se toca (calcRes lo recalcula desde total)
   vs.resources.madera = res.madera; vs.resources.piedra = res.piedra;
   vs.resources.hierro = res.hierro; vs.resources.provisiones = res.provisiones;
   vs.resources.esencia = res.esencia;
-  // aldeanos sigue siendo el TOTAL (no cambiar)
   vs.aldeanos_assigned[resource] = (vs.aldeanos_assigned[resource] || 0) + amount;
   vs.aldeanos_granja = vs.aldeanos_assigned.provisiones || 0;
   vs.last_updated = new Date().toISOString();
@@ -2299,32 +2258,24 @@ function unassignWorker(resource, amount) {
   amount = Math.max(0, Math.min(amount, vs.aldeanos_assigned[resource] || 0));
   if (amount <= 0) return;
 
-  // Ponemos el estado al día (incluye aldeanos TOTAL)
   snapshotResources(vs);
 
   vs.aldeanos_assigned[resource] = Math.max(0, (vs.aldeanos_assigned[resource] || 0) - amount);
   vs.aldeanos_granja = vs.aldeanos_assigned.provisiones || 0;
 
-  // last_updated ya lo fijó snapshotResources()
   debouncedSave(); tick(); updateRecursosSliders();
 }
 
-// ============================================================
-// APPLY ALL WORKERS — botón global que lee los 5 sliders/inputs
-// de una vez y los escribe todos en state en una sola operación
-// ============================================================
 function applyAllWorkers() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   if (!vs.aldeanos_assigned) vs.aldeanos_assigned = defaultAssignments();
   var w = vs.aldeanos_assigned;
 
-  // 1) Snapshot para tener recursos y aldeanos al día
   var r = snapshotResources(vs);
   var totalLibres = r.aldeanos_libres !== undefined ? r.aldeanos_libres : r.aldeanos;
   var totalAld = r.aldeanos_total || (totalLibres + Object.values(w).reduce(function (a, b) { return a + (b || 0); }, 0));
 
-  // 2) Leer los 5 valores del DOM tal como el usuario los ha dejado
   var KEYS = ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'];
   var newVals = {};
   var sumNew = 0;
@@ -2335,44 +2286,35 @@ function applyAllWorkers() {
     sumNew += v;
   });
 
-  // 3) Validar: la suma no puede superar el total de aldeanos
   if (sumNew > totalAld) {
     showNotif('Solo tienes ' + totalAld + ' aldeanos. Estás asignando ' + sumNew + '.', 'err');
     return;
   }
 
-  // 4) Aplicar todos de golpe
   KEYS.forEach(function (k) { w[k] = newVals[k]; });
   vs.aldeanos_granja = w.provisiones || 0;
-  // last_updated ya lo fijó snapshotResources()
 
   showNotif('✓ Aldeanos asignados correctamente', 'ok');
   debouncedSave(); tick(); updateRecursosSliders();
 }
 
-// Llamado al soltar la barra o confirmar número — guarda y refresca todo
 function setWorker(resource, rawValue) {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   if (!vs.aldeanos_assigned) vs.aldeanos_assigned = defaultAssignments();
   var w = vs.aldeanos_assigned;
 
-  // 1) Primero, aplicamos el offline-calc para que recursos/aldeanos estén al día
   var r = snapshotResources(vs);
 
-  // 2) Los disponibles para este recurso = libres + los ya asignados a ESTE recurso
   var available = (r.aldeanos_libres || 0) + (w[resource] || 0);
   var value = Math.max(0, Math.min(parseInt(rawValue) || 0, available));
 
-  // 3) Guardamos la asignación
   w[resource] = value;
-  vs.aldeanos_granja = w.provisiones || 0; // compatibilidad
-  // last_updated ya lo fijó snapshotResources()
+  vs.aldeanos_granja = w.provisiones || 0;
 
   debouncedSave(); tick(); updateRecursosSliders();
 }
 
-// Sync instantáneo mientras se arrastra (sin guardar) — actualiza número + restricciones
 function syncWorkerInput(key, val) {
   var ni = document.getElementById('rw_n_' + key);
   if (ni) ni.value = val;
@@ -2385,10 +2327,6 @@ function syncWorkerSlider(key, val, available) {
   _previewWorker(key, val);
 }
 
-// Vista previa: ajusta maxes de los demás sin guardar
-// Lee los valores ACTUALES del DOM (no del state) para calcular libres correctamente.
-// Esto evita el bug donde mover la 3ª barra calcula mal los aldeanos disponibles
-// porque el state aún tiene los valores anteriores sin guardar.
 function _previewWorker(changedKey, newVal) {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -2396,7 +2334,6 @@ function _previewWorker(changedKey, newVal) {
   var totalAld = res.aldeanos_total || (vs.troops && vs.troops.aldeano) || 0;
   var KEYS = ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'];
 
-  // Leer valores actuales del DOM (pueden diferir del state si no se ha guardado)
   var domVals = {};
   KEYS.forEach(function (k) {
     if (k === changedKey) {
@@ -2407,11 +2344,9 @@ function _previewWorker(changedKey, newVal) {
     }
   });
 
-  // Total asignado según DOM actual
   var totalW = KEYS.reduce(function (sum, k) { return sum + domVals[k]; }, 0);
   var freeNow = Math.max(0, totalAld - totalW);
 
-  // Actualizar maxes de los demás sliders
   KEYS.forEach(function (key) {
     if (key === changedKey) return;
     var cur = domVals[key];
@@ -2425,7 +2360,6 @@ function _previewWorker(changedKey, newVal) {
   var elWork = document.getElementById('recAldWorking'); if (elWork) elWork.textContent = totalW;
 }
 
-// Refresca sliders + stats sin re-renderizar DOM
 function updateRecursosSliders() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -2442,7 +2376,6 @@ function updateRecursosSliders() {
   var elFree = document.getElementById('recAldLibres'); if (elFree) elFree.textContent = (res.aldeanos_libres !== undefined ? res.aldeanos_libres : res.aldeanos);
   var elWork = document.getElementById('recAldWorking'); if (elWork) elWork.textContent = totalW;
 
-  // v1.17: Mostrar capacidad de barracas con porcentaje y uso
   var used = getBarracksUsed(vs);
   var barrPct = barrCap > 0 ? Math.round(used / barrCap * 100) : 0;
   var elCap = document.getElementById('recAldCap'); if (elCap) elCap.textContent = used + ' / ' + barrCap + ' (' + barrPct + '%)';
@@ -2463,8 +2396,6 @@ function updateRecursosSliders() {
   var bfEl = document.getElementById('barrFreeDisplay'); if (bfEl) bfEl.textContent = Math.max(0, barrCap - usedSlotsRS);
   var bpEl = document.getElementById('barrProdDisplay'); if (bpEl) bpEl.textContent = getAldeanosProd(vs.buildings);
 }
-
-// Legacy aliases
 
 // ============================================================
 // RENAME VILLAGE
@@ -2521,7 +2452,6 @@ function fmt(n) {
 
 // ============================================================
 // BUILDING DETAIL MODAL
-// Calculates levels up to 100, shows current up to current+10
 // ============================================================
 function fmtTime(secs) {
   if (secs < 60) return secs + 's';
@@ -2543,13 +2473,11 @@ function openBuildingDetail(id) {
   var anyQueue = !!vs.build_queue;
   var endShow = Math.min(curLvl + 10, 100);
 
-  // ── Cabeceras de tabla según el edificio ──────────────────
   var isReclutamiento = (id === 'reclutamiento');
   var isAlmacen = (id === 'almacen');
   var isGranja = (id === 'granja');
   var isBarracas = (id === 'barracas');
   var isRefugio = (id === 'refugio');
-
   var isTorre = (id === 'torre');
   var isTorreInv = (id === 'torreinvocacion');
   var isMuralla = (id === 'muralla');
@@ -2576,7 +2504,6 @@ function openBuildingDetail(id) {
     var tagHTML = isCur ? '<span class="lvl-tag cur">actual</span>'
       : isNext ? '<span class="lvl-tag nxt">siguiente</span>' : '';
 
-    // ── Columna de "efecto" según edificio ───────────────────
     var plines = '';
 
     if (isReclutamiento) {
@@ -2612,19 +2539,16 @@ function openBuildingDetail(id) {
       plines = '<div class="pl" style="color:var(--prov)">🌾 ' + provPerAld + ' prov./aldeano/h</div>';
 
     } else {
-      // Simular el edificio actual a este nivel concreto, manteniendo el resto igual
       var fakeBlds = {};
       BUILDINGS.forEach(function (b) { fakeBlds[b.id] = { level: (vs.buildings[b.id] && vs.buildings[b.id].level) || 1 }; });
       fakeBlds[id] = { level: lvl };
       var bProd = getBaseProd(fakeBlds);
       var bBonus = getBonusPerWorker(fakeBlds);
-      // Clave de workers según edificio
       var workerKey = id === 'aserradero' ? 'madera'
         : id === 'cantera' ? 'piedra'
           : id === 'minehierro' ? 'hierro'
             : id === 'circulo' ? 'esencia' : null;
       var wk = workerKey ? ((vs.aldeanos_assigned && vs.aldeanos_assigned[workerKey]) || 0) : 0;
-      // Mostrar SOLO el recurso que produce este edificio concreto
       if (id === 'aserradero') {
         var totM = bProd.madera + wk * bBonus.madera;
         plines = '<div class="pl" style="color:var(--madera)">🌲 ' + fmt(bProd.madera) + '/h base'
@@ -2656,7 +2580,7 @@ function openBuildingDetail(id) {
         plines = lvl === 0
           ? '<div class="pl" style="color:var(--danger)">Sin muralla — tropas expuestas</div>'
           : '<div class="pl" style="color:var(--piedra)">🏰 ' + fmt(wallHPShow) + ' HP de escudo</div>'
-          + '<div class="pl" style="color:var(--dim);font-size:.58rem;">Atacantes deben destruirlo antes de dañar tropas</div>';
+          + '<div class="pl" style="color:var(--dim);font-size:.58rem;">Atacantes deben destruirlo antes de llegar a tus tropas</div>';
       } else if (id === 'refugio') {
         var fakeBldRef = {}; fakeBldRef['refugio'] = { level: lvl };
         var refCap = getRefugioCapacity(fakeBldRef);
@@ -2673,7 +2597,6 @@ function openBuildingDetail(id) {
       }
     }
 
-    // ── Coste para subir ESTE nivel al siguiente ──────────────
     var clines = '';
     if (lvl < 100) {
       var c = def.cost(lvl);
@@ -2701,7 +2624,6 @@ function openBuildingDetail(id) {
       + '</tr>';
   }
 
-  // ── Subtítulo contextual en la cabecera del modal ─────────
   var curBaseProd = getBaseProd(vs.buildings);
   var curBonusProd = getBonusPerWorker(vs.buildings);
   var curWorkers = vs.aldeanos_assigned || defaultAssignments();
@@ -2764,7 +2686,6 @@ function openBuildingDetail(id) {
     modalSub = 'Nivel ' + curLvl + '&nbsp;·&nbsp;📜 Módulo de Investigación — <span style="color:var(--gold)">Próximamente activo</span>';
   }
 
-  // ── Botón footer ──────────────────────────────────────────
   var btnCls, btnTxt;
   if (curLvl >= 100) {
     btnCls = 'maxlvl'; btnTxt = 'Nivel máximo alcanzado (100)';
@@ -2833,8 +2754,6 @@ function createStars() {
 
 createStars();
 
-// Guardado "mejor esfuerzo" al ocultar la pestaña (no bloqueante).
-// Nota: ningún navegador garantiza 100% el guardado al cerrar, pero esto evita el XHR síncrono y la auth incorrecta.
 document.addEventListener('visibilitychange', function () {
   if (document.hidden) {
     try { flushVillage(); } catch (e) { }
@@ -2847,7 +2766,7 @@ document.addEventListener('visibilitychange', function () {
 // ============================================================
 let currentThreadId = null;
 let currentThreadType = null;
-var _selectedReportIds = new Set(); // v1.30: multi-select para informes de sistema
+var _selectedReportIds = new Set();
 
 async function ensureLogged() {
   if (!currentUser) { showNotif('Inicia sesión primero.', 'err'); return false; }
@@ -2860,8 +2779,6 @@ function escapeHtml(str) {
 }
 
 function escapeJs(str) {
-  // Escapa string para uso en atributos onclick/JavaScript inline
-  // Reemplaza backslash primero, luego comillas simples
   return String(str ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '');
 }
 

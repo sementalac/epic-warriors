@@ -38,12 +38,12 @@
 // ============================================================
 
 const CAVES_TOTAL = 10;   // Nº total de cuevas que existen en el mundo
-const CAVE_XP     = 800;  // XP que da vencer al guardián
+const CAVE_XP = 800;  // XP que da vencer al guardián
 
 // Lookup global de cuevas wild para el mapa — se rellena en loadCaves()
-var cavesLookup  = {};  // key: "cx,cy" → cave object
-var cavesLoaded  = false;
-var _cavesCache  = [];   // array completo (wild + captured)
+var cavesLookup = {};  // key: "cx,cy" → cave object
+var cavesLoaded = false;
+var _cavesCache = [];   // array completo (wild + captured)
 
 // ─────────────────────────────────────────────────────────────
 // DEFINICIÓN DEL GUARDIÁN — en game-constants.js debes añadir:
@@ -94,11 +94,9 @@ async function loadCaves(force) {
     _rebuildCavesLookup();
     cavesLoaded = true;
 
-    // Si hay menos cuevas wild de las necesarias, completar hasta CAVES_TOTAL
-    var wildCount     = _cavesCache.filter(function (c) { return c.status === 'wild'; }).length;
-    var capturedCount = _cavesCache.filter(function (c) { return c.status === 'captured'; }).length;
-    var total         = wildCount + capturedCount;
-    var needSpawn     = CAVES_TOTAL - total;
+    // Si hay menos cuevas wild de las necesarias, completar hasta CAVES_TOTAL wild
+    var wildCount = _cavesCache.filter(function (c) { return c.status === 'wild'; }).length;
+    var needSpawn = CAVES_TOTAL - wildCount;
     if (needSpawn > 0) {
       await _spawnCaves(needSpawn);
     }
@@ -132,7 +130,7 @@ async function _spawnCaves(count) {
   }
   _cavesCache.forEach(function (c) { occupied.add(c.cx + ',' + c.cy); });
 
-  var ms  = typeof MAP_SIZE !== 'undefined' ? MAP_SIZE : 200;
+  var ms = typeof MAP_SIZE !== 'undefined' ? MAP_SIZE : 200;
   var rows = [];
   var tries = 0;
 
@@ -184,19 +182,19 @@ function renderCaveCell(cell, cave) {
 
   // Gradiente de color según la "personalidad" de la cueva (basada en su id)
   var colors = [
-    { bg: 'rgba(120,60,20,.55)',  border: '#8B4513', glyph: '🟫' },   // marrón
+    { bg: 'rgba(120,60,20,.55)', border: '#8B4513', glyph: '🟫' },   // marrón
     { bg: 'rgba(80,20,120,.55)', border: '#7B2D8B', glyph: '🟣' },    // púrpura
     { bg: 'rgba(20,80,120,.55)', border: '#1E6B9B', glyph: '🔵' },    // azul
     { bg: 'rgba(20,110,60,.55)', border: '#1A7A3A', glyph: '🟢' },    // verde
     { bg: 'rgba(160,60,10,.55)', border: '#B04010', glyph: '🟠' }     // naranja
   ];
-  var idx   = (cave.id ? cave.id.charCodeAt(0) % colors.length : 0);
+  var idx = (cave.id ? cave.id.charCodeAt(0) % colors.length : 0);
   var color = colors[idx];
 
-  cell.style.background    = color.bg;
-  cell.style.border        = '1.5px solid ' + color.border;
-  cell.style.borderRadius  = '4px';
-  cell.style.position      = 'relative';
+  cell.style.background = color.bg;
+  cell.style.border = '1.5px solid ' + color.border;
+  cell.style.borderRadius = '4px';
+  cell.style.position = 'relative';
   cell.innerHTML =
     '<div style="font-size:1rem;line-height:1;filter:drop-shadow(0 0 3px ' + color.border + ');">⛏️</div>'
     + '<div style="position:absolute;bottom:1px;right:2px;font-size:.45rem;opacity:.85;">' + color.glyph + '</div>';
@@ -207,9 +205,9 @@ function renderCaveCell(cell, cave) {
 // ─────────────────────────────────────────────────────────────
 
 function selectCave(cave, x, y) {
-  var panel   = document.getElementById('mapPanel');
-  var title   = document.getElementById('mapPanelTitle');
-  var sub     = document.getElementById('mapPanelSub');
+  var panel = document.getElementById('mapPanel');
+  var title = document.getElementById('mapPanelTitle');
+  var sub = document.getElementById('mapPanelSub');
   var actions = document.getElementById('mapActions');
   panel.classList.add('show');
 
@@ -260,7 +258,7 @@ function _countPlayerCaveGuardians() {
 
 function openCaveAttackModal(caveId, x, y) {
   if (!activeVillage) return;
-  var vs       = activeVillage.state;
+  var vs = activeVillage.state;
   var guardian = CREATURE_TYPES.guardiancueva;
 
   var prev = document.getElementById('caveAttackOverlay');
@@ -417,8 +415,8 @@ async function startCaveMission(caveId, x, y, troops) {
   if (!activeVillage) return;
   var vs = activeVillage.state;
 
-  var dx   = Math.abs(x - activeVillage.x);
-  var dy   = Math.abs(y - activeVillage.y);
+  var dx = Math.abs(x - activeVillage.x);
+  var dy = Math.abs(y - activeVillage.y);
   var dist = Math.max(dx, dy);
 
   var minSpeed = 999;
@@ -428,8 +426,8 @@ async function startCaveMission(caveId, x, y, troops) {
   });
   if (minSpeed === 999) minSpeed = 1;
 
-  var ms       = typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 3600;
-  var seconds  = (dist / minSpeed) * ms;
+  var ms = typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 3600;
+  var seconds = (dist / minSpeed) * ms;
   var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
 
   // Descontar tropas del estado local
@@ -440,13 +438,13 @@ async function startCaveMission(caveId, x, y, troops) {
   });
 
   var missionEntry = {
-    mid:      'cave_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36),
-    type:     'cave_attack',
+    mid: 'cave_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36),
+    type: 'cave_attack',
     tx: x, ty: y,
     targetId: caveId,
-    troops:   troops,
+    troops: troops,
     finish_at: finishAt,
-    start_at:  new Date().toISOString()
+    start_at: new Date().toISOString()
   };
 
   vs.mission_queue.push(missionEntry);
@@ -490,16 +488,16 @@ async function executeAttackCave(m) {
 
   // 3. Montar ejército defensor (el guardián)
   var guardian = CREATURE_TYPES.guardiancueva;
-  var defArmy  = {
+  var defArmy = {
     _guardian: {
       count: 1,
       stats: {
-        hp:            guardian.hp,
-        damage:        guardian.damage,
+        hp: guardian.hp,
+        damage: guardian.damage,
         attacksPerTurn: guardian.attacksPerTurn,
-        attackChance:  guardian.attackChance,
-        defense:       guardian.defense,
-        dexterity:     guardian.dexterity,
+        attackChance: guardian.attackChance,
+        defense: guardian.defense,
+        dexterity: guardian.dexterity,
         armor: 0, weapon: 0,
         icon: guardian.icon,
         name: guardian.name
@@ -508,15 +506,15 @@ async function executeAttackCave(m) {
   };
 
   // 4. Combate
-  var rd     = (typeof _researchData !== 'undefined') ? _researchData : null;
+  var rd = (typeof _researchData !== 'undefined') ? _researchData : null;
   var result = simulateBattle(m.troops, defArmy, 0, rd);
   var victoria = result.winner === 1;
 
   // 4. Calcular bajas
   var atkCas = {}, defCas = {};
   Object.keys(m.troops).forEach(function (k) {
-    var ini  = m.troops[k] || 0;
-    var fin  = result.survivors1[k] || 0;
+    var ini = m.troops[k] || 0;
+    var fin = result.survivors1[k] || 0;
     if (ini > fin) atkCas[k] = ini - fin;
   });
   var guardianKilled = (result.survivors2['_guardian'] || 0) === 0;
@@ -534,8 +532,8 @@ async function executeAttackCave(m) {
   }
 
   // 6. Supervivientes propios (con recuperación)
-  var recovered   = (typeof calculateRecovery === 'function') ? calculateRecovery(atkCas) : {};
-  var survivors   = {};
+  var recovered = (typeof calculateRecovery === 'function') ? calculateRecovery(atkCas) : {};
+  var survivors = {};
   Object.keys(result.survivors1).forEach(function (k) {
     var n = (result.survivors1[k] || 0) + (recovered[k] || 0);
     if (n > 0) survivors[k] = n;
@@ -548,8 +546,8 @@ async function executeAttackCave(m) {
 
     // Marcar cueva como capturada
     await sbClient.from('caves').update({
-      status:     'captured',
-      owner_id:   currentUser.id,
+      status: 'captured',
+      owner_id: currentUser.id,
       village_id: activeVillage.id
     }).eq('id', cave.id);
 
@@ -557,10 +555,25 @@ async function executeAttackCave(m) {
     delete cavesLookup[cave.cx + ',' + cave.cy];
     var cIdx = _cavesCache.findIndex(function (c) { return c.id === cave.id; });
     if (cIdx !== -1) {
-      _cavesCache[cIdx].status     = 'captured';
-      _cavesCache[cIdx].owner_id   = currentUser.id;
+      _cavesCache[cIdx].status = 'captured';
+      _cavesCache[cIdx].owner_id = currentUser.id;
       _cavesCache[cIdx].village_id = activeVillage.id;
     }
+
+    // ── v1.51: Auto-respawn de cueva salvaje para mantener el cupo lleno ──
+    setTimeout(async function () {
+      try {
+        var spawnPos = await _findFreeCaveSpot();
+        if (spawnPos) {
+          var insR = await sbClient.from('caves').insert({ cx: spawnPos.cx, cy: spawnPos.cy, status: 'wild' }).select().single();
+          if (!insR.error && insR.data) {
+            _cavesCache.push(insR.data);
+            cavesLookup[spawnPos.cx + ',' + spawnPos.cy] = insR.data;
+            if (typeof renderMap === 'function') renderMap();
+          }
+        }
+      } catch (e) { }
+    }, 100);
 
     showNotif('🧿 ¡Guardián capturado! Se une a tu ejército. +' + xpGained + ' XP', 'ok');
     if (typeof renderMap === 'function') setTimeout(renderMap, 500);
@@ -648,16 +661,16 @@ async function onCaveGuardianDied(villageId, ownerId) {
     if (!newPos) {
       // Si no encuentra posición, reusar la misma
       await sbClient.from('caves').update({
-        status:     'wild',
-        owner_id:   null,
+        status: 'wild',
+        owner_id: null,
         village_id: null
       }).eq('id', oldCave.id);
     } else {
       await sbClient.from('caves').update({
-        status:     'wild',
-        cx:         newPos.cx,
-        cy:         newPos.cy,
-        owner_id:   null,
+        status: 'wild',
+        cx: newPos.cx,
+        cy: newPos.cy,
+        owner_id: null,
         village_id: null
       }).eq('id', oldCave.id);
     }
@@ -667,10 +680,10 @@ async function onCaveGuardianDied(villageId, ownerId) {
     if (cIdx !== -1) {
       delete cavesLookup[_cavesCache[cIdx].cx + ',' + _cavesCache[cIdx].cy];
       var nc = newPos || { cx: oldCave.cx, cy: oldCave.cy };
-      _cavesCache[cIdx].status     = 'wild';
-      _cavesCache[cIdx].cx         = nc.cx;
-      _cavesCache[cIdx].cy         = nc.cy;
-      _cavesCache[cIdx].owner_id   = null;
+      _cavesCache[cIdx].status = 'wild';
+      _cavesCache[cIdx].cx = nc.cx;
+      _cavesCache[cIdx].cy = nc.cy;
+      _cavesCache[cIdx].owner_id = null;
       _cavesCache[cIdx].village_id = null;
       cavesLookup[nc.cx + ',' + nc.cy] = _cavesCache[cIdx];
     }
@@ -704,8 +717,8 @@ async function _findFreeCaveSpot() {
 
   var ms = typeof MAP_SIZE !== 'undefined' ? MAP_SIZE : 200;
   for (var i = 0; i < 500; i++) {
-    var cx  = Math.floor(Math.random() * (ms - 4)) + 3;
-    var cy  = Math.floor(Math.random() * (ms - 4)) + 3;
+    var cx = Math.floor(Math.random() * (ms - 4)) + 3;
+    var cy = Math.floor(Math.random() * (ms - 4)) + 3;
     var key = cx + ',' + cy;
     var tooClose = _cavesCache.some(function (c) {
       return c.status === 'wild' && Math.abs(c.cx - cx) < 5 && Math.abs(c.cy - cy) < 5;
@@ -859,12 +872,11 @@ async function adminSpawnCave() {
 }
 
 async function adminRefillCaves() {
-  var wild     = _cavesCache.filter(function (c) { return c.status === 'wild'; }).length;
-  var captured = _cavesCache.filter(function (c) { return c.status === 'captured'; }).length;
-  var need     = CAVES_TOTAL - (wild + captured);
-  if (need <= 0) { showNotif('Ya hay ' + CAVES_TOTAL + ' cuevas en el mundo.', 'ok'); return; }
+  var wild = _cavesCache.filter(function (c) { return c.status === 'wild'; }).length;
+  var need = CAVES_TOTAL - wild; // v1.51: Mantener siempre CAVES_TOTAL wild
+  if (need <= 0) { showNotif('Ya hay ' + CAVES_TOTAL + ' cuevas salvajes en el mapa.', 'ok'); return; }
   await _spawnCaves(need);
-  showNotif('✓ ' + need + ' cueva(s) nueva(s) añadidas.', 'ok');
+  showNotif('✓ ' + need + ' cueva(s) nueva(s) salvajes creadas.', 'ok');
   loadAdminCaves();
   if (typeof renderMap === 'function') setTimeout(renderMap, 300);
 }
@@ -914,19 +926,19 @@ function adminTeleportCaveCustom(caveId) {
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
     + '<div>'
     + '<div style="font-size:.62rem;color:var(--dim);margin-bottom:4px;">X</div>'
-    + '<input id="caveMoveX_' + caveId.slice(0,8) + '" type="number" min="1" max="' + (ms-1) + '" placeholder="X" '
+    + '<input id="caveMoveX_' + caveId.slice(0, 8) + '" type="number" min="1" max="' + (ms - 1) + '" placeholder="X" '
     + 'style="width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;'
     + 'padding:6px 10px;color:var(--text);font-family:VT323,monospace;font-size:.95rem;outline:none;box-sizing:border-box;">'
     + '</div>'
     + '<div>'
     + '<div style="font-size:.62rem;color:var(--dim);margin-bottom:4px;">Y</div>'
-    + '<input id="caveMoveY_' + caveId.slice(0,8) + '" type="number" min="1" max="' + (ms-1) + '" placeholder="Y" '
+    + '<input id="caveMoveY_' + caveId.slice(0, 8) + '" type="number" min="1" max="' + (ms - 1) + '" placeholder="Y" '
     + 'style="width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:4px;'
     + 'padding:6px 10px;color:var(--text);font-family:VT323,monospace;font-size:.95rem;outline:none;box-sizing:border-box;">'
     + '</div>'
     + '</div>'
 
-    + '<div id="caveMoveErr_' + caveId.slice(0,8) + '" style="font-size:.7rem;color:var(--danger);min-height:16px;margin-bottom:8px;"></div>'
+    + '<div id="caveMoveErr_' + caveId.slice(0, 8) + '" style="font-size:.7rem;color:var(--danger);min-height:16px;margin-bottom:8px;"></div>'
 
     + '<div style="display:flex;gap:8px;">'
     + '<button class="btn" style="flex:1;" '
@@ -945,9 +957,9 @@ function adminTeleportCaveCustom(caveId) {
 }
 
 async function adminTeleportCaveToCoords(caveId) {
-  var shortId  = caveId.slice(0, 8);
-  var errEl    = document.getElementById('caveMoveErr_' + shortId);
-  var ms       = typeof MAP_SIZE !== 'undefined' ? MAP_SIZE : 200;
+  var shortId = caveId.slice(0, 8);
+  var errEl = document.getElementById('caveMoveErr_' + shortId);
+  var ms = typeof MAP_SIZE !== 'undefined' ? MAP_SIZE : 200;
 
   var xVal = parseInt((document.getElementById('caveMoveX_' + shortId) || {}).value);
   var yVal = parseInt((document.getElementById('caveMoveY_' + shortId) || {}).value);
@@ -964,8 +976,8 @@ async function adminTeleportCaveToCoords(caveId) {
   // Comprobar que la casilla no está ocupada
   var key = xVal + ',' + yVal;
   var occupiedByVillage = typeof allVillages !== 'undefined' && allVillages.some(function (v) { return v.x === xVal && v.y === yVal; });
-  var occupiedByCastle  = typeof NPC_CASTLES !== 'undefined' && NPC_CASTLES.some(function (n) { return n.x === xVal && n.y === yVal; });
-  var occupiedByCave    = _cavesCache.some(function (c) { return c.id !== caveId && c.cx === xVal && c.cy === yVal; });
+  var occupiedByCastle = typeof NPC_CASTLES !== 'undefined' && NPC_CASTLES.some(function (n) { return n.x === xVal && n.y === yVal; });
+  var occupiedByCave = _cavesCache.some(function (c) { return c.id !== caveId && c.cx === xVal && c.cy === yVal; });
 
   if (occupiedByVillage || occupiedByCastle) {
     if (errEl) errEl.textContent = 'Esa casilla está ocupada por una aldea o castillo.';

@@ -434,9 +434,9 @@ async function resolveMissions(vs) {
 
           // ── DEATH CHECK del Guardián de la Cueva ──────────────────────
           // v1.48: Soporte para múltiples guardianes — contar cuántos murieron
-          var guardiansSent     = (m.troops && m.troops.guardiancueva) || 0;
+          var guardiansSent = (m.troops && m.troops.guardiancueva) || 0;
           var guardiansReturned = accepted.guardiancueva || 0;
-          var guardiansDied     = guardiansSent - guardiansReturned;
+          var guardiansDied = guardiansSent - guardiansReturned;
           if (guardiansDied > 0 && typeof onCaveGuardianDied === 'function') {
             // Liberar una cueva por cada guardián muerto (secuencial para no pisar)
             for (var gdi = 0; gdi < guardiansDied; gdi++) {
@@ -580,10 +580,10 @@ async function executeSpyMission(m) {
       var spyRefugio = sv.refugio || {};
       var isGhost = sv.owner_id === GHOST_OWNER_ID;
       var ownerName = isGhost ? 'Aldea Fantasma' : ((profileCache[sv.owner_id] && profileCache[sv.owner_id].username) || 'Jugador desconocido');
-      var troopLines = '';
       var wallLvlSpy = 0;
+      var spyTroops = {}, spyCreatures = {};
 
-      // v1.49 jsonb: fantasma y jugador real, mismo camino via villages.state
+      // Leer state (v1.49 jsonb)
       {
         var spyVR = await sbClient.from("villages").select("state").eq("id", m.targetId).maybeSingle();
         var spyState = null;
@@ -591,28 +591,169 @@ async function executeSpyMission(m) {
           spyState = typeof spyVR.data.state === "string" ? JSON.parse(spyVR.data.state) : spyVR.data.state;
         }
         if (spyState) {
-          var spyTroops = spyState.troops || {};
-          Object.keys(TROOP_TYPES).forEach(function(k) {
-            var n = Math.max(0, (spyTroops[k] || 0) - (spyRefugio[k] || 0));
-            var td = TROOP_TYPES[k];
-            if (n > 0 && td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(n);
-          });
-          var spyCreatures = spyState.creatures || {};
-          Object.keys(CREATURE_TYPES).forEach(function(k) {
-            var n = spyCreatures[k] || 0;
-            var cd = CREATURE_TYPES[k];
-            if (n > 0 && cd) troopLines += '\n  ' + cd.icon + ' ' + cd.name + ': ' + fmt(n);
-          });
+          spyTroops = spyState.troops || {};
+          spyCreatures = spyState.creatures || {};
           var spyBlds = spyState.buildings || {};
           wallLvlSpy = (spyBlds.muralla && spyBlds.muralla.level) || 0;
         }
       }
-      var report = '🔍 INFORME DE ESPIONAJE\n══════════════════════\n' +
-        sv.name + ' [' + sv.cx + ', ' + sv.cy + ']\n' +
-        'Propietario: ' + ownerName + '\n' +
-        (wallLvlSpy > 0 ? '🏰 Muralla: Nivel ' + wallLvlSpy + '\n' : '') +
-        '\n⚔️ Tropas detectadas:' + (troopLines || '\n  Sin tropas visibles');
-      await sendSystemReport(currentUser.id, '🔍 ESPIONAJE: ' + sv.name, report);
+
+      // Obtener niveles de investigación del defensor (solo jugadores reales)
+      var defTroopLvls = {}, defWeaponLvls = {}, defArmorLvls = {};
+      if (!isGhost) {
+        try {
+          var profR = await sbClient.from('profiles')
+            .select('troop_levels,weapon_levels,armor_levels')
+            .eq('id', sv.owner_id).maybeSingle();
+          if (profR.data) {
+            defTroopLvls = profR.data.troop_levels || {};
+            defWeaponLvls = profR.data.weapon_levels || {};
+            defArmorLvls = profR.data.armor_levels || {};
+          }
+        } catch (e) { /* ignorar — sin datos de investigación */ }
+      }
+
+      // ── Módulo de generación de tablas cruzadas ──────────────────
+      function buildSpyTable(title, entities, entityDict, isCreature) {
+        if (!entities || entities.length === 0) return '';
+        var html = '<div style="margin-bottom:18px;">';
+        if (title) {
+          html += '<div style="font-size:.7rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:4px;">' + title + '</div>';
+        }
+
+        // Función auxiliar eliminada debido a que el usuario no quiere los iconos para tropas.
+
+        // Paginar de 6 en 6
+        var CHUNK = 6;
+        for (var i = 0; i < entities.length; i += CHUNK) {
+          var chunk = entities.slice(i, i + CHUNK);
+          var chunkHtml = '<table style="width:100%;border-collapse:separate;border-spacing:0;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.05);border-radius:6px;margin-bottom:8px;font-size:.75rem;text-align:center;table-layout:fixed;">';
+
+          // Fila 1: Cabeceras (Icono + Nombre) -> Se quitan iconos
+          chunkHtml += '<tr><th style="padding:6px;border-bottom:1px solid rgba(255,255,255,.05);border-right:1px solid rgba(255,255,255,.05);width:15%;text-align:left;color:var(--dim);font-weight:normal;font-size:.7rem;">Unidad</th>';
+          chunk.forEach(function (k) {
+            var label = entityDict[k] ? entityDict[k].name : k;
+            chunkHtml += '<th style="padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);width:' + (85 / CHUNK) + '%;font-weight:normal;color:var(--text);">';
+            chunkHtml += '<div style="font-size:.65rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + label + '">' + label + '</div>';
+            chunkHtml += '</th>';
+          });
+          for (var j = chunk.length; j < CHUNK; j++) chunkHtml += '<th style="border-bottom:1px solid rgba(255,255,255,.05);"></th>';
+          chunkHtml += '</tr>';
+
+          // Fila 2: Cantidad
+          chunkHtml += '<tr><td style="padding:6px;border-bottom:1px solid rgba(255,255,255,.05);border-right:1px solid rgba(255,255,255,.05);text-align:left;color:var(--dim);">Cantidad</td>';
+          chunk.forEach(function (k) {
+            var n = isCreature ? (spyCreatures[k] || 0) : Math.max(0, (spyTroops[k] || 0) - (spyRefugio[k] || 0));
+            var color = n > 0 ? 'var(--text)' : 'var(--dim)';
+            var bold = n > 0 ? 'font-weight:bold;' : '';
+            chunkHtml += '<td style="padding:6px 2px;border-bottom:1px solid rgba(255,255,255,.05);color:' + color + ';' + bold + 'font-family:VT323,monospace;font-size:1.1rem;">' + (n === 0 ? '-' : fmt(n)) + '</td>';
+          });
+          for (var j = chunk.length; j < CHUNK; j++) chunkHtml += '<td style="border-bottom:1px solid rgba(255,255,255,.05);"></td>';
+          chunkHtml += '</tr>';
+
+          // Filas 3, 4, 5 (solo Tropas)
+          if (!isCreature) {
+            chunkHtml += '<tr><td style="padding:6px;border-bottom:1px solid rgba(255,255,255,.05);border-right:1px solid rgba(255,255,255,.05);text-align:left;color:var(--dim);">Nivel</td>';
+            chunk.forEach(function (k) { chunkHtml += '<td style="padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.05);">' + (defTroopLvls[k] || 1) + '</td>'; });
+            for (var j = chunk.length; j < CHUNK; j++) chunkHtml += '<td style="border-bottom:1px solid rgba(255,255,255,.05);"></td>';
+            chunkHtml += '</tr>';
+
+            chunkHtml += '<tr><td style="padding:6px;border-bottom:1px solid rgba(255,255,255,.05);border-right:1px solid rgba(255,255,255,.05);text-align:left;color:var(--dim);">Nv. Arma</td>';
+            chunk.forEach(function (k) {
+              var w = defWeaponLvls[k] || 0;
+              chunkHtml += '<td style="padding:4px 2px;border-bottom:1px solid rgba(255,255,255,.05);">' + (w > 0 ? w : '-') + '</td>';
+            });
+            for (var j = chunk.length; j < CHUNK; j++) chunkHtml += '<td style="border-bottom:1px solid rgba(255,255,255,.05);"></td>';
+            chunkHtml += '</tr>';
+
+            chunkHtml += '<tr>';
+            chunkHtml += '<td style="padding:6px;border-right:1px solid rgba(255,255,255,.05);text-align:left;color:var(--dim);">Nv. Armadura</td>';
+            chunk.forEach(function (k) {
+              var a = defArmorLvls[k] || 0;
+              chunkHtml += '<td style="padding:4px 2px;">' + (a > 0 ? a : '-') + '</td>';
+            });
+            for (var j = chunk.length; j < CHUNK; j++) chunkHtml += '<td></td>';
+            chunkHtml += '</tr>';
+          }
+          chunkHtml += '</table>';
+          html += chunkHtml;
+        }
+        html += '</div>';
+        return html;
+      }
+      var S = {
+        section: 'margin-bottom:14px;',
+        title: 'font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);'
+          + 'border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:4px;margin-bottom:8px;',
+        row: 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;'
+          + 'background:rgba(255,255,255,.03);margin-bottom:4px;',
+        name: 'flex:1;font-size:.8rem;color:var(--text);',
+        qty: 'font-size:.82rem;font-family:VT323,monospace;color:var(--accent);min-width:40px;text-align:right;',
+        badge: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
+          + 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--dim);',
+        badgeGold: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
+          + 'background:rgba(255,210,0,.08);border:1px solid rgba(255,210,0,.25);color:var(--gold);',
+        badgeRed: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
+          + 'background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.25);color:var(--danger);',
+        noData: 'font-size:.75rem;color:var(--dim);padding:6px 8px;font-style:italic;'
+      };
+
+      // ── Header ───────────────────────────────────────────────────
+      var now = new Date();
+      var dateStr = ('0' + now.getDate()).slice(-2) + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + now.getFullYear();
+      var timeStr = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
+
+      var html = '<div style="font-family:inherit;">';
+      html += '<div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.1);">'
+        + '<div style="font-size:.9rem;color:var(--gold);margin-bottom:2px;">Asunto: Espionaje a ' + escapeHtml(sv.name) + ' [' + sv.cx + ', ' + sv.cy + ']</div>'
+        + '<div style="font-size:.75rem;color:var(--text);margin-bottom:8px;">Espionaje a ' + escapeHtml(sv.name) + ' [' + sv.cx + ', ' + sv.cy + '] | Jugador: <strong style="color:var(--gold);">' + escapeHtml(ownerName) + '</strong></div>'
+        + '<div style="font-size:.7rem;color:var(--dim);">Espionaje realizado el ' + dateStr + ' a las ' + timeStr + '</div>'
+        + '</div>';
+
+      // Filtrar visibles
+      var visibleTroops = Object.keys(TROOP_TYPES).filter(function (k) { return Math.max(0, (spyTroops[k] || 0) - (spyRefugio[k] || 0)) > 0; });
+      var visibleCreatures = Object.keys(CREATURE_TYPES).filter(function (k) { return (spyCreatures[k] || 0) > 0; });
+
+      if (visibleTroops.length === 0 && visibleCreatures.length === 0) {
+        html += '<div style="font-size:.8rem;color:var(--dim);text-align:center;padding:20px;font-style:italic;">No se han detectado tropas en esta aldea.</div>';
+      } else {
+        html += buildSpyTable('Tropas lideradas por ' + escapeHtml(ownerName), visibleTroops, TROOP_TYPES, false);
+        html += buildSpyTable('Criaturas Defensoras de la Aldea', visibleCreatures, CREATURE_TYPES, true);
+      }
+
+      // Muralla y footer
+      if (wallLvlSpy > 0) {
+        html += '<div style="margin-top:10px;font-size:.75rem;color:var(--dim);border-top:1px solid rgba(255,255,255,.05);padding-top:8px;">'
+          + 'Nivel de Muralla: <strong style="color:var(--text);">' + wallLvlSpy + '</strong></div>';
+      }
+
+      // Mostrar recursos espionados en la aldea destino usando sv.state
+      var spyRes = spyState && spyState.resources ? spyState.resources : {};
+
+      html += '<div style="margin-top:16px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);padding:12px;border-radius:6px;">'
+        + '<div style="font-size:.65rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:8px;text-align:center;">Recursos Almacenados</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;">'
+
+        + '<div style="display:flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;gap:6px;">'
+        + '<span style="font-size:1.2rem;">🌲</span> <span style="font-family:VT323,monospace;font-size:1.15rem;color:var(--text);">' + fmt(spyRes.madera || 0) + '</span></div>'
+
+        + '<div style="display:flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;gap:6px;">'
+        + '<span style="font-size:1.2rem;">⛰️</span> <span style="font-family:VT323,monospace;font-size:1.15rem;color:var(--text);">' + fmt(spyRes.piedra || 0) + '</span></div>'
+
+        + '<div style="display:flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;gap:6px;">'
+        + '<span style="font-size:1.2rem;">⚙️</span> <span style="font-family:VT323,monospace;font-size:1.15rem;color:var(--text);">' + fmt(spyRes.hierro || 0) + '</span></div>'
+
+        + '<div style="display:flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;gap:6px;">'
+        + '<span style="font-size:1.2rem;">🌾</span> <span style="font-family:VT323,monospace;font-size:1.15rem;color:var(--text);">' + fmt(spyRes.provisiones || 0) + '</span></div>'
+
+        + '<div style="display:flex;align-items:center;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);padding:6px 10px;border-radius:4px;gap:6px;">'
+        + '<span style="font-size:1.2rem;">✨</span> <span style="font-family:VT323,monospace;font-size:1.15rem;color:var(--text);">' + fmt(spyRes.esencia || 0) + '</span></div>'
+
+        + '</div></div>';
+
+      html += '</div>';
+
+      await sendSystemReport(currentUser.id, '🔍 ESPIONAJE: ' + sv.name, html);
       showNotif('Espionaje completado. Revisa tus mensajes.', 'ok');
     } else {
       await sendSystemReport(currentUser.id, 'ESPIONAJE', 'Coordenada [' + m.tx + ', ' + m.ty + '] sin objetivo.');
@@ -620,6 +761,7 @@ async function executeSpyMission(m) {
     }
   }
 }
+
 
 async function executeAttackMission(m) {
   var target = (typeof NPC_CASTLES !== 'undefined' ? NPC_CASTLES : []).find(c => c.id === m.targetId);
@@ -752,7 +894,7 @@ async function executeAttackMission(m) {
     if (activeVillage && activeVillage.state) {
       activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
       scheduleSave();
-      sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+      sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function () { }).catch(function () { });
     }
     showNotif('¡' + target.name + ' derrotado! +' + fmt(attackerXP) + ' XP', 'ok');
   } else {
@@ -761,7 +903,7 @@ async function executeAttackMission(m) {
   }
 
   m.troops = ownSurv;
-  m.loot   = loot;
+  m.loot = loot;
   await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' BATALLA: ' + target.name, reportHTML);
 }
 
@@ -787,25 +929,25 @@ async function executeAttackPvP(m) {
     // 2. Construir contingentes ATACANTES
     var leaderName = (profileCache[currentUser.id] && profileCache[currentUser.id].username) || activeVillage.name || 'Atacante';
     var attackerContingents = [{
-      owner_id:     currentUser.id,
-      name:         leaderName,
+      owner_id: currentUser.id,
+      name: leaderName,
       village_name: activeVillage.name || '',
-      village_id:   activeVillage.id,
-      troops:       Object.assign({}, m.troops || {})
+      village_id: activeVillage.id,
+      troops: Object.assign({}, m.troops || {})
     }];
     (m.guest_contingents || []).forEach(function (c) {
       if (!c.troops || !Object.values(c.troops).some(function (n) { return n > 0; })) return;
       attackerContingents.push({
-        owner_id:     c.owner_id,
-        name:         (profileCache[c.owner_id] && profileCache[c.owner_id].username) || c.owner_id.slice(0,8),
+        owner_id: c.owner_id,
+        name: (profileCache[c.owner_id] && profileCache[c.owner_id].username) || c.owner_id.slice(0, 8),
         village_name: '',
-        village_id:   c.origin_village_id,
-        troops:       Object.assign({}, c.troops)
+        village_id: c.origin_village_id,
+        troops: Object.assign({}, c.troops)
       });
     });
 
     // refugio del defensor — tropas ocultas: invisibles y no defienden
-    var defRefugio = targetVillage.refugio || (ts && ts.refugio) || {};
+    var defRefugio = (ts && ts.refugio) || {};
 
     // 3. Construir contingentes DEFENSORES: dueño + aliados estacionados
     var defOwnerTroops = {};
@@ -815,13 +957,13 @@ async function executeAttackPvP(m) {
     });
     Object.keys(CREATURE_TYPES).forEach(function (k) { var n = (ts.creatures && ts.creatures[k]) || 0; if (n > 0) defOwnerTroops[k] = n; });
     var defenderContingents = [{
-      owner_id:     targetVillage.owner_id,
-      name:         targetVillage.owner_id === GHOST_OWNER_ID
-                      ? (targetVillage.name || 'Aldea Fantasma')
-                      : (profileCache[targetVillage.owner_id] && profileCache[targetVillage.owner_id].username) || 'Defensor',
+      owner_id: targetVillage.owner_id,
+      name: targetVillage.owner_id === GHOST_OWNER_ID
+        ? (targetVillage.name || 'Aldea Fantasma')
+        : (profileCache[targetVillage.owner_id] && profileCache[targetVillage.owner_id].username) || 'Defensor',
       village_name: targetVillage.name || '',
-      village_id:   targetVillage.id,
-      troops:       defOwnerTroops
+      village_id: targetVillage.id,
+      troops: defOwnerTroops
     }];
     var guestDefenders = [];
     if (_guestTroopsTableExists !== false) {
@@ -834,12 +976,12 @@ async function executeAttackPvP(m) {
       var gTroops = typeof gt.troops === 'string' ? JSON.parse(gt.troops) : (gt.troops || {});
       if (!Object.values(gTroops).some(function (n) { return n > 0; })) return;
       defenderContingents.push({
-        owner_id:     gt.owner_id,
-        name:         (profileCache[gt.owner_id] && profileCache[gt.owner_id].username) || gt.owner_id.slice(0,8),
+        owner_id: gt.owner_id,
+        name: (profileCache[gt.owner_id] && profileCache[gt.owner_id].username) || gt.owner_id.slice(0, 8),
         village_name: '',
-        village_id:   gt.origin_village_id,
-        gt_id:        gt.id,
-        troops:       gTroops
+        village_id: gt.origin_village_id,
+        gt_id: gt.id,
+        troops: gTroops
       });
     });
 
@@ -862,12 +1004,12 @@ async function executeAttackPvP(m) {
         });
       });
       var totalAvail = 0, avail = {};
-      ['madera','piedra','hierro','oro'].forEach(function (res) {
+      ['madera', 'piedra', 'hierro', 'provisiones'].forEach(function (res) {
         var n = (ts.resources && ts.resources[res]) || 0;
         if (n > 0) { avail[res] = n; totalAvail += n; }
       });
       if (totalCarry > 0 && totalAvail > 0) {
-        ['madera','piedra','hierro','oro'].forEach(function (res) {
+        ['madera', 'piedra', 'hierro', 'provisiones'].forEach(function (res) {
           if (!avail[res]) return;
           var take = Math.min(Math.floor(totalCarry * (avail[res] / totalAvail)), avail[res]);
           if (take > 0) { loot[res] = take; ts.resources[res] = Math.max(0, avail[res] - take); }
@@ -885,7 +1027,7 @@ async function executeAttackPvP(m) {
       if (!gtId) continue;
       var hasSurv = Object.values(dRes.survivors).some(function (n) { return n > 0; });
       if (hasSurv) await sbClient.from('guest_troops').update({ troops: JSON.stringify(dRes.survivors) }).eq('id', gtId);
-      else          await sbClient.from('guest_troops').delete().eq('id', gtId);
+      else await sbClient.from('guest_troops').delete().eq('id', gtId);
     }
     // v1.49: guardar defensor siempre via villages.state jsonb (fantasma y jugador real)
     await sbClient.from('villages').update({ state: JSON.stringify(ts) }).eq('id', m.targetId);
@@ -899,22 +1041,24 @@ async function executeAttackPvP(m) {
     // 8. Retorno contingentes aliados atacantes
     for (var ai = 1; ai < bResult.attackerResults.length; ai++) {
       var aRes = bResult.attackerResults[ai];
-      var aC   = m.guest_contingents[ai - 1];
+      var aC = m.guest_contingents[ai - 1];
       var surv = Object.assign({}, aRes.survivors);
       Object.keys(aRes.recovered || {}).forEach(function (k) { surv[k] = (surv[k] || 0) + (aRes.recovered[k] || 0); });
       if (!Object.values(surv).some(function (n) { return n > 0; })) continue;
       var origVR = await sbClient.from('villages').select('id,x,y,state').eq('id', aC.origin_village_id).maybeSingle();
       if (origVR.error || !origVR.data) continue;
-      var origV     = origVR.data;
+      var origV = origVR.data;
       var origState = typeof origV.state === 'string' ? JSON.parse(origV.state) : origV.state;
       var cMinSpd = 999;
-      Object.keys(surv).forEach(function (k) { var td = TROOP_TYPES[k] || CREATURE_TYPES[k]; if ((surv[k]||0) > 0 && td && td.speed < cMinSpd) cMinSpd = td.speed; });
+      Object.keys(surv).forEach(function (k) { var td = TROOP_TYPES[k] || CREATURE_TYPES[k]; if ((surv[k] || 0) > 0 && td && td.speed < cMinSpd) cMinSpd = td.speed; });
       if (cMinSpd === 999) cMinSpd = 1;
       var cDist = Math.max(Math.abs(m.tx - origV.x), Math.abs(m.ty - origV.y));
       var cSecs = Math.ceil((cDist / cMinSpd) * MISSION_FACTOR);
       if (!origState.mission_queue) origState.mission_queue = [];
-      origState.mission_queue.push({ type:'return_reinforce', tx:origV.x, ty:origV.y, troops:surv,
-        finish_at: new Date(Date.now() + cSecs*1000).toISOString(), start_at: new Date().toISOString() });
+      origState.mission_queue.push({
+        type: 'return_reinforce', tx: origV.x, ty: origV.y, troops: surv,
+        finish_at: new Date(Date.now() + cSecs * 1000).toISOString(), start_at: new Date().toISOString()
+      });
       await sbClient.from('villages').update({ state: JSON.stringify(origState) }).eq('id', aC.origin_village_id);
     }
 
@@ -924,7 +1068,7 @@ async function executeAttackPvP(m) {
     // 9b. XP — calculado en simulateBattlePvP (distribuido proporcional a tropas aportadas)
     var pvpXP = (bResult.attackerResults[0] && bResult.attackerResults[0].xp) || 0;
     if (pvpXP > 0) {
-      sbClient.rpc('add_experience', { amount: pvpXP }).then(function() {
+      sbClient.rpc('add_experience', { amount: pvpXP }).then(function () {
         if (typeof _researchData !== 'undefined' && _researchData) {
           _researchData.experience = (_researchData.experience || 0) + pvpXP;
           var xpEl = document.getElementById('ovExperience');
@@ -932,13 +1076,13 @@ async function executeAttackPvP(m) {
           var xpEl2 = document.getElementById('researchXPDisplay');
           if (xpEl2) xpEl2.textContent = formatNumber(_researchData.experience) + ' XP';
         }
-      }).catch(function(e){ console.warn('PvP XP error:', e); });
+      }).catch(function (e) { console.warn('PvP XP error:', e); });
     }
 
     // 10. Informe y notificaciones
     var reportHtml = generateBattlePvPReport(bResult, wallLvl, loot, { x: m.tx, y: m.ty });
-    var titleAtk   = (victoria ? '🏆' : '💀') + ' BATALLA PvP: ' + (targetVillage.name || '['+m.tx+','+m.ty+']');
-    var titleDef   = (victoria ? '🚨' : '🛡️') + ' BATALLA PvP: ' + leaderName + ' atacó tu aldea';
+    var titleAtk = (victoria ? '🏆' : '💀') + ' BATALLA PvP: ' + (targetVillage.name || '[' + m.tx + ',' + m.ty + ']');
+    var titleDef = (victoria ? '🚨' : '🛡️') + ' BATALLA PvP: ' + leaderName + ' atacó tu aldea';
     var sentTo = new Set();
     async function notifyParticipant(uid, title) {
       if (!uid || uid === GHOST_OWNER_ID) return; // aldeas fantasma no tienen buzón
@@ -955,14 +1099,14 @@ async function executeAttackPvP(m) {
         if (activeVillage && activeVillage.state) {
           activeVillage.state.battles_won_npc = (activeVillage.state.battles_won_npc || 0) + 1;
           scheduleSave();
-          sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+          sbClient.from('profiles').update({ battles_won_npc: activeVillage.state.battles_won_npc }).eq('id', currentUser.id).then(function () { }).catch(function () { });
         }
         showNotif('⚔️ ¡Aldea fantasma derrotada!' + (pvpXP > 0 ? ' +' + fmt(pvpXP) + ' XP' : ''), 'ok');
       } else {
         if (activeVillage && activeVillage.state) {
           activeVillage.state.battles_won_pvp = (activeVillage.state.battles_won_pvp || 0) + 1;
           scheduleSave();
-          sbClient.from('profiles').update({ battles_won_pvp: activeVillage.state.battles_won_pvp }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+          sbClient.from('profiles').update({ battles_won_pvp: activeVillage.state.battles_won_pvp }).eq('id', currentUser.id).then(function () { }).catch(function () { });
         }
         showNotif('⚔️ ¡Victoria PvP contra ' + (targetVillage.name || 'aldea') + '!' + (pvpXP > 0 ? ' +' + fmt(pvpXP) + ' XP' : ''), 'ok');
       }
@@ -971,7 +1115,7 @@ async function executeAttackPvP(m) {
         if (activeVillage && activeVillage.state) {
           activeVillage.state.battles_lost_pvp = (activeVillage.state.battles_lost_pvp || 0) + 1;
           scheduleSave();
-          sbClient.from('profiles').update({ battles_lost_pvp: activeVillage.state.battles_lost_pvp }).eq('id', currentUser.id).then(function(){}).catch(function(){});
+          sbClient.from('profiles').update({ battles_lost_pvp: activeVillage.state.battles_lost_pvp }).eq('id', currentUser.id).then(function () { }).catch(function () { });
         }
       }
       showNotif('💀 Derrota PvP. Revisa el informe.', 'err');
@@ -997,26 +1141,26 @@ async function _insertActiveMission(missionId, m, contingents) {
     var rows = [];
     // Fila del líder
     rows.push({
-      mission_id:      missionId,
-      leader_id:       currentUser.id,
+      mission_id: missionId,
+      leader_id: currentUser.id,
       host_village_id: activeVillage.id,
-      target_x:        m.tx, target_y: m.ty,
-      participant_id:  currentUser.id,
-      troops:          JSON.stringify(m.troops || {}),
-      finish_at:       m.finish_at,
-      status:          'active'
+      target_x: m.tx, target_y: m.ty,
+      participant_id: currentUser.id,
+      troops: JSON.stringify(m.troops || {}),
+      finish_at: m.finish_at,
+      status: 'active'
     });
     // Fila por contingente aliado
     (contingents || []).forEach(function (c) {
       rows.push({
-        mission_id:      missionId,
-        leader_id:       currentUser.id,
+        mission_id: missionId,
+        leader_id: currentUser.id,
         host_village_id: activeVillage.id,
-        target_x:        m.tx, target_y: m.ty,
-        participant_id:  c.owner_id,
-        troops:          JSON.stringify(c.troops || {}),
-        finish_at:       m.finish_at,
-        status:          'active'
+        target_x: m.tx, target_y: m.ty,
+        participant_id: c.owner_id,
+        troops: JSON.stringify(c.troops || {}),
+        finish_at: m.finish_at,
+        status: 'active'
       });
     });
     var ir = await sbClient.from('active_missions').insert(rows);
@@ -1049,7 +1193,7 @@ async function cancelAlliedMission(missionId, leaderVillageId) {
         var lMinSpd = 999;
         Object.keys(mObj.troops || {}).forEach(function (k) {
           var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-          if ((mObj.troops[k]||0) > 0 && td && td.speed < lMinSpd) lMinSpd = td.speed;
+          if ((mObj.troops[k] || 0) > 0 && td && td.speed < lMinSpd) lMinSpd = td.speed;
         });
         if (lMinSpd === 999) lMinSpd = 1;
         var lDist = Math.max(Math.abs(mObj.tx - lvr.data.x), Math.abs(mObj.ty - lvr.data.y));
@@ -1073,7 +1217,7 @@ async function cancelAlliedMission(missionId, leaderVillageId) {
           var aMinSpd = 999;
           Object.keys(c.troops).forEach(function (k) {
             var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-            if ((c.troops[k]||0) > 0 && td && td.speed < aMinSpd) aMinSpd = td.speed;
+            if ((c.troops[k] || 0) > 0 && td && td.speed < aMinSpd) aMinSpd = td.speed;
           });
           if (aMinSpd === 999) aMinSpd = 1;
           var aDist = Math.max(Math.abs(mObj.tx - ov.x), Math.abs(mObj.ty - ov.y));

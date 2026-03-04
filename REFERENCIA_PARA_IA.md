@@ -1,137 +1,188 @@
-# REFERENCIA PARA IA — Epic Warriors
-
-## ⚠️ REGLA CRÍTICA: ARCHIVOS Y UPLOADS
-
-**Los archivos subidos en turnos anteriores NO persisten en disco entre turnos.**
-- Solo están disponibles los archivos subidos en el turno ACTUAL de la conversación.
-- Si necesito modificar un archivo, el usuario DEBE subirlo en el mismo mensaje donde pide el cambio.
-- Nunca asumir que un archivo está disponible porque fue subido antes.
-- Si el archivo no está en `/mnt/user-data/uploads/`, pedirlo antes de proceder.
-- **Siempre entregar los archivos completos y listos en `/mnt/user-data/outputs/`** — nunca instrucciones de cómo parchearlos manualmente.
+# REFERENCIA PARA IA — Epic Warriors v1.51
 
 ---
 
-## Estado del proyecto: Epic Warriors v1.49
+## ⚠️ REGLAS CRÍTICAS DE OPERACIÓN
 
-### Archivos entregados en v1.49
+1. **Solo existen los archivos subidos en el turno ACTUAL.** Nunca asumir que un upload anterior sigue disponible.
+2. **Si el archivo está en el contexto del documento → ir directo a crear el output. Sin `ls`, sin `bash`, sin intentar leerlo desde disco.** Es el mayor desperdicio de tokens — evitarlo siempre.
+3. **Entregar siempre archivo completo en `/mnt/user-data/outputs/`** — nunca instrucciones manuales de parcheo.
+4. Si falta un archivo necesario → pedirlo. Solo pedir LO NECESARIO (ver tabla workflow).
 
-| Archivo | Cambio | Estado |
-|---------|--------|--------|
-| index.html | v1.49: load/save/score/createVillage → jsonb | ✅ Entregado v1.49 |
-| game-ui.js | v1.49: transport/syncResources/refuerzos → jsonb | ✅ Entregado v1.49 |
-| game-engine.js | v1.49: espionaje + combate PvP → jsonb | ✅ Entregado v1.49 |
-| game-admin.js | v1.49: info usuario + borrado → jsonb | ✅ Entregado v1.49 |
-| game-caves.js | v1.49: write legacy guardiancueva eliminado | ✅ Entregado v1.49 |
-| game-troops.js | Sin cambios (no accede a Supabase) | ✅ v1.47 |
-| game-combat.js | Sin cambios (motor puro en memoria) | ✅ v1.46 |
+---
+
+## 🔑 WORKFLOW ANTI-SOBRECARGA (validado v1.50)
+
+**Regla de oro: ARQUITECTURA.md + REFERENCIA_PARA_IA.md siempre en contexto, más SOLO el archivo que toca.**
+
+| Cambio | Archivo necesario |
+|---|---|
+| Bug UI / render / cola | Solo `game-ui.js` |
+| Bug de combate | Solo `game-combat.js` |
+| Bug de misiones/red | Solo `game-engine.js` |
+| Tropas/criaturas UI | Solo `game-troops.js` |
+| Cuevas | Solo `game-caves.js` |
+| Admin | Solo `game-admin.js` |
+| Bug HTML/estructura | Solo `index.html` |
+| Bug multi-archivo | Máximo 2 archivos por turno |
+
+---
+
+## Estado del proyecto: Epic Warriors v1.51
+
+| Archivo | Versión | Notas |
+|---------|---------|-------|
+| index.html | **v1.51** | ✅ |
+| game-ui.js | v1.50 | ✅ |
+| game-engine.js | **v1.51** | ✅ fix botín PvP provisiones + defRefugio |
+| game-admin.js | v1.49 | ✅ |
+| game-caves.js | v1.49 | ✅ |
+| game-troops.js | v1.47 | ✅ sin cambios |
+| game-combat.js | v1.46 | ✅ sin cambios |
+| game-social.js | v1.45 | ✅ sin cambios |
+| game-smithy.js | v1.44 | ✅ sin cambios |
+
+---
+
+## v1.51 — Fix botín PvP + cleanup
+
+**Bug crítico:** `executeAttackPvP` calculaba el botín con `['madera','piedra','hierro','oro']`. El recurso `oro` no existe — el juego usa `provisiones`. Las provisiones del defensor **nunca se robaban** en PvP.
+
+**Fix:**
+```js
+// ANTES ❌
+['madera','piedra','hierro','oro'].forEach(...)
+// DESPUÉS ✅
+['madera','piedra','hierro','provisiones'].forEach(...)
+```
+(Afectaba dos bucles en las líneas 865 y 870 de game-engine.js)
+
+**Cleanup adicional (game-engine.js línea 808):**
+```js
+// ANTES (orden engañoso — targetVillage.refugio no existe como columna)
+var defRefugio = targetVillage.refugio || (ts && ts.refugio) || {};
+// DESPUÉS ✅
+var defRefugio = (ts && ts.refugio) || {};
+```
+
+**Fix HTML (index.html línea 261):**
+```html
+<!-- ANTES: atributo style duplicado —el navegador ignora el primero -->
+<div class="card" style="margin-bottom:14px;" id="ovReinforcementsCard" style="display:none;">
+<!-- DESPUÉS ✅ -->
+<div class="card" style="margin-bottom:14px;display:none;" id="ovReinforcementsCard">
+```
+
+**Nota:** Los IDs `movItems`/`movItemsOv` ya estaban en index.html (líneas 255 y 321). El pendiente de v1.50 ya estaba resuelto.
+
+---
+
+## v1.50 — Fix renderQueue
+
+**Bug:** misiones aparecían duplicadas en "EN CONSTRUCCIÓN" porque `renderQueue()` usaba los mismos contenedores para construcción y misiones.
+
+**Fix:**
+```js
+// ANTES ❌
+var mIds = ['qItems', 'qItemsOv'];
+// DESPUÉS ✅
+var mIds = ['movItems', 'movItemsOv'];
+// + if (!el) return;  ← null-check de seguridad
+```
 
 ---
 
 ## Reglas críticas por módulo
 
+### game-ui.js
+- `renderQueue(vs)` — construcción → `qItems/qItemsOv`, misiones → `movItems/movItemsOv`
+- `snapshotResources(vs)` — única función que congela recursos antes de guardar
+- `calcRes(vs)` — solo lectura, NUNCA escribe en `state.resources`
+
 ### game-engine.js
-- **Espionaje (jugador real Y fantasma)** → leer desde `villages.state` jsonb — un solo camino para ambos
-- **executeAttackPvP carga** → `villages.state` jsonb — sin fallback a tablas separadas
-- **Guardar resultado combate (jugador real Y fantasma)** → `villages.update({ state: JSON.stringify(ts) })` — un solo camino
+- Espionaje y combate PvP (jugador real Y fantasma) → siempre via `villages.state` jsonb
+- Sin bifurcación `isGhost` para datos de aldea
+- `MISSION_FACTOR = 3600` (velocidades en casillas/hora)
 
 ### game-caves.js
-- `guardiancueva` existe en `CREATURE_TYPES` y vive en `state.creatures` igual que cualquier criatura
-- Al liberar guardián (admin): actualizar `state.creatures.guardiancueva = 0` en `villages.state`
-- Al borrar usuario: liberar sus cuevas con `caves.update({status:'wild', owner_id:null, village_id:null})`
+- `guardiancueva` vive en `state.creatures` igual que cualquier criatura
+- Fallback en línea ~472 garantiza que existe en `CREATURE_TYPES` antes de usarlo
+- Al borrar usuario: `caves.update({status:'wild', owner_id:null, village_id:null})`
+- Al capturar: `vs.creatures.guardiancueva = 1`
+- Al morir: llamar `onCaveGuardianDied(villageId, ownerId)`
 
 ### game-admin.js — orden de borrado de usuario
 ```
-alliance_members → messages (sender) → thread_members → player_objectives
+alliance_members → messages → thread_members → player_objectives
 → caves (liberar) → villages → profiles
 ```
-- `troops`, `resources`, `creatures` ya NO existen — no intentar borrarlas
+- `troops`, `resources`, `creatures` NO existen como tablas — no intentar borrarlas
+- `ranking` NO existe como tabla
 - Tabla correcta: `player_objectives` (no `objectives`)
-- `ranking` no existe como tabla — no intentar borrar
-- `renderAdminUsersList` solo llamar si `document.getElementById('adminUsersList')` existe
+- `renderAdminUsersList` — solo llamar si `document.getElementById('adminUsersList')` existe
+
+### game-troops.js
+- `renderCaughtCreatures()` — renderiza `guardiancueva` separado con estilo dorado "⛏️ CAPTURADO"
+- `renderCreaturesList()` — excluye `guardiancueva`
+
+### game-social.js
+- `renderThreads`: Sistema → "Informes del sistema" | Alianza → "Chat [TAG]" | DM → nombre jugador
+- `threadMeta()`: devuelve `{ icon, color, label }` por tipo
 
 ---
 
-## Arquitectura general
+## Modelo de datos v1.49 — JSON blob único
 
-### Sistema de velocidad (v1.44+)
-- Todas las velocidades de tropas están en **casillas/hora (cas/h)**
-- `MISSION_FACTOR = 3600` en game-combat.js
-
-### Sistema de mensajes (v1.45+)
-- `renderThreads`: muestra nombre descriptivo sin ID
-  - Sistema → "Informes del sistema"
-  - Alianza → "Chat [TAG]"
-  - DM → nombre del otro jugador
-- `threadMeta()`: devuelve `{ icon, color, label }` por tipo
-
-### Sistema de cuevas (v1.46+)
-- `CAVES_TOTAL = 10` cuevas en el mundo (wild + capturadas)
-- Misión tipo `cave_attack` → resuelve en `executeAttackCave()`
-- Al capturar: guardián pasa a `vs.creatures.guardiancueva = 1` (dentro de `state`)
-- Al morir en combate: llamar `onCaveGuardianDied(villageId, ownerId)`
-
-### Sistema de Criaturas Cazadas (v1.47+)
-- **`guardiancueva`** es criatura especial: se captura en cuevas, NO se invoca
-- Se renderiza SEPARADAMENTE en `renderCaughtCreatures()` (no en `renderCreaturesList()`)
-- Apartado visual diferenciado: estilo dorado, label "⛏️ CAPTURADO"
-- Se persiste en `state.creatures.guardiancueva` dentro del jsonb de `villages`
-- **Regla crítica**: `guardiancueva` SIEMPRE debe existir en `CREATURE_TYPES` ANTES de usarlo
-  - Fallback en game-caves.js línea ~472 garantiza existencia
-  - Si se usa sin estar definido → error en combate
-- Se puede usar en ataques/espías como cualquier criatura (sin restricción)
-- Al atacar con guardián y perder → cueva reaparece en el mapa (llama `onCaveGuardianDied()`)
-
-### Modelo de datos v1.49 — JSON blob único
-Desde v1.49 **todos** los datos de aldea (jugadores y fantasmas) viven en `villages.state` jsonb:
-
+Todos los datos de aldea en `villages.state` jsonb:
 ```json
 {
-  "resources":          { "madera": 0, "piedra": 0, "hierro": 0, "provisiones": 0, "esencia": 0, "aldeanos": 0 },
-  "aldeanos_assigned":  { "madera": 0, "piedra": 0, "hierro": 0, "provisiones": 0, "esencia": 0 },
-  "troops":             { "aldeano": 0, "soldado": 0, ... },
-  "creatures":          { "dragon": 0, "fenix": 0, "guardiancueva": 0, ... },
-  "buildings":          { "aserradero": { "level": 0 }, "muralla": { "level": 0 }, ... },
-  "build_queue":        null,
-  "mission_queue":      [],
-  "summoning_queue":    [],
-  "training_queue":     [],
-  "last_updated":       "ISO string",
-  "last_aldeano_at":    null,
-  "refugio":            {}
+  "resources":         { "madera": 0, "piedra": 0, "hierro": 0, "provisiones": 0, "esencia": 0, "aldeanos": 0 },
+  "aldeanos_assigned": { "madera": 0, "piedra": 0, "hierro": 0, "provisiones": 0, "esencia": 0 },
+  "troops":            { "aldeano": 0, "soldado": 0 },
+  "creatures":         { "dragon": 0, "guardiancueva": 0 },
+  "buildings":         { "aserradero": { "level": 0 }, "muralla": { "level": 0 } },
+  "build_queue":       null,
+  "mission_queue":     [],
+  "summoning_queue":   [],
+  "training_queue":    [],
+  "last_updated":      "ISO string",
+  "last_aldeano_at":   null,
+  "refugio":           {}
 }
 ```
 
-Las tablas `troops`, `creatures`, `buildings`, `resources` **ya no existen** (eliminadas en v1.49).
-El trigger `trigger_create_creatures` **ya no existe**.
-La RPC `admin_ghost_create` crea fantasmas con `state` jsonb directamente.
-
-### Archivos principales
-- `game-constants.js` — TROOP_TYPES, CREATURE_TYPES, constantes globales
-- `game-combat.js` — motor de batalla, MISSION_FACTOR, defaultTroops/defaultCreatures
-- `game-troops.js` — gestión de tropas, showTroopStats
-- `game-engine.js` — calcRes, misiones, resolveMissions, executeXxx
-- `game-ui.js` — UI principal, calcMissionETA, render de paneles, openMissionModal
-- `game-social.js` — ranking, investigación, alianzas, mensajes
-- `game-caves.js` — sistema de cuevas completo + panel admin de cuevas
-- `game-admin.js` — panel de administración, borrado de usuarios, aldeas fantasma
-
-### Base de datos (Supabase) — tablas relevantes
-- `profiles` — usuario: experience, troop_levels, weapon_levels, armor_levels
-- `villages` — aldeas: owner_id, cx, cy, **state jsonb** (troops + creatures + buildings + resources + colas)
-- `caves` — id, cx, cy, status, owner_id, village_id
-- `guest_troops` — tropas de refuerzo en aldeas ajenas
-- `player_objectives` — estado de objetivos NPC por jugador (no "objectives")
-- `alliance_members` — user_id, alliance_id, role, status
-- `message_threads` — thread_type: 'system' | 'dm' | 'alliance'
-- `thread_members` — user_id, thread_id, last_read_at
-- `messages` — thread_id, sender_id, body, read
+- Tablas `troops`, `creatures`, `buildings`, `resources` → **eliminadas en v1.49**
+- Trigger `trigger_create_creatures` → **eliminado en v1.49**
+- RPC `admin_ghost_create` → crea fantasmas con `state` jsonb directamente
 
 ---
 
-## Workflow para la IA
+## Base de datos (tablas activas)
 
-1. Al inicio de cada sesión, leer este archivo y ARQUITECTURA.md
-2. Verificar qué archivos están en `/mnt/user-data/uploads/` antes de empezar
-3. Si falta algún archivo necesario → pedirlo al usuario
-4. Aplicar cambios y entregar **archivo completo** en `/mnt/user-data/outputs/`
-5. Nunca entregar instrucciones manuales de parcheo
+| Tabla | Contenido |
+|---|---|
+| `profiles` | experience, troop_levels, weapon_levels, armor_levels |
+| `villages` | owner_id, cx, cy, **state jsonb** |
+| `caves` | id, cx, cy, status, owner_id, village_id |
+| `guest_troops` | tropas de refuerzo en aldeas ajenas |
+| `player_objectives` | estado objetivos NPC (no "objectives") |
+| `alliance_members` | user_id, alliance_id, role, status |
+| `message_threads` | thread_type: 'system' \| 'dm' \| 'alliance' |
+| `thread_members` | user_id, thread_id, last_read_at |
+| `messages` | thread_id, sender_id, body, read |
+
+---
+
+## Sistema de guardado
+```
+scheduleSave() → _stateDirty = true → setTimeout(flushVillage, 2000)
+flushVillage() → saveVillage(activeVillage) → escribe en Supabase
+```
+**El tick NUNCA puede llamar a Supabase.**
+
+## Orden de carga de scripts (fijo, no reordenar)
+```
+game-globals → game-data → game-constants → game-troops → game-combat
+→ game-engine → game-ui → game-social → game-smithy → game-auth
+→ game-simulator → game-admin → css
+```

@@ -6,14 +6,13 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.48</title>
+  <title>Epic Warriors Online v1.50</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- ⚠️ game-globals.js PRIMERO — define sbClient y globals antes que cualquier módulo -->
-  <script src="game-globals.js?v=1.47"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.47">
+  <script src="game-globals.js?v=1.50"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.50">
 </head>
 
 <body>
@@ -40,7 +39,6 @@
         <div class="auth-field"><label class="auth-label">Nombre de usuario</label><input class="auth-input" type="text"
             id="rUser" oninput="onUserInput()" placeholder="Ej: Jesus_33" maxlength="15" autocapitalize="off"
             autocomplete="nickname"></div>
-
         <div class="auth-field"><label class="auth-label">Email</label><input class="auth-input" type="email"
             id="rEmail" placeholder="comandante@galaxia.com" onkeypress="if(event.key==='Enter')doRegister()"></div>
         <div class="auth-field"><label class="auth-label">Contrasena</label><input class="auth-input" type="password"
@@ -165,7 +163,8 @@
           <div class="nav-label">Militar</div>
           <div class="nav-item" onclick="showPage('fleet',this)"><span class="nav-icon">⚔️</span> Tropas</div>
           <div class="nav-item" onclick="showPage('creatures',this)"><span class="nav-icon">🐉</span> Criaturas</div>
-          <div class="nav-item" onclick="showPage('defense',this);renderRefugio()"><span class="nav-icon">&#x1F6E1;</span> Defensa</div>
+          <div class="nav-item" onclick="showPage('defense',this);renderRefugio()"><span
+              class="nav-icon">&#x1F6E1;</span> Defensa</div>
           <div class="nav-item" onclick="window.open('battle-simulator.html','_blank')"><span
               class="nav-icon">&#x2694;&#xFE0F;</span> Simulador</div>
         </div>
@@ -173,16 +172,16 @@
           <div class="nav-label">Ciencia</div>
           <div class="nav-item" onclick="showPage('research',this)"><span class="nav-icon">&#x1F52C;</span>
             Investigacion</div>
-          <div class="nav-item" onclick="showPage('smithy',this);renderSmithy()"><span class="nav-icon">🔨</span> Herrería</div>
+          <div class="nav-item" onclick="showPage('smithy',this);renderSmithy()"><span class="nav-icon">🔨</span>
+            Herrería</div>
         </div>
         <div class="nav-section">
           <div class="nav-label">Social</div>
           <div class="nav-item" onclick="showPage('ranking',this)"><span class="nav-icon">&#x1F3C6;</span> Ranking</div>
           <div class="nav-item" onclick="showPage('alliances',this)"><span class="nav-icon">&#x1F6E1;</span> Alianzas
           </div>
-          <div class="nav-item" id="navMessages" onclick="showPage('messages',this)"><span
-              class="nav-icon">📨</span> Mensajes<span id="msgBadge" class="msg-badge"
-              style="display:none;">0</span>
+          <div class="nav-item" id="navMessages" onclick="showPage('messages',this)"><span class="nav-icon">📨</span>
+            Mensajes<span id="msgBadge" class="msg-badge" style="display:none;">0</span>
           </div>
         </div>
       </nav>
@@ -251,19 +250,22 @@
             </div>
           </div>
 
-          <!-- Troop movement alerts -->
+          <!-- Troop movement panel — renderMissionsPanel() escribe aquí (id=movItemsOv) -->
           <div class="card" style="margin-bottom:14px;">
             <div class="h2">🗺 MOVIMIENTOS</div>
-            <div id="ovAlertsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin movimientos activos.</div>
+            <div id="movItemsOv" style="margin-top:8px;">
+              <span style="color:var(--dim);font-size:.8rem;">Sin movimientos activos.</span>
+            </div>
           </div>
 
           <!-- Refuerzos estacionados en esta aldea -->
-          <div class="card" style="margin-bottom:14px;" id="ovReinforcementsCard" style="display:none;">
+          <div class="card" style="margin-bottom:14px;display:none;" id="ovReinforcementsCard">
             <div class="h2">🛡️ REFUERZOS AQUÍ</div>
-            <div id="ovReinforcementsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin refuerzos estacionados.</div>
+            <div id="ovReinforcementsBox" style="margin-top:8px;font-size:.8rem;color:var(--dim);">Sin refuerzos
+              estacionados.</div>
           </div>
 
-          <!-- Build queue -->
+          <!-- Build queue — SOLO construcción, misiones van a movItemsOv -->
           <div class="queue-panel">
             <div class="queue-title">EN CONSTRUCCIÓN</div>
             <div class="queue-empty" id="qEmptyOv">Sin construcciones activas.</div>
@@ -282,12 +284,14 @@
             <div style="display:flex;gap:0;flex-wrap:wrap;">
               <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
                 <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">LIBRES</div>
-                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--aldeanos);" id="recAldLibres">0</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--aldeanos);" id="recAldLibres">0
+                </div>
               </div>
               <div style="width:1px;background:var(--border);"></div>
               <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
                 <div style="font-size:.58rem;color:var(--dim);letter-spacing:.1em;margin-bottom:2px;">TRABAJANDO</div>
-                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--accent2);" id="recAldWorking">0</div>
+                <div style="font-family:VT323,monospace;font-size:1.1rem;color:var(--accent2);" id="recAldWorking">0
+                </div>
               </div>
               <div style="width:1px;background:var(--border);"></div>
               <div style="flex:1;min-width:80px;text-align:center;padding:4px 8px;">
@@ -306,7 +310,7 @@
           <div class="recursos-grid" id="recursosGrid"></div>
         </div>
 
-        <!-- ADMIN USUARIOS PAGE -->
+        <!-- BUILDINGS PAGE -->
         <div class="page" id="page-buildings">
           <div class="page-title">EDIFICIOS</div>
           <div class="page-sub">Construye y mejora las estructuras de tu colonia</div>
@@ -314,6 +318,11 @@
             <div class="queue-title">COLA DE CONSTRUCCION</div>
             <div class="queue-empty" id="qEmpty">Sin construcciones activas.</div>
             <div id="qItems"></div>
+          </div>
+          <!-- Movimientos activos (todas las aldeas) — renderQueue escribe aquí -->
+          <div class="queue-panel" style="margin-top:10px;">
+            <div class="queue-title">MOVIMIENTOS</div>
+            <div id="movItems"></div>
           </div>
           <div class="bld-grid" id="bldGrid"></div>
         </div>
@@ -409,13 +418,14 @@
 
           <div class="card" style="margin-bottom:14px;">
             <div class="h2">⚔️ RECLUTAR</div>
-            <div class="muted" style="font-size:.65rem;margin-bottom:10px;">Pulsa el icono de cada tropa para ver sus estadísticas completas.</div>
+            <div class="muted" style="font-size:.65rem;margin-bottom:10px;">Pulsa el icono de cada tropa para ver sus
+              estadísticas completas.</div>
             <div id="trainOptionsBox" style="margin-top:10px;"></div>
           </div>
 
-          <!-- troopsListBox eliminado — integrado en trainOptionsBox -->
           <div id="troopsListBox" style="display:none;"></div>
         </div>
+
         <div class="page" id="page-creatures">
           <div class="page-title">🐉 CRIATURAS</div>
           <div class="page-sub">No ocupan barracas · No consumen provisiones · Requieren invocadores</div>
@@ -428,13 +438,11 @@
             <div id="summoningQueueBox" style="margin-top:4px;">—</div>
           </div>
 
-
           <div class="card" style="margin-bottom:14px;">
             <div class="h2">👹 TUS CRIATURAS</div>
             <div id="creaturesListBox" style="margin-top:10px;"></div>
           </div>
 
-          <!-- ⛏️ v1.47: Apartado de Criaturas Cazadas -->
           <div class="card" style="margin-bottom:14px;">
             <div class="h2">⛏️ CRIATURAS CAZADAS</div>
             <div id="caughtCreaturesBox" style="margin-top:10px;"></div>
@@ -445,9 +453,11 @@
             <div id="summonBox" style="margin-top:10px;"></div>
           </div>
         </div>
+
         <div class="page" id="page-defense">
           <div class="page-title">🛡️ DEFENSA</div>
-          <div class="page-sub">Oculta tropas en el Refugio · Invisibles a espías · No defienden mientras están dentro</div>
+          <div class="page-sub">Oculta tropas en el Refugio · Invisibles a espías · No defienden mientras están dentro
+          </div>
           <div id="refugioContent">
             <div class="muted" style="padding:20px;text-align:center;">Cargando…</div>
           </div>
@@ -461,27 +471,29 @@
               ver el resultado estimado del combate antes de enviar tus tropas.</p>
           </div>
         </div>
+
         <div class="page" id="page-research">
           <div class="page-title">CENTRO DE INVESTIGACIÓN</div>
           <div class="page-sub">Gasta experiencia de combate para subir el nivel de tus tropas · Máximo nivel 30</div>
 
-          <!-- XP disponible -->
-          <div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div class="card"
+            style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div>
-              <div class="muted" style="font-size:.65rem;letter-spacing:.1em;margin-bottom:3px;">EXPERIENCIA DISPONIBLE</div>
-              <div id="researchXPDisplay" style="font-size:1.4rem;color:var(--gold);font-family:VT323,monospace;">—</div>
+              <div class="muted" style="font-size:.65rem;letter-spacing:.1em;margin-bottom:3px;">EXPERIENCIA DISPONIBLE
+              </div>
+              <div id="researchXPDisplay" style="font-size:1.4rem;color:var(--gold);font-family:VT323,monospace;">—
+              </div>
             </div>
             <button class="btn btn-sm" onclick="renderResearch()" style="font-size:.68rem;">↻ Actualizar</button>
           </div>
 
-          <!-- Tabla de tropas -->
           <div class="card" id="researchTroopGrid" style="display:grid;gap:12px;">
             <div class="muted">Cargando…</div>
           </div>
 
-          <!-- Leyenda stats -->
           <div class="muted" style="margin-top:10px;font-size:.65rem;text-align:center;padding:8px;">
-            Cada nivel mejora Daño, HP, Defensa y Prob. Golpe · Los aldeanos cuestan XP reducida · Nv. máx: <strong style="color:var(--gold);">30</strong>
+            Cada nivel mejora Daño, HP, Defensa y Prob. Golpe · Los aldeanos cuestan XP reducida · Nv. máx: <strong
+              style="color:var(--gold);">30</strong>
           </div>
         </div>
 
@@ -499,7 +511,8 @@
           <div class="card">
             <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px;">
               <div class="muted" style="font-size:.68rem;">Actualización automática cada 6h</div>
-              <button class="btn btn-sm" onclick="forceRefreshRanking()" style="font-size:.68rem;padding:3px 10px;">↻ Actualizar</button>
+              <button class="btn btn-sm" onclick="forceRefreshRanking()" style="font-size:.68rem;padding:3px 10px;">↻
+                Actualizar</button>
             </div>
             <div id="rankingBox"></div>
           </div>
@@ -509,7 +522,6 @@
           <div class="page-title">ALIANZAS</div>
           <div class="page-sub">Forma alianzas con otros jugadores · Coordina ataques · Chat privado de alianza</div>
 
-          <!-- CABECERA MI ALIANZA -->
           <div class="card" style="margin-bottom:14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
               <div class="h2">MI ALIANZA</div>
@@ -518,7 +530,6 @@
             <div id="myAllianceBox" class="muted">Cargando&#x2026;</div>
           </div>
 
-          <!-- SIN ALIANZA -->
           <div id="alNoAlliancePanel">
             <div class="grid2">
               <div class="card">
@@ -545,7 +556,6 @@
             </div>
           </div>
 
-          <!-- MIEMBRO ACTIVO (no l&#xED;der) -->
           <div id="alMemberPanel" style="display:none;">
             <div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent);">
               <div class="h2" style="margin-bottom:6px;">📢 Tablón de anuncios</div>
@@ -568,7 +578,6 @@
             </div>
           </div>
 
-          <!-- L&#xCD;DER -->
           <div id="alLeaderPanel" style="display:none;">
             <div class="grid2">
               <div class="card">
@@ -611,14 +620,13 @@
             </div>
           </div>
 
-          <!-- PENDIENTE / INVITADO -->
           <div id="alPendingPanel" style="display:none;">
             <div class="card">
               <div id="alPendingStatusBox" class="muted">Cargando&#x2026;</div>
               <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;" id="alPendingActions"></div>
             </div>
           </div>
-          <!-- v1.22: Ranking colectivo de alianzas -->
+
           <div class="card" style="margin-top:14px;">
             <div class="h2">🏆 Ranking de alianzas</div>
             <div id="allianceRankingBox" class="muted" style="margin-top:8px;">Cargando&#x2026;</div>
@@ -632,15 +640,11 @@
           <div
             style="display:grid;grid-template-columns:280px 360px 1fr;gap:16px;height:calc(100vh - 200px);min-height:420px;">
 
-            <!-- ── PANEL IZQUIERDO: bandeja ────────────────────── -->
             <div
               style="display:flex;flex-direction:column;gap:0;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-
-              <!-- Cabecera + acciones rápidas -->
               <div style="padding:14px 14px 10px;border-bottom:1px solid var(--border);">
-                <div style="font-size:.65rem;letter-spacing:.12em;color:var(--dim);margin-bottom:10px;">CONVERSACIONES</div>
-
-                <!-- DM -->
+                <div style="font-size:.65rem;letter-spacing:.12em;color:var(--dim);margin-bottom:10px;">CONVERSACIONES
+                </div>
                 <div style="display:flex;gap:6px;margin-bottom:8px;">
                   <input id="dmUser" placeholder="Username para DM…"
                     style="flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-family:VT323,monospace;font-size:.78rem;outline:none;"
@@ -649,37 +653,30 @@
                     style="padding:5px 10px;background:rgba(240,192,64,.1);border:1px solid var(--accent);border-radius:4px;color:var(--accent);font-family:VT323,monospace;font-size:.75rem;cursor:pointer;white-space:nowrap;">✉
                     DM</button>
                 </div>
-
-                <!-- Botones rápidos -->
                 <div style="display:flex;gap:6px;">
                   <button onclick="openAllianceChat()"
-                    style="flex:1;padding:5px 4px;background:rgba(96,208,96,.08);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">⚔ Alianza</button>
+                    style="flex:1;padding:5px 4px;background:rgba(96,208,96,.08);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">⚔
+                    Alianza</button>
                   <button onclick="openSystemThread()"
-                    style="flex:1;padding:5px 4px;background:rgba(192,96,255,.08);border:1px solid var(--esencia);border-radius:4px;color:var(--esencia);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">🔔 Sistema</button>
+                    style="flex:1;padding:5px 4px;background:rgba(192,96,255,.08);border:1px solid var(--esencia);border-radius:4px;color:var(--esencia);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">🔔
+                    Sistema</button>
                   <button onclick="renderThreads()"
                     style="flex:1;padding:5px 4px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:4px;color:var(--dim);font-family:VT323,monospace;font-size:.72rem;cursor:pointer;">↻</button>
                 </div>
               </div>
-
-              <!-- Lista de hilos -->
               <div id="threadsBox" style="flex:1;overflow-y:auto;padding:6px 0;"></div>
             </div>
 
-            <!-- ── PANEL CENTRAL: lista de reportes ────────────── -->
             <div id="reportsList"
               style="display:none;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-
-              <!-- Header con acciones -->
               <div
                 style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;">
-                <!-- Fila 1: título + marcar leídos -->
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                   <div style="font-size:.8rem;color:var(--accent);letter-spacing:.08em;">📋 INFORMES</div>
                   <button onclick="markAllSystemAsRead()"
                     style="padding:4px 8px;background:rgba(96,208,96,.1);border:1px solid var(--accent2);border-radius:4px;color:var(--accent2);font-family:VT323,monospace;font-size:.65rem;cursor:pointer;">✓
                     Marcar leídos</button>
                 </div>
-                <!-- Fila 2: selección múltiple -->
                 <div style="display:flex;align-items:center;gap:8px;">
                   <label
                     style="display:flex;align-items:center;gap:4px;font-size:.65rem;color:var(--dim);cursor:pointer;user-select:none;">
@@ -694,25 +691,16 @@
                     Eliminar sel.</button>
                 </div>
               </div>
-
-              <!-- Lista scrolleable -->
               <div id="reportsListBox" style="flex:1;overflow-y:auto;padding:6px;"></div>
             </div>
 
-            <!-- ── PANEL DERECHO: reporte completo o chat ─────── -->
             <div
               style="display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-
-              <!-- Cabecera -->
               <div id="chatHeader"
                 style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;min-height:48px;">
                 <span style="color:var(--dim);font-size:.78rem;">Selecciona una conversación…</span>
               </div>
-
-              <!-- Contenido: chat o reporte -->
               <div id="chatBox" style="flex:1;overflow-y:auto;padding:14px 16px;"></div>
-
-              <!-- Input envío (oculto hasta que haya hilo activo) -->
               <div id="chatInputArea"
                 style="padding:10px 14px;border-top:1px solid var(--border);display:none;gap:8px;align-items:center;">
                 <input id="chatMsg" placeholder="Escribe un mensaje…"
@@ -725,7 +713,6 @@
           </div>
         </div>
 
-        <!-- v1.17: Página de usuarios admin (solo para sementalac@gmail.com) -->
         <div class="page" id="page-admin-users">
           <div class="page-title">GESTIÓN DE USUARIOS</div>
           <div class="page-sub">Administración de cuentas</div>
@@ -747,8 +734,6 @@
       </main>
     </div>
   </div>
-
-
 
   <div id="bldModal" style="display:none"></div>
 
@@ -786,7 +771,7 @@
     </div>
   </div>
 
-  <!-- ADMIN RECURSOS PANEL (v0.19) -->
+  <!-- ADMIN PANEL -->
   <div class="admin-overlay hidden" id="adminOverlay">
     <div class="admin-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -795,13 +780,11 @@
           Cerrar</button>
       </div>
 
-      <!-- Buscador de jugadores -->
       <div style="margin-bottom: 10px; font-size: 0.7rem; color: var(--dim);">BUSCAR JUGADOR (EMAIL O USERNAME)</div>
       <div class="admin-search-wrap">
         <input class="admin-input-search" id="adSearchInp" placeholder="Ej: jesus_33..."
           onkeypress="if(event.key==='Enter') searchAdminPlayer()">
         <button class="admin-btn search" onclick="searchAdminPlayer()">Buscar</button>
-        <!-- v1.17: Botón Ver todos usuarios (solo para sementalac@gmail.com) -->
         <button class="admin-btn search" id="adminViewAllBtn" onclick="openAdminUsersPage()"
           style="background:rgba(0,212,255,.15);display:none;">👥 Ver todos</button>
       </div>
@@ -820,7 +803,6 @@
         <div style="font-size: 0.8rem; margin-bottom: 15px; color: var(--text); text-align:center;">
           Editando aldea: <b id="adEditingName" style="color:var(--accent2)">-</b>
         </div>
-
         <div class="admin-row"><span class="admin-label">🌲 Madera</span><input class="admin-input" id="adMadera"
             type="number"></div>
         <div class="admin-row"><span class="admin-label">⛰️ Piedra</span><input class="admin-input" id="adPiedra"
@@ -835,7 +817,6 @@
             type="number"></div>
         <div class="admin-row"><span class="admin-label">⭐ Experiencia</span><input class="admin-input"
             id="adExperience" type="number"></div>
-
         <div class="admin-actions" style="display:flex; gap:10px; margin-top:20px;">
           <button class="admin-btn apply" style="flex:1" onclick="adminApplyUniversal()">✓ Guardar Cambios</button>
           <button class="admin-btn cancel" onclick="closeAdmin()">Cerrar</button>
@@ -845,46 +826,58 @@
       <div id="adminMsg" style="font-size:.7rem; margin-top:15px; min-height:16px; text-align:center; color:var(--ok);">
       </div>
 
-      <!-- ── Reparación Global ── -->
       <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
-
-      <!-- ── Aldeas Fantasma ── -->
-      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">🏚️ ALDEAS FANTASMA (TEST PvP)</div>
-          <button class="admin-btn search" onclick="ghostToggleForm()" style="font-size:.68rem;padding:4px 10px;">+ Nueva</button>
-        </div>
-        <div id="ghostForm" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">NOMBRE</div>
-              <input id="ghostName" placeholder="Aldea Oscura" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-              <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">X</div>
-                <input id="ghostX" type="number" value="100" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
-              <div><div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">Y</div>
-                <input id="ghostY" type="number" value="100" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;"></div>
+        <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">🏚️ ALDEAS FANTASMA (TEST PvP)</div>
+            <button class="admin-btn search" onclick="ghostToggleForm()" style="font-size:.68rem;padding:4px 10px;">+
+              Nueva</button>
+          </div>
+          <div id="ghostForm"
+            style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">NOMBRE</div>
+                <input id="ghostName" placeholder="Aldea Oscura"
+                  style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div>
+                  <div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">X</div>
+                  <input id="ghostX" type="number" value="100"
+                    style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;">
+                </div>
+                <div>
+                  <div style="font-size:.62rem;color:var(--dim);margin-bottom:3px;">Y</div>
+                  <input id="ghostY" type="number" value="100"
+                    style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:5px 8px;font-family:VT323,monospace;font-size:.85rem;">
+                </div>
+              </div>
+            </div>
+            <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">TROPAS (deja en 0 las que no quieras)
+            </div>
+            <div id="ghostTroopInputs"
+              style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;"></div>
+            <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">NIVEL MURALLA</div>
+            <input id="ghostWall" type="number" value="0" min="0" max="20"
+              style="width:80px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 6px;font-family:VT323,monospace;font-size:.85rem;margin-bottom:10px;">
+            <div style="display:flex;gap:8px;">
+              <button class="admin-btn apply" style="flex:1;" onclick="ghostCreate()">✓ Crear Aldea Fantasma</button>
+              <button class="admin-btn cancel" onclick="ghostToggleForm()">Cancelar</button>
             </div>
           </div>
-          <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">TROPAS (deja en 0 las que no quieras)</div>
-          <div id="ghostTroopInputs" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;"></div>
-          <div style="font-size:.62rem;color:var(--dim);margin-bottom:6px;">NIVEL MURALLA</div>
-          <input id="ghostWall" type="number" value="0" min="0" max="20" style="width:80px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:4px 6px;font-family:VT323,monospace;font-size:.85rem;margin-bottom:10px;">
-          <div style="display:flex;gap:8px;">
-            <button class="admin-btn apply" style="flex:1;" onclick="ghostCreate()">✓ Crear Aldea Fantasma</button>
-            <button class="admin-btn cancel" onclick="ghostToggleForm()">Cancelar</button>
+          <div id="ghostList" style="font-size:.72rem;"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">⛏️ CUEVAS</div>
+            <button class="admin-btn search" onclick="loadAdminCaves()" style="font-size:.68rem;padding:4px 10px;">↻
+              Gestionar</button>
+          </div>
+          <div id="adminCavesBox" style="font-size:.72rem;color:var(--dim);">Pulsa "Gestionar" para cargar las cuevas.
           </div>
         </div>
-        <div id="ghostList" style="font-size:.72rem;"></div>
-      </div>
-
-      <!-- ── Cuevas ── -->
-      <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div style="font-size:.7rem;color:var(--dim);letter-spacing:.1em;">⛏️ CUEVAS</div>
-          <button class="admin-btn search" onclick="loadAdminCaves()" style="font-size:.68rem;padding:4px 10px;">↻ Gestionar</button>
-        </div>
-        <div id="adminCavesBox" style="font-size:.72rem;color:var(--dim);">Pulsa "Gestionar" para cargar las cuevas.</div>
-      </div>
 
         <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px;letter-spacing:.1em;">MANTENIMIENTO GLOBAL</div>
         <div style="font-size:.68rem;color:var(--dim);margin-bottom:10px;">
@@ -914,7 +907,6 @@
         </div>
       </div>
 
-      <!-- v1.30: Mensaje del día (MOTD) -->
       <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
         <div style="font-size:.7rem;color:var(--dim);letter-spacing:.08em;margin-bottom:8px;">📢 MENSAJE DEL DÍA
           (visible para todos al entrar)</div>
@@ -930,9 +922,9 @@
     </div>
   </div>
 
-  <!-- v1.30: Modal MOTD para jugadores -->
+  <!-- MOTD Modal -->
   <div id="motdModal"
-    style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;">
+    style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.75);align-items:center;justify-content:center;">
     <div
       style="background:var(--panel);border:1px solid var(--accent);border-radius:10px;padding:24px;max-width:480px;width:90%;font-family:VT323,monospace;box-shadow:0 0 40px rgba(0,212,255,.2);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
@@ -948,58 +940,173 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.48</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.50</div>
 
-  <!-- Módulos JS — cargados al final del body para que el DOM exista -->
-  <!-- Datos estáticos primero (NPC_CASTLES) -->
   <script src="game-data.js"></script>
-  <!-- Módulos del juego — v1.48 -->
-  <script src="game-constants.js?v=1.47"></script>
-  <script src="game-troops.js?v=1.47"></script>
-  <script src="game-combat.js?v=1.47"></script>
-  <script src="game-engine.js?v=1.47"></script>
-  <script src="game-ui.js?v=1.47"></script>
-  <script src="game-social.js?v=1.47"></script>
-  <script src="game-smithy.js?v=1.47"></script>
-  <script src="game-auth.js?v=1.47"></script>
-  <!-- Módulos originales -->
-  <script src="game-simulator.js?v=1.47"></script>
-  <script src="game-admin.js?v=1.47"></script>
-  <!-- v1.45: Sistema de cuevas -->
-  <script src="game-caves.js?v=1.47"></script>
+  <script src="game-constants.js?v=1.50"></script>
+  <script src="game-troops.js?v=1.50"></script>
+  <script src="game-combat.js?v=1.50"></script>
+  <script src="game-engine.js?v=1.50"></script>
+  <script src="game-ui.js?v=1.50"></script>
+  <script src="game-social.js?v=1.50"></script>
+  <script src="game-smithy.js?v=1.50"></script>
+  <script src="game-auth.js?v=1.50"></script>
+  <script src="game-simulator.js?v=1.50"></script>
+  <script src="game-admin.js?v=1.50"></script>
+  <script src="game-caves.js?v=1.50"></script>
+
   <script>
     // ============================================================
+    // RENDER MISSIONS PANEL — v1.50
+    // Pinta el panel movItemsOv con estilo tabla elegante.
+    // Sustituye el bloque inline del tick(). Sin duplicados.
+    // ============================================================
+    function renderMissionsPanel() {
+      var box = document.getElementById('movItemsOv');
+      if (!box) return;
+
+      var now = Date.now();
+      var html = '';
+
+      // ── 1. Ataques entrantes ───────────────────────────────────
+      (_incomingAttacks || []).forEach(function (a) {
+        var eta = Math.max(0, Math.ceil((new Date(a.finish_at).getTime() - now) / 1000));
+        html += _missionRow({
+          icon: '🚨', color: 'var(--danger)',
+          bg: 'rgba(255,61,90,.07)', border: 'rgba(255,61,90,.3)',
+          title: 'Ataque entrante',
+          sub: 'desde ' + escapeHtml(a.fromName || 'Enemigo'),
+          villageTag: '',
+          eta: eta, pct: 100,
+          troops: null, mid: null, canCancel: false, isIncoming: true
+        });
+      });
+
+      // ── 2. Misiones propias (todas las aldeas) ─────────────────
+      (myVillages || []).forEach(function (v) {
+        var vName = v.name || ('[' + v.cx + ',' + v.cy + ']');
+        ((v.state && v.state.mission_queue) || []).forEach(function (m) {
+          var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
+          if (!ft) return;
+          var eta = Math.max(0, Math.ceil((ft - now) / 1000));
+          // Ocultar retornos ya resueltos (>5s pasados)
+          if (eta === 0 && (now - ft) > 5000) return;
+
+          var start = m.start_at ? new Date(m.start_at).getTime() : (ft - 60000);
+          var total = Math.max(1, ft - start);
+          var elapsed = Math.max(0, now - start);
+          var pct = Math.min(100, Math.round((elapsed / total) * 100));
+
+          var cfg = _missionTypeCfg(m.type);
+          var mid = m.mid || m.finish_at;
+          var canCancel = (m.type !== 'return' && m.type !== 'found' && m.type !== 'return_reinforce');
+          var hasTroops = m.troops && Object.keys(m.troops).some(function (k) { return (m.troops[k] || 0) > 0; });
+
+          html += _missionRow({
+            icon: cfg.icon, color: cfg.color,
+            bg: cfg.bg, border: cfg.border,
+            title: cfg.label(m),
+            sub: '',
+            villageTag: escapeHtml(vName),
+            eta: eta, pct: pct,
+            troops: hasTroops ? m.troops : null,
+            mid: mid, canCancel: canCancel,
+            isIncoming: false,
+            villageId: v.id
+          });
+        });
+      });
+
+      box.innerHTML = html || '<span style="color:var(--dim);font-size:.8rem;">Sin movimientos activos.</span>';
+    }
+
+    // ── Genera el HTML de una fila de misión ──────────────────────
+    function _missionRow(o) {
+      var etaStr = o.eta > 3600
+        ? Math.floor(o.eta / 3600) + 'h ' + Math.floor((o.eta % 3600) / 60) + 'm'
+        : o.eta > 60 ? Math.floor(o.eta / 60) + 'm ' + (o.eta % 60) + 's'
+          : o.eta + 's';
+
+      // Botones de acción — los chips de tropa NO se muestran en el panel (usar "Ver tropas")
+      var troopChips = ''; // siempre vacío — el usuario usa el botón para ver detalles
+      var btns = '';
+      if (o.troops && !o.isIncoming) {
+        btns += '<button onclick="showMissionTroops(\'' + escapeJs(o.mid || '') + '\')" '
+          + 'style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);'
+          + 'padding:3px 10px;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:VT323,monospace;">👁 Ver tropas</button>';
+      }
+      if (o.canCancel && o.mid) {
+        btns += '<button onclick="cancelMission(\'' + escapeJs(o.mid) + '\')" '
+          + 'style="background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);color:var(--danger);'
+          + 'padding:3px 10px;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:VT323,monospace;">✗ Cancelar</button>';
+      }
+
+      return '<div style="'
+        + 'display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;'
+        + 'background:' + o.bg + ';border:1px solid ' + o.border + ';'
+        + 'border-radius:8px;padding:9px 12px;margin-bottom:6px;">'
+
+        // Columna 1: icono + aldea origen
+        + '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:32px;">'
+        + '<span style="font-size:1.4rem;line-height:1;">' + o.icon + '</span>'
+        + (o.villageTag ? '<span style="font-size:.58rem;color:var(--dim);white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis;" title="' + o.villageTag + '">' + o.villageTag + '</span>' : '')
+        + '</div>'
+
+        // Columna 2: info + barra + tropas
+        + '<div style="min-width:0;">'
+        + '<div style="font-size:.82rem;color:' + o.color + ';font-weight:bold;margin-bottom:2px;">' + o.title + '</div>'
+        + (o.sub ? '<div style="font-size:.68rem;color:var(--dim);margin-bottom:4px;">' + o.sub + '</div>' : '')
+        // Barra de progreso
+        + '<div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-bottom:6px;overflow:hidden;">'
+        + '<div style="height:100%;width:' + o.pct + '%;background:' + o.color + ';border-radius:2px;transition:width .5s linear;"></div>'
+        + '</div>'
+        // Chips de tropas
+        + (troopChips ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px;">' + troopChips + '</div>' : '')
+        // Botones
+        + (btns ? '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + btns + '</div>' : '')
+        + '</div>'
+
+        // Columna 3: ETA
+        + '<div style="text-align:right;white-space:nowrap;">'
+        + '<div style="font-size:.75rem;color:' + o.color + ';font-family:VT323,monospace;">⏱ ' + etaStr + '</div>'
+        + '</div>'
+
+        + '</div>';
+    }
+
+    // ── Config visual por tipo de misión ──────────────────────────
+    function _missionTypeCfg(type) {
+      var cfgs = {
+        'spy': { icon: '🔍', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Espionaje → [' + m.tx + ',' + m.ty + ']'; } },
+        'attack': { icon: '⚔️', color: 'var(--danger)', bg: 'rgba(255,61,90,.06)', border: 'rgba(255,61,90,.25)', label: function (m) { return 'Ataque → [' + m.tx + ',' + m.ty + ']'; } },
+        'move': { icon: '⚔', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Moviendo tropas → [' + m.tx + ',' + m.ty + ']'; } },
+        'reinforce': { icon: '🛡️', color: 'var(--accent2)', bg: 'rgba(96,208,96,.05)', border: 'rgba(96,208,96,.2)', label: function (m) { return 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; } },
+        'transport': { icon: '📦', color: 'var(--madera)', bg: 'rgba(200,164,90,.05)', border: 'rgba(200,164,90,.2)', label: function (m) { return 'Caravana → [' + m.tx + ',' + m.ty + ']'; } },
+        'found': { icon: '🏠', color: 'var(--gold)', bg: 'rgba(240,192,64,.05)', border: 'rgba(240,192,64,.2)', label: function (m) { return 'Colonos → [' + m.tx + ',' + m.ty + ']'; } },
+        'cave_attack': { icon: '🧿', color: 'var(--esencia)', bg: 'rgba(192,96,255,.05)', border: 'rgba(192,96,255,.2)', label: function (m) { return 'Cueva [' + m.tx + ',' + m.ty + ']'; } },
+        'return': { icon: '↩️', color: 'var(--ok)', bg: 'rgba(79,255,176,.04)', border: 'rgba(79,255,176,.15)', label: function (m) { return 'Tropas regresando'; } },
+        'return_reinforce': { icon: '↩️', color: 'var(--ok)', bg: 'rgba(79,255,176,.04)', border: 'rgba(79,255,176,.15)', label: function (m) { return 'Refuerzo volviendo a casa'; } }
+      };
+      return cfgs[type] || { icon: '⚔️', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Misión → [' + m.tx + ',' + m.ty + ']'; } };
+    }
+
+    // ============================================================
     // CONFIG
-    // ============================================================
-    // --- Supabase (DEV) ---
-    // NOTE: The anon key is safe to include in the client for development, but your database must enforce RLS.
-    // Globals (sbClient, currentUser, etc.) definidos en game-globals.js (cargado en <head>).
-
-    // ============================================================
-    // TROOP TYPES — normal (ocupa barracas + gasta provisiones) vs criatura
-    // ============================================================
-
-    // Rango de visión/ataque (distancia Chebyshev en casillas del mapa)
-
-    // ============================================================
-    // CORE — initGame, carga de aldeas, guardado, tick
     // ============================================================
 
     async function initGame() {
       if (!currentUser) return;
 
-      // 1. Ensure profile exists and get it
       let myName = (currentUser.email || '').split('@')[0];
       await ensureProfile(currentUser.id, myName);
 
       const profile = await getMyPlayerData();
       myName = profile?.username || myName;
       const myXP = profile?.experience || 0;
-      // Guardar stats de batallas en variable global para inyectar en state tras loadMyVillages
       window._profileBattles = {
-        battles_won_pvp:  profile?.battles_won_pvp  || 0,
+        battles_won_pvp: profile?.battles_won_pvp || 0,
         battles_lost_pvp: profile?.battles_lost_pvp || 0,
-        battles_won_npc:  profile?.battles_won_npc  || 0
+        battles_won_npc: profile?.battles_won_npc || 0
       };
 
       const elUser = document.getElementById('ovUser');
@@ -1015,7 +1122,6 @@
 
         if (myVillages.length === 0) {
           await createFirstVillage();
-          // Reload to get the fresh full data structure
           await loadMyVillages();
         }
 
@@ -1024,19 +1130,15 @@
           return;
         }
 
-        // Select first village by default
-        activeVillage = myVillages[0]; // Object ref
+        activeVillage = myVillages[0];
 
-        // Inyectar contadores de batallas desde profiles en el state
         if (window._profileBattles && activeVillage && activeVillage.state) {
-          activeVillage.state.battles_won_pvp  = window._profileBattles.battles_won_pvp;
+          activeVillage.state.battles_won_pvp = window._profileBattles.battles_won_pvp;
           activeVillage.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp;
-          activeVillage.state.battles_won_npc  = window._profileBattles.battles_won_npc;
+          activeVillage.state.battles_won_npc = window._profileBattles.battles_won_npc;
         }
 
-        // Refresh UI
         populateVillageSel();
-        // Usar _initSwitch para no pisar el sessionStorage durante el arranque
         window._suppressSessionSave = true;
         switchVillage(activeVillage.id);
         window._suppressSessionSave = false;
@@ -1047,31 +1149,23 @@
         return;
       }
 
-      // Start Loops
       clearInterval(uiTimer);
       uiTimer = setInterval(tick, 1000);
       clearInterval(autoSaveTimer);
-      // autoSaveTimer y processRecalls: eliminados. Modelo evento-reactivo puro.
-      // El guardado ocurre en scheduleSave() tras acciones del jugador.
-      // processRecalls se llama una vez al login en initGame.
 
       if (typeof resetUiAnimation === 'function') resetUiAnimation();
       if (typeof ensureUiAnim === 'function') ensureUiAnim();
 
       if (typeof loadAllVillages === 'function') loadAllVillages();
-      // Cargar estado de alianza para el overview (sin bloquear)
       refreshMyAlliance().catch(function () { });
 
-      // ── One-shot al login: única ronda de red ────────────────
       checkIncomingAttacks();
       updateLastSeen();
       updateOnlineCount();
       processRecalls();
-      updateUnreadCount(); // Actualizar badge de mensajes no leídos
-      // Cargar cuevas al inicio (sin bloquear)
+      updateUnreadCount();
       if (typeof loadCaves === 'function') loadCaves();
 
-      // Mostrar/ocultar botón admin según email del usuario autenticado
       checkAdminButton();
 
       tick();
@@ -1082,20 +1176,18 @@
         showNotif('🔒 Modo Admin Detectado', 'accent');
       }
 
-      // Restaurar posición tras F5 (sessionStorage)
-      // Espera 200ms para que initGame termine del todo antes de restaurar
       setTimeout(function restoreSession(attempts) {
         try {
           var lastVillage = sessionStorage.getItem('EW_lastVillage');
           var lastPage = sessionStorage.getItem('EW_lastPage');
-          if (!lastVillage && !lastPage) return; // nada que restaurar
+          if (!lastVillage && !lastPage) return;
 
           if (myVillages.length === 0 && attempts < 50) {
             return setTimeout(function () { restoreSession(attempts + 1); }, 100);
           }
 
           if (lastVillage && myVillages.find(function (v) { return v.id === lastVillage; })) {
-            window._suppressSessionSave = true;  // no pisar el valor al restaurar
+            window._suppressSessionSave = true;
             switchVillage(lastVillage);
             window._suppressSessionSave = false;
           }
@@ -1134,7 +1226,6 @@
     // VILLAGES & DATA MAPPING
     // ============================================================
     async function loadMyVillages() {
-      // ── v1.49: Lee state directamente del jsonb — 1 query en vez de 5 ──
       const { data: villages, error: vErr } = await sbClient.from('villages')
         .select('id, owner_id, name, cx, cy, state, build_queue, mission_queue, summoning_queue, training_queue, last_aldeano_at, refugio, created_at')
         .eq('owner_id', currentUser.id)
@@ -1150,18 +1241,14 @@
       const loaded = [];
 
       for (const v of villages) {
-        // ── State desde jsonb (o default si es aldea nueva / pre-migración) ──
-        var s = v.state;
+        var s = typeof v.state === 'string' ? JSON.parse(v.state) : v.state;
 
         if (!s) {
-          // Self-healing: crear state por defecto para aldeas sin migrar
           s = defaultState();
           s.last_updated = new Date().toISOString();
-          // Guardar state para que no vuelva a pasar
           await sbClient.from('villages').update({ state: s }).eq('id', v.id);
         }
 
-        // Colas vienen de columnas (son la versión "live", usadas por checkIncomingAttacks)
         s.build_queue = v.build_queue || null;
         s.mission_queue = (v.mission_queue || []).filter(function (m) {
           var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
@@ -1175,7 +1262,6 @@
         s.last_aldeano_at = v.last_aldeano_at || null;
         s.refugio = s.refugio || v.refugio || {};
 
-        // Garantizar sub-objetos
         s.resources = s.resources || { madera: 500, piedra: 300, hierro: 100, provisiones: 0, esencia: 0, aldeanos: 0 };
         s.aldeanos_assigned = s.aldeanos_assigned || { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0 };
         s.troops = s.troops || {};
@@ -1184,12 +1270,10 @@
         s.last_updated = s.last_updated || new Date().toISOString();
         s._aldeanos_total_mode = true;
 
-        // Sync aldeano count
         if (s.troops.aldeano !== undefined) {
           s.resources.aldeanos = s.troops.aldeano;
         }
 
-        // Garantizar que todos los edificios starter existen
         var starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
         var allBldKeys = typeof BUILDINGS !== 'undefined' ? BUILDINGS.map(function (b) { return b.id; }) : starterBlds;
         allBldKeys.forEach(function (k) {
@@ -1200,16 +1284,13 @@
 
         s.owner_name = currentUser.email;
 
-        // Attach state to village object
         v.state = s;
         v.x = Number(v.cx); v.y = Number(v.cy);
 
-        // IMMEDIATE OFFLINE PROGRESSION:
         if (v.state.build_queue) {
           const oldQ = JSON.stringify(v.state.build_queue);
           v.state = resolveQueue(v.state);
           const newQ = JSON.stringify(v.state.build_queue);
-
           if (oldQ !== newQ) {
             await saveVillage(v, { updateScore: false });
           }
@@ -1221,16 +1302,12 @@
       myVillages = loaded;
     }
 
-
     async function loadAllVillages() {
-      // Cargar TODAS las aldeas del mapa (para el mapa global)
-      // FIX: 'state' and 'user_id' do not exist in schema. Use 'owner_id'.
-      // We don't have 'state' column in villages, so we can't show points/score yet unless we join resources.
       var r = await sbClient.from('villages').select('id, owner_id, name, cx, cy');
       if (r.error) { console.error('Error loading world:', r.error); return; }
       if (r.data) {
         allVillages = r.data.map(function (v) {
-          v.x = Number(v.cx); v.y = Number(v.cy); // Ensure numbers
+          v.x = Number(v.cx); v.y = Number(v.cy);
           return v;
         });
       }
@@ -1258,10 +1335,8 @@
         resetUiAnimation();
         var sel = document.getElementById('villageSel');
         if (sel) sel.value = v.id;
-        // Guardar aldea seleccionada para restaurar tras F5 (no durante arranque)
         if (!window._suppressSessionSave) { try { sessionStorage.setItem('EW_lastVillage', v.id); } catch (e) { } }
         tick();
-        // Re-renderizar la página activa si es sensible a la aldea seleccionada
         var activePage = document.querySelector('.page.active');
         if (activePage) {
           var pid = activePage.id;
@@ -1294,7 +1369,6 @@
 
       const vName = 'Aldea 1';
 
-      // v1.49: Crear aldea con state jsonb inicial
       var initialState = defaultState();
       initialState.last_updated = new Date().toISOString();
 
@@ -1309,38 +1383,32 @@
 
       if (err) { throw new Error(err.message); }
 
-      // Tablas legacy (mantener mientras existan)
-      await sbClient.from('resources').insert({ village_id: v.id }).catch(function () {});
+      await sbClient.from('resources').insert({ village_id: v.id }).catch(function () { });
       await sbClient.from('buildings').insert({
         village_id: v.id,
         aserradero: 1, cantera: 1, minehierro: 1, granja: 1, almacen: 1, torre: 1, barracas: 1, circulo: 1, reclutamiento: 1, muralla: 0, lab: 0
-      }).catch(function () {});
+      }).catch(function () { });
       var initialTroops = { village_id: v.id };
       Object.keys(TROOP_TYPES).forEach(function (k) { initialTroops[k] = (k === 'aldeano' ? 50 : 0); });
-      await sbClient.from('troops').insert(initialTroops).catch(function () {});
+      await sbClient.from('troops').insert(initialTroops).catch(function () { });
     }
 
-    // Generic save function for ANY village (not just active)
-    // Generic save function for ANY village (not just active)
     // ── v1.49: Escribe state jsonb en villages (1 write en vez de 5) ──
     async function saveVillage(v, opts) {
       if (!v || !currentUser) return;
       opts = opts || {};
       var shouldUpdateScore = opts.updateScore !== false ? true : false;
 
-      // Snapshot: calcular recursos actuales antes de guardar
       snapshotResources(v.state);
 
       const s = v.state;
 
-      // Sync aldeano count
       s.troops.aldeano = (s.resources.aldeanos !== undefined && s.resources.aldeanos !== null)
         ? Math.max(0, Math.floor(s.resources.aldeanos))
         : (s.troops.aldeano || 0);
 
       s.last_updated = new Date().toISOString();
 
-      // Un solo UPDATE: state jsonb + columnas de colas
       const { error } = await sbClient.from('villages').update({
         state: {
           resources: s.resources,
@@ -1368,7 +1436,6 @@
       if (shouldUpdateScore) { refreshMilitaryScore(); }
     }
 
-
     async function flushVillage() {
       if (!activeVillage) return;
       if (isFlushing) { pendingFlush = true; return; }
@@ -1377,8 +1444,6 @@
       setSave('saving');
 
       try {
-        // Opt-F: flushVillage skips military_score recalc (expensive: 3 extra queries).
-        // Score is updated explicitly via refreshMilitaryScore() after real troop/creature changes.
         await saveVillage(activeVillage, { updateScore: false });
         setSave('saved');
       } catch (e) {
@@ -1395,7 +1460,6 @@
       }
     }
 
-    // Opt-F: Recalculates military_score. Call after real troop/creature changes.
     // v1.49: Lee directamente de state jsonb - 1 query, sin tablas separadas
     async function refreshMilitaryScore() {
       if (!currentUser) return;
@@ -1409,13 +1473,10 @@
 
         vils.forEach(function (vil) {
           var s = vil.state || {};
-          // Tropas en base
           var troops = s.troops || {};
           Object.keys(TROOP_TYPES).forEach(function (k) { grandTotal += (Number(troops[k]) || 0); });
-          // Criaturas en base (incluye guardiancueva - ya vive naturalmente en state)
           var creatures = s.creatures || {};
           Object.keys(CREATURE_TYPES).forEach(function (k) { grandTotal += (Number(creatures[k]) || 0); });
-          // Tropas y criaturas en mision (restadas de state al enviarlas)
           var mq = vil.mission_queue || [];
           for (var mi = 0; mi < mq.length; mi++) {
             var mTroops = mq[mi].troops || {};
@@ -1431,9 +1492,8 @@
       } catch (e) { console.warn('refreshMilitaryScore failed', e); }
     }
 
-
     var saveDebounce = null;
-    var modalBuildingId = null; // tracks which building is open in modal
+    var modalBuildingId = null;
     function scheduleSave() {
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(flushVillage, 2000);
@@ -1446,15 +1506,13 @@
       txt.textContent = s === 'saving' ? 'guardando...' : s === 'saved' ? 'guardado' : '';
     }
 
-
     // ============================================================
-    // UI ANIMATION — números que suben y bajan suave (tipo barra)
+    // UI ANIMATION
     // ============================================================
     var uiShown = null;
     var uiTarget = null;
     var uiAnimStarted = false;
 
-    // Cache de elementos DOM frecuentes — evita querySelector 60 veces/segundo
     var _elCache = {};
     function _el(id) {
       if (!_elCache[id]) _elCache[id] = document.getElementById(id);
@@ -1467,14 +1525,10 @@
     }
 
     function ensureUiAnim() {
-      // Animación desactivada temporalmente — los valores se muestran directos desde calcRes()
-      // para garantizar que lo que se ve es exactamente lo que hay en estado.
-      // Reactivar cuando el sistema de producción esté verificado.
       if (uiAnimStarted) return;
       uiAnimStarted = true;
       function step() {
         if (uiShown && uiTarget) {
-          // Sin lerp: copiamos target directamente a shown
           var keys = ['madera', 'piedra', 'hierro', 'provisiones', 'esencia', 'aldeanos', 'capPctMa', 'capPctPi', 'capPctHi', 'capPctPr', 'capPctEs', 'capPctAld'];
           keys.forEach(function (key) { uiShown[key] = uiTarget[key]; });
           renderAnimatedUi();
@@ -1501,14 +1555,12 @@
       var stored = Math.round(uiShown.stored || 0);
       var capPct = Math.max(0, Math.min(100, uiShown.capPct || 0));
 
-      // Topbar — valores
       _el('rMadera').textContent = fmt(madera);
       _el('rPiedra').textContent = fmt(piedra);
       _el('rHierro').textContent = fmt(hierro);
       _el('rProv').textContent = fmt(prov);
       _el('rEsencia').textContent = fmt(esencia);
 
-      // Barras de capacidad individuales por recurso
       function setBar(id, pct, color) {
         var b = _el(id); if (!b) return;
         var cls = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : 'ok';
@@ -1523,15 +1575,13 @@
       setBar('capBarEs', uiShown.capPctEs || 0, 'var(--esencia)');
       setBar('capBarAld', uiShown.capPctAld || 0, 'var(--aldeanos)');
 
-      // Overview — valores (pueden no existir si se rediseñó la página)
       if (_el('ovMadera')) _el('ovMadera').textContent = fmt(madera);
       if (_el('ovPiedra')) _el('ovPiedra').textContent = fmt(piedra);
       if (_el('ovHierro')) _el('ovHierro').textContent = fmt(hierro);
       if (_el('ovProv')) _el('ovProv').textContent = fmt(prov);
       if (_el('ovEsencia')) _el('ovEsencia').textContent = fmt(esencia);
 
-      // Arriba: aldeanos libres. Abajo izq: total tropas en base. Abajo der: capacidad.
-      var tropasEnBase = getBarracksUsed(vs); // todos los que están en base (no en misión)
+      var tropasEnBase = getBarracksUsed(vs);
       _el('rAldeanos').textContent = aldLibres;
       if (_el('rTropasBase')) _el('rTropasBase').textContent = tropasEnBase;
       if (_el('rBarrCap')) _el('rBarrCap').textContent = '/ ' + barrCap;
@@ -1551,32 +1601,24 @@
       if (!activeVillage.state.summoning_queue) activeVillage.state.summoning_queue = [];
       var oldS = JSON.stringify(activeVillage.state.summoning_queue);
 
-      // ── Colas locales — cero red ──────────────────────────────
       activeVillage.state = resolveQueue(activeVillage.state);
       activeVillage.state = resolveSummoningQueue(activeVillage.state);
       activeVillage.state = resolveTrainingQueue(activeVillage.state);
 
-      // Si una cola local completó → guardar
       var newQ2 = activeVillage.state.build_queue ? JSON.stringify(activeVillage.state.build_queue) : null;
       var newM2 = JSON.stringify(activeVillage.state.mission_queue || []);
       var newS2 = JSON.stringify(activeVillage.state.summoning_queue || []);
       if ((oldQ && !newQ2) || (oldM !== newM2) || (oldS !== newS2)) {
         scheduleSave();
-        // Cola de invocación completó → criatura añadida, refrescar panel si está abierto
         if (oldS !== newS2 && document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
           renderCreatures();
         }
-        // Cola de entrenamiento completó → tropa añadida, refrescar panel de tropas
         if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
           renderTroops();
         }
-        // Opt-F: actualizar military_score tras cambio real de tropas/criaturas
         refreshMilitaryScore && refreshMilitaryScore();
       }
 
-      // ── resolveMissions — REACTIVO, no polling ─────────────
-      // Solo se lanza cuando el contador local de una misión llega a cero.
-      // NUNCA se llama en cada tick por defecto.
       var _nowMs2 = Date.now();
       var hasMissionDue = (activeVillage.state.mission_queue || []).some(function (m) {
         return m.finish_at && new Date(m.finish_at).getTime() <= _nowMs2;
@@ -1587,30 +1629,22 @@
           activeVillage.state = updated;
           _missionWatchScheduled = false;
           scheduleSave();
-          // Misión resuelta → badge de mensajes
           updateUnreadCount && updateUnreadCount();
-          // ── Auto-refresh panels con datos reales, no calculados ──
-          // Tropas: recuento exacto de barracas tras llegada o retorno
           if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
             renderTroops();
           }
-          // Criaturas: aparecen invocadas o regresan de misión
           if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) {
             renderCreatures();
           }
-          // Refugio: plazas ocupadas pueden haber cambiado al regresar tropas
           if (document.getElementById('page-defense') && document.getElementById('page-defense').classList.contains('active')) {
             renderRefugio();
           }
-          // Investigación: XP actualizada tras victoria (executeAttack la escribe en
-          // _researchData, pero si la página está abierta la renderizamos de nuevo)
           if (document.getElementById('page-research') && document.getElementById('page-research').classList.contains('active')) {
             var xpEl = document.getElementById('researchXPDisplay');
             if (xpEl && typeof _researchData !== 'undefined' && _researchData) {
               xpEl.textContent = formatNumber(_researchData.experience) + ' XP';
             }
           }
-          // Actualizar military_score tras cambio real de tropas
           refreshMilitaryScore && refreshMilitaryScore();
         }).catch(function () { _missionWatchScheduled = false; });
       }
@@ -1621,7 +1655,6 @@
       var res = calcRes(vs);
       var prod = getProd(vs.buildings, 0, w);
       var cap = getCapacity(vs.buildings);
-      // Porcentaje individual de cada recurso respecto al almacén
       var capPctMa = cap > 0 ? Math.min(100, Math.round(res.madera / cap * 100)) : 0;
       var capPctPi = cap > 0 ? Math.min(100, Math.round(res.piedra / cap * 100)) : 0;
       var capPctHi = cap > 0 ? Math.min(100, Math.round(res.hierro / cap * 100)) : 0;
@@ -1631,27 +1664,17 @@
       var aldEnBaseTick = Math.max(0, (vs.troops && vs.troops.aldeano) || 0);
       var capPctAld = barrCapTick > 0 ? Math.min(100, Math.round(aldEnBaseTick / barrCapTick * 100)) : 0;
 
-      // v1.17: Actualizar display de barracas en el tick (para que refleje tropas en movimiento)
       var usedBarracas = getBarracksUsed(vs);
       var barrPctTick = barrCapTick > 0 ? Math.round(usedBarracas / barrCapTick * 100) : 0;
       var elCapTick = document.getElementById('recAldCap');
       if (elCapTick) elCapTick.textContent = usedBarracas + ' / ' + barrCapTick + ' (' + barrPctTick + '%)';
 
-      // IMPORTANTE: tick() NO escribe a state.resources.
-      // calcRes() calcula (now - last_updated) cada vez que se llama.
-      // Si escribiéramos el resultado a state.resources, el siguiente tick
-      // volvería a sumar las mismas horas sobre el nuevo valor — duplicando infinitamente.
-      // state.resources solo se actualiza en snapshotResources() → llamado desde saveVillage().
-      // tick() solo usa calcRes() para la UI, no para el estado.
-
-      // Production rates (instantáneos)
       _el('rMaderaR').textContent = '+' + fmt(prod.madera) + '/h';
       _el('rPiedraR').textContent = '+' + fmt(prod.piedra) + '/h';
       _el('rHierroR').textContent = '+' + fmt(prod.hierro) + '/h';
       _el('rProvR').textContent = '+' + fmt(prod.provisiones) + '/h';
       _el('rEsenciaR').textContent = '+' + fmt(prod.esencia) + '/h';
 
-      // Objetivos para animación (sube y baja)
       if (!uiShown) resetUiAnimation();
       ensureUiAnim();
       uiTarget = {
@@ -1666,7 +1689,7 @@
 
       if (_el('ovVillageName')) _el('ovVillageName').textContent = activeVillage.name;
       if (_el('ovVillageCoords')) _el('ovVillageCoords').textContent = 'Coordenadas: [' + activeVillage.x + ', ' + activeVillage.y + ']';
-      // Overview player stats
+
       if (_el('ovUser')) {
         var displayUsername = window._playerUsername || (currentUser ? (currentUser.email || '--').split('@')[0] : '--');
         _el('ovUser').textContent = displayUsername;
@@ -1680,56 +1703,14 @@
       if (_el('ovBattlesWon')) _el('ovBattlesWon').textContent = (vs.battles_won_pvp || 0);
       if (_el('ovBattlesLost')) _el('ovBattlesLost').textContent = (vs.battles_lost_pvp || 0);
       if (_el('ovBattlesNPC')) _el('ovBattlesNPC').textContent = (vs.battles_won_npc || 0);
-      // Troop movement alerts in overview — muestra misiones de TODAS las aldeas del jugador
-      if (_el('ovAlertsBox')) {
-        var alerts = _incomingAttacks || [];
-        // Recoger misiones de todas las aldeas del jugador, no solo activeVillage
-        var myOutgoing = [];
-        var myReturning = [];
-        (myVillages || []).forEach(function (v) {
-          var vName = v.name || ('[' + v.cx + ',' + v.cy + ']');
-          var mq = (v.state && v.state.mission_queue) || [];
-          mq.forEach(function (m) {
-            var mWithVillage = Object.assign({}, m, { _villageName: vName });
-            if (m.type === 'return') myReturning.push(mWithVillage);
-            else myOutgoing.push(mWithVillage);
-          });
-        });
-        var alertLines = '';
-        alerts.forEach(function (a) {
-          var eta = Math.max(0, Math.ceil((new Date(a.finish_at).getTime() - Date.now()) / 1000));
-          var fromName = a.fromVillage || 'Enemigo';
-          alertLines += '<div style="background:rgba(255,61,90,.07);border:1px solid rgba(255,61,90,.2);border-radius:6px;padding:7px 10px;margin-bottom:5px;">'
-            + '<span style="color:var(--danger);">🚨 Ataque entrante</span>'
-            + '<span style="color:var(--dim);font-size:.72rem;margin-left:8px;">desde ' + escapeHtml(fromName) + '</span>'
-            + '<span style="float:right;color:var(--danger);font-size:.75rem;">ETA ' + fmtTime(eta) + '</span>'
-            + '</div>';
-        });
-        myOutgoing.forEach(function (m) {
-          var eta = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
-          var ico = m.type === 'spy' ? '🔍' : m.type === 'found' ? '🏠' : m.type === 'move' ? '⚔' : m.type === 'reinforce' ? '🛡️' : m.type === 'transport' ? '📦' : m.type === 'cave_attack' ? '🧿' : '⚔️';
-          var label = m.type === 'spy' ? 'Espionaje' : m.type === 'found' ? 'Colonos → [' + m.tx + ',' + m.ty + ']' : m.type === 'move' ? 'Moviendo tropas → [' + m.tx + ',' + m.ty + ']' : m.type === 'reinforce' ? 'Refuerzo → [' + m.tx + ',' + m.ty + ']' : m.type === 'transport' ? 'Caravana → [' + m.tx + ',' + m.ty + ']' : m.type === 'cave_attack' ? 'Ataque cueva [' + m.tx + ',' + m.ty + ']' : 'Ataque → [' + m.tx + ',' + m.ty + ']';
-          alertLines += '<div style="background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.1);border-radius:6px;padding:7px 10px;margin-bottom:5px;">'
-            + '<span style="color:var(--accent);">' + ico + ' ' + label + '</span>'
-            + '<span style="color:var(--dim);font-size:.68rem;margin-left:6px;">· ' + escapeHtml(m._villageName) + '</span>'
-            + '<span style="float:right;color:var(--accent);font-size:.75rem;">ETA ' + fmtTime(eta) + '</span>'
-            + '</div>';
-        });
-        myReturning.forEach(function (m) {
-          var eta = Math.max(0, Math.ceil((new Date(m.finish_at).getTime() - Date.now()) / 1000));
-          alertLines += '<div style="background:rgba(79,255,176,.04);border:1px solid rgba(79,255,176,.1);border-radius:6px;padding:7px 10px;margin-bottom:5px;">'
-            + '<span style="color:var(--ok);">↩️ Tropas regresando</span>'
-            + '<span style="color:var(--dim);font-size:.68rem;margin-left:6px;">· ' + escapeHtml(m._villageName) + '</span>'
-            + '<span style="float:right;color:var(--ok);font-size:.75rem;">ETA ' + fmtTime(eta) + '</span>'
-            + '</div>';
-        });
-        _el('ovAlertsBox').innerHTML = alertLines || '<span style="color:var(--dim);font-size:.8rem;">Sin movimientos activos.</span>';
-      }
+
+      // ── Panel de movimientos — renderMissionsPanel() → movItemsOv ──
+      renderMissionsPanel();
 
       renderQueue(vs);
       updateAlertsButton();
       updateGranjaPanel();
-      // Reinforce panel — solo cada 60s
+
       var nowMs = Date.now();
       if (nowMs - _lastReinforcementsCheck > 60000 && document.getElementById('page-overview').classList.contains('active')) {
         _lastReinforcementsCheck = nowMs;
@@ -1749,7 +1730,7 @@
     // ============================================================
     // ALERTS — incoming attacks detection
     // ============================================================
-    var _incomingAttacks = []; // cache updated periodically
+    var _incomingAttacks = [];
     var _lastAlertsCheck = 0;
     var _lastMsgPoll = 0;
 
@@ -1769,7 +1750,7 @@
 
     async function updateOnlineCount() {
       try {
-        var cutoff = new Date(Date.now() - 60000).toISOString(); // last 60s
+        var cutoff = new Date(Date.now() - 60000).toISOString();
         var r = await sbClient.from('profiles').select('id', { count: 'exact', head: true }).gte('last_seen', cutoff);
         var count = r.count || 0;
         var el = document.getElementById('activePlayers');
@@ -1794,13 +1775,11 @@
         if (label) label.textContent = 'Alertas';
       }
 
-      // Refrescar datos cada 30s sin bloquear el tick
       var now = Date.now();
       if (now - _lastAlertsCheck > 30000) {
         _lastAlertsCheck = now;
         checkIncomingAttacks();
       }
-      // Poll mensajes cada 60s — query ligera (solo count)
       if (now - _lastMsgPoll > 60000) {
         _lastMsgPoll = now;
         updateUnreadCount && updateUnreadCount();
@@ -1810,11 +1789,9 @@
     async function checkIncomingAttacks() {
       if (!activeVillage || !sbClient || !currentUser) return;
       try {
-        // Coordenadas de todas mis aldeas
         var myCoords = myVillages.map(function (v) { return { x: v.x, y: v.y, id: v.id, name: v.name }; });
         if (myCoords.length === 0) return;
 
-        // Cargar mission_queue de aldeas enemigas (las que no son mías)
         var { data, error } = await sbClient
           .from('villages')
           .select('id, name, cx, cy, owner_id, mission_queue')
@@ -1830,11 +1807,10 @@
           if (!Array.isArray(mq)) return;
           mq.forEach(function (m) {
             if (m.type !== 'attack') return;
-            // ¿apunta a alguna de mis aldeas?
             var target = myCoords.find(function (c) { return c.x === m.tx && c.y === m.ty; });
             if (!target) return;
             var finish = new Date(m.finish_at).getTime();
-            if (finish <= now) return; // ya llegó, tick la resolverá
+            if (finish <= now) return;
             attacks.push({
               fromName: village.name || '[' + village.cx + ',' + village.cy + ']',
               fromCoords: [village.cx, village.cy],
@@ -1846,7 +1822,6 @@
           });
         });
 
-        // Ordenar por llegada más próxima
         attacks.sort(function (a, b) { return a.secsLeft - b.secsLeft; });
         _incomingAttacks = attacks;
       } catch (e) {
@@ -1881,7 +1856,6 @@
         + inner
         + '</div>';
 
-      // Cierra al click fuera del panel
       overlay.addEventListener('click', function (e) {
         if (e.target === overlay) overlay.remove();
       });
