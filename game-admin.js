@@ -3,7 +3,7 @@
 //             escapeHtml, escapeJs, fmt, loadMyVillages, switchVillage
 
 // Función local para escapar atributos HTML (onclick, etc.)
-function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 async function _loadMOTDForAdmin() {
   if (!isAdmin()) return;
@@ -250,7 +250,7 @@ async function adminRepairAll() {
       log.push('📋 0 aldeas encontradas — ' + new Date().toLocaleTimeString('es-ES'));
       log.push('✅ Todo correcto — ninguna aldea necesita reparación.');
       _repairScanResults = [];
-      logEl.innerHTML = log.map(function(l) {
+      logEl.innerHTML = log.map(function (l) {
         return '<div style="color:var(--dim);margin-bottom:2px;">' + escapeHtml(l) + '</div>';
       }).join('');
       btnEl.disabled = false;
@@ -263,7 +263,7 @@ async function adminRepairAll() {
 
     for (var row of allRows) {
       var mq = Array.isArray(row.mission_queue) ? row.mission_queue : [];
-      var stuck = mq.filter(function(m) {
+      var stuck = mq.filter(function (m) {
         if (m.type !== 'return') return false;
         var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
         return ft <= now;
@@ -277,7 +277,7 @@ async function adminRepairAll() {
       var _fakeBldScan = { barracas: { level: barrLvl } };
       var barrCap = getBarracksCapacity(_fakeBldScan);
       var otherSlots = 0;
-      Object.keys(TROOP_TYPES).forEach(function(k) {
+      Object.keys(TROOP_TYPES).forEach(function (k) {
         if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
       });
       var maxAld = Math.max(0, barrCap - otherSlots);
@@ -285,14 +285,14 @@ async function adminRepairAll() {
       var isOvercapped = currentAld > maxAld;
 
       var returningAld = 0;
-      stuck.forEach(function(m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
+      stuck.forEach(function (m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
 
       if (stuck.length === 0 && !isOvercapped) continue;
 
       var playerName = row.username || (row.owner_id ? row.owner_id.substring(0, 8) + '…' : '?');
       var problems = [];
       if (stuck.length > 0) {
-        var oldestStuck = stuck.reduce(function(min, m) {
+        var oldestStuck = stuck.reduce(function (min, m) {
           return new Date(m.finish_at).getTime() < new Date(min.finish_at).getTime() ? m : min;
         });
         var horasAtascado = Math.round((now - new Date(oldestStuck.finish_at).getTime()) / 3600000 * 10) / 10;
@@ -312,7 +312,7 @@ async function adminRepairAll() {
       });
 
       log.push('⚠️ [' + playerName + '] ' + (row.village_name || row.village_id));
-      problems.forEach(function(p) { log.push('   → ' + p); });
+      problems.forEach(function (p) { log.push('   → ' + p); });
     }
 
     log.push('─────────────────────────────────');
@@ -330,7 +330,7 @@ async function adminRepairAll() {
     showNotif('Error en escaneo: ' + e.message, 'err');
   }
 
-  logEl.innerHTML = log.map(function(l) {
+  logEl.innerHTML = log.map(function (l) {
     var color = l.startsWith('❌') ? 'var(--danger)'
       : l.startsWith('⚠️') ? 'var(--gold)'
         : l.startsWith('✅') ? 'var(--ok)'
@@ -382,7 +382,7 @@ async function adminRepairConfirm() {
     var barrCap = entry.barrCap;
     var trpRow = entry.trpRow;
     var otherSlots = 0;
-    Object.keys(TROOP_TYPES).forEach(function(k) {
+    Object.keys(TROOP_TYPES).forEach(function (k) {
       if (k !== 'aldeano') otherSlots += (trpRow[k] || 0) * (TROOP_TYPES[k].barracasSlots || 1);
     });
 
@@ -394,12 +394,12 @@ async function adminRepairConfirm() {
 
     var freeSlots = Math.max(0, barrCap - currentAld - otherSlots);
     var returningAld = 0;
-    stuck.forEach(function(m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
+    stuck.forEach(function (m) { returningAld += (m.troops && m.troops.aldeano) || 0; });
 
     var aldEntra = Math.min(returningAld, freeSlots);
     var newAld = currentAld + aldEntra;
 
-    var newMq = mq.filter(function(m) {
+    var newMq = mq.filter(function (m) {
       if (m.type !== 'return') return true;
       return new Date(m.finish_at).getTime() > now;
     });
@@ -435,7 +435,7 @@ async function adminRepairConfirm() {
     showNotif('Reparación completada: ' + fixed + ' aldeas arregladas.', 'ok');
   }
 
-  logEl.innerHTML = log.map(function(l) {
+  logEl.innerHTML = log.map(function (l) {
     var color = l.startsWith('❌') ? 'var(--danger)' : l.startsWith('✅') ? 'var(--ok)' : l.startsWith('🔧') ? 'var(--gold)' : 'var(--dim)';
     return '<div style="color:' + color + ';margin-bottom:2px;">' + escapeHtml(l) + '</div>';
   }).join('');
@@ -487,14 +487,14 @@ function ghostToggleForm() {
           + 'style="width:100%;background:transparent;border:none;color:var(--text);font-family:VT323,monospace;font-size:.9rem;outline:none;">'
           + '</div>';
       }).join('')
-      + Object.keys(CREATURE_TYPES).map(function (k) {
-        var c = CREATURE_TYPES[k];
-        return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:3px;padding:5px 6px;">'
-          + '<div style="font-size:.6rem;color:var(--accent2);margin-bottom:2px;">' + c.icon + ' ' + c.name + '</div>'
-          + '<input type="number" id="ghostTroop_' + k + '" value="0" min="0" '
-          + 'style="width:100%;background:transparent;border:none;color:var(--text);font-family:VT323,monospace;font-size:.9rem;outline:none;">'
-          + '</div>';
-      }).join('');
+        + Object.keys(CREATURE_TYPES).map(function (k) {
+          var c = CREATURE_TYPES[k];
+          return '<div style="background:var(--panel2);border:1px solid var(--border);border-radius:3px;padding:5px 6px;">'
+            + '<div style="font-size:.6rem;color:var(--accent2);margin-bottom:2px;">' + c.icon + ' ' + c.name + '</div>'
+            + '<input type="number" id="ghostTroop_' + k + '" value="0" min="0" '
+            + 'style="width:100%;background:transparent;border:none;color:var(--text);font-family:VT323,monospace;font-size:.9rem;outline:none;">'
+            + '</div>';
+        }).join('');
     }
     loadGhostList();
   }
@@ -503,8 +503,8 @@ function ghostToggleForm() {
 async function ghostCreate() {
   if (!isAdmin()) return;
   var name = (document.getElementById('ghostName').value || '').trim() || 'Aldea Fantasma';
-  var cx   = parseInt(document.getElementById('ghostX').value) || 100;
-  var cy   = parseInt(document.getElementById('ghostY').value) || 100;
+  var cx = parseInt(document.getElementById('ghostX').value) || 100;
+  var cy = parseInt(document.getElementById('ghostY').value) || 100;
   var wall = parseInt(document.getElementById('ghostWall').value) || 0;
 
   if (cx < 1 || cx > MAP_SIZE || cy < 1 || cy > MAP_SIZE) {
@@ -526,11 +526,11 @@ async function ghostCreate() {
   }
 
   var ir = await sbClient.rpc('admin_ghost_create', {
-    p_name:      name,
-    p_cx:        cx,
-    p_cy:        cy,
-    p_wall:      wall,
-    p_troops:    troops,
+    p_name: name,
+    p_cx: cx,
+    p_cy: cy,
+    p_wall: wall,
+    p_troops: troops,
     p_creatures: creatures
   });
 
@@ -852,7 +852,7 @@ async function _adminDeleteUserData(userId, username) {
 
   async function tryDelete(label, promise) {
     try { var r = await promise; if (r.error) errors.push(label + ': ' + r.error.message); else steps.push('✓ ' + label); }
-    catch(e) { errors.push(label + ': ' + e.message); }
+    catch (e) { errors.push(label + ': ' + e.message); }
   }
 
   // 1. Sacar de alianzas
@@ -868,11 +868,11 @@ async function _adminDeleteUserData(userId, username) {
   // 4. Aldeas y sus dependencias (ORDEN CRÍTICO: primero hijos, luego aldeas)
   const vills = await sbClient.from('villages').select('id').eq('owner_id', userId);
   if (!vills.error && vills.data && vills.data.length > 0) {
-    var villIds = vills.data.map(function(v) { return v.id; });
+    var villIds = vills.data.map(function (v) { return v.id; });
     // v1.49: troops/resources/creatures ya no tienen FK a villages (datos en state jsonb)
     // Liberar cuevas capturadas por este usuario (marcarlas wild)
     await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null })
-      .eq('owner_id', userId).then(function(){}).catch(function(){});
+      .eq('owner_id', userId).then(function () { }).catch(function () { });
     // Ahora sí borrar aldeas
     await tryDelete('villages', sbClient.from('villages').delete().eq('owner_id', userId));
   }
@@ -925,7 +925,7 @@ async function loadAdminAlliances() {
     .eq('status', 'active');
   var memberCounts = {};
   if (!mr.error && mr.data) {
-    mr.data.forEach(function(m) {
+    mr.data.forEach(function (m) {
       memberCounts[m.alliance_id] = (memberCounts[m.alliance_id] || 0) + 1;
     });
   }
@@ -937,7 +937,7 @@ async function loadAdminAlliances() {
     .eq('status', 'active');
   var leaderMap = {};
   if (!lr.error && lr.data) {
-    lr.data.forEach(function(m) {
+    lr.data.forEach(function (m) {
       leaderMap[m.alliance_id] = (m.profiles && m.profiles.username) ? m.profiles.username : '?';
     });
   }
@@ -945,7 +945,7 @@ async function loadAdminAlliances() {
   var html = '<div class="table">'
     + '<div class="trow thead"><div>TAG</div><div>Nombre</div><div>Líder</div><div style="text-align:center">Miembros</div><div></div></div>';
 
-  r.data.forEach(function(al) {
+  r.data.forEach(function (al) {
     var count = memberCounts[al.id] || 0;
     var leader = leaderMap[al.id] || '—';
     html += '<div class="trow">'
@@ -980,12 +980,12 @@ async function adminInspectAlliance(allianceId, tag) {
   var overlay = document.createElement('div');
   overlay.id = 'adminAllianceInspectBox';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
 
   var statuses = { active: 'Activo', pending: 'Solicitud', invited: 'Invitado' };
   var statusColors = { active: 'var(--ok)', pending: 'var(--gold)', invited: 'var(--accent)' };
 
-  var rows = members.map(function(m) {
+  var rows = members.map(function (m) {
     var uname = (m.profiles && m.profiles.username) ? escapeHtml(m.profiles.username) : m.user_id.slice(0, 8);
     var roleBadge = m.role === 'leader'
       ? '<span style="color:var(--gold);font-size:.7rem;">👑 Líder</span>'
@@ -1116,3 +1116,397 @@ function openAdminCavesSection() {
 
   loadAdminCaves();
 }
+
+// ============================================================
+// ADMIN — GOD MODE (MAP INTERACTION)
+// ============================================================
+
+async function adminSpawnGhostMap(x, y) {
+  if (!isAdmin()) return;
+  var name = prompt('Nombre de la aldea fantasma:', 'Aldea Fantasma');
+  if (name === null) return;
+
+  var wall = parseInt(prompt('Nivel del muro:', '1')) || 1;
+  var troops = { guerrero: 100, arquero: 50 };
+  var creatures = { guardiancueva: 1 };
+
+  var ir = await sbClient.rpc('admin_ghost_create', {
+    p_name: name,
+    p_cx: x,
+    p_cy: y,
+    p_wall: wall,
+    p_troops: troops,
+    p_creatures: creatures
+  });
+
+  if (ir.error) {
+    showNotif('Error: ' + (ir.error.message || ir.error.code), 'err');
+    return;
+  }
+  showNotif('🏚️ Fantasma creado en [' + x + ',' + y + ']', 'ok');
+  if (typeof renderMap === 'function') setTimeout(renderMap, 300);
+}
+
+async function adminSpawnCaveMap(x, y) {
+  if (!isAdmin()) return;
+  if (!confirm('¿Crear una cueva salvaje en [' + x + ',' + y + ']?')) return;
+
+  var type = prompt('Tipo de guardián (guardiancueva o arana_gigante):', 'guardiancueva');
+  if (!type) return;
+
+  try {
+    var r = await sbClient.from('caves').insert({
+      cx: x,
+      cy: y,
+      status: 'wild',
+      guardian_type: type
+    });
+    if (r.error) throw r.error;
+
+    showNotif('⛏️ Cueva creada en [' + x + ',' + y + ']', 'ok');
+    if (typeof loadCaves === 'function') await loadCaves(true);
+    if (typeof renderMap === 'function') renderMap();
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+async function adminTeleportMap(x, y) {
+  if (!isAdmin()) return;
+  if (!activeVillage) return;
+  if (!confirm('¿Teletransportar "' + activeVillage.name + '" a [' + x + ',' + y + ']?')) return;
+
+  try {
+    var { error: rErr } = await sbClient.from('villages').update({ x: x, y: y }).eq('id', activeVillage.id);
+    if (rErr) throw rErr;
+
+    activeVillage.x = x;
+    activeVillage.y = y;
+    showNotif('🌌 Aldea teletransportada!', 'ok');
+    if (typeof renderMap === 'function') {
+      mapCamX = x;
+      mapCamY = y;
+      renderMap();
+    }
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+async function adminDeleteCaveMap(caveId) {
+  if (!isAdmin()) return;
+  if (!confirm('¿Eliminar esta cueva permanentemente?')) return;
+
+  try {
+    var { error: rErr } = await sbClient.from('caves').delete().eq('id', caveId);
+    if (rErr) throw rErr;
+
+    showNotif('🗑️ Cueva eliminada', 'ok');
+    if (typeof loadCaves === 'function') await loadCaves(true);
+    if (typeof renderMap === 'function') renderMap();
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+async function sendGlobalAnnouncement() {
+  if (!isAdmin()) return;
+  var text = (document.getElementById('motdInput').value || '').trim();
+  if (!text) {
+    showNotif('Escribe algo en el cuadro del MOTD primero.', 'info');
+    return;
+  }
+
+  if (!confirm('¿Enviar este mensaje como anuncio instantáneo a TODO el servidor?')) return;
+
+  try {
+    const channel = sbClient.channel('global-announcements');
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        const resp = await channel.send({
+          type: 'broadcast',
+          event: 'announcement',
+          payload: { message: text }
+        });
+
+        if (resp === 'ok') {
+          showNotif('⚡ Anuncio enviado instantáneamente.', 'ok');
+          saveMOTD();
+        } else {
+          showNotif('Error al enviar broadcast: ' + resp, 'err');
+        }
+      }
+    });
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+async function loadAdminActivity() {
+  if (!isAdmin()) return;
+  var box = document.getElementById('adminActivityLog');
+  if (!box) return;
+
+  box.innerHTML = '<div style="color:var(--dim);text-align:center;padding:10px;">Cargando actividad...</div>';
+
+  try {
+    // 1. Aldeas recientes (Fundaciones)
+    var { data: vills, error: vErr } = await sbClient.from('villages')
+      .select('name,x,y,created_at,owner_id,profiles(username)')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // 2. Mensajes de sistema (Batallas/Espionajes)
+    var { data: msgs, error: mErr } = await sbClient.from('messages')
+      .select('body,created_at,sender_id')
+      .is('sender_id', null)
+      .order('created_at', { ascending: false })
+      .limit(15);
+
+    if (vErr || mErr) throw (vErr || mErr);
+
+    var events = [];
+
+    (vills || []).forEach(v => {
+      events.push({
+        ts: new Date(v.created_at),
+        type: '🏠',
+        text: 'NUEVA ALDEA: "' + v.name + '" en [' + v.x + ',' + v.y + '] por ' + (v.profiles ? v.profiles.username : 'desconocido')
+      });
+    });
+
+    (msgs || []).forEach(m => {
+      var body = m.body || '';
+      var title = body.split('\n')[0] || 'Evento de sistema';
+      var type = '🔔';
+      if (title.includes('BATALLA') || title.includes('⚔️')) type = '⚔️';
+      if (title.includes('ESPIONAJE') || title.includes('🔍')) type = '🔍';
+
+      events.push({
+        ts: new Date(m.created_at),
+        type: type,
+        text: title
+      });
+    });
+
+    events.sort((a, b) => b.ts - a.ts);
+
+    if (events.length === 0) {
+      box.innerHTML = '<div style="color:var(--dim);text-align:center;padding:10px;">No hay actividad reciente.</div>';
+      return;
+    }
+
+    box.innerHTML = events.slice(0, 20).map(e => {
+      var time = e.ts.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      return '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeAttr(e.text) + '">'
+        + '<span style="color:var(--dim);margin-right:6px;">[' + time + ']</span> '
+        + '<span>' + e.type + '</span> '
+        + '<span style="color:var(--text);">' + escapeHtml(e.text) + '</span>'
+        + '</div>';
+    }).join('');
+
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+// ============================================================
+// ADMIN — DÍA DE CAZA (SIMULADOR DE ATAQUES)
+// ============================================================
+
+function toggleAdminHuntForm() {
+  if (!isAdmin()) return;
+  var form = document.getElementById('adminHuntForm');
+  if (!form) return;
+
+  var isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+
+  if (isHidden) {
+    var list = document.getElementById('huntTroopsList');
+    if (list && list.children.length === 0) {
+      var html = '';
+      Object.keys(TROOP_TYPES).forEach(k => {
+        if (k === 'aldeano') return;
+        var t = TROOP_TYPES[k];
+        html += '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.03);padding:4px;border-radius:4px;">' +
+          '<span style="font-size:0.9rem;">' + t.icon + '</span>' +
+          '<input type="number" id="hunt_t_' + k + '" placeholder="0" min="0" style="width:100%;background:transparent;border:none;color:var(--text);font-size:0.8rem;text-align:right;">' +
+          '</div>';
+      });
+      Object.keys(CREATURE_TYPES).forEach(k => {
+        var t = CREATURE_TYPES[k];
+        html += '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,210,0,0.05);padding:4px;border-radius:4px;">' +
+          '<span style="font-size:0.9rem;">' + t.icon + '</span>' +
+          '<input type="number" id="hunt_t_' + k + '" placeholder="0" min="0" style="width:100%;background:transparent;border:none;color:var(--gold);font-size:0.8rem;text-align:right;">' +
+          '</div>';
+      });
+      list.innerHTML = html;
+    }
+  }
+}
+
+async function adminLaunchHunt() {
+  if (!isAdmin()) return;
+
+  var ox = parseInt(document.getElementById('huntOrigX').value);
+  var oy = parseInt(document.getElementById('huntOrigY').value);
+  var dx = parseInt(document.getElementById('huntDestX').value);
+  var dy = parseInt(document.getElementById('huntDestY').value);
+
+  if (isNaN(ox) || isNaN(oy) || isNaN(dx) || isNaN(dy)) {
+    showNotif('Coordenadas inválidas.', 'err');
+    return;
+  }
+
+  // Recopilar tropas
+  var troops = {};
+  var total = 0;
+  Object.keys(TROOP_TYPES).concat(Object.keys(CREATURE_TYPES)).forEach(k => {
+    if (k === 'aldeano') return;
+    var el = document.getElementById('hunt_t_' + k);
+    if (el) {
+      var n = parseInt(el.value) || 0;
+      if (n > 0) {
+        troops[k] = n;
+        total += n;
+      }
+    }
+  });
+
+  if (total === 0) {
+    showNotif('Debes enviar al menos una unidad.', 'err');
+    return;
+  }
+
+  var lvlTroop = parseInt(document.getElementById('huntLvlTroop').value) || 1;
+  var lvlWeapon = parseInt(document.getElementById('huntLvlWeapon').value) || 0;
+  var lvlArmor = parseInt(document.getElementById('huntLvlArmor').value) || 0;
+
+  if (!confirm('¿Lanzar invasión de ' + total + ' unidades desde [' + ox + ',' + oy + '] hacia [' + dx + ',' + dy + ']?')) return;
+
+  try {
+    // 1. Verificar que el destino existe
+    var { data: destVill, error: dErr } = await sbClient.from('villages').select('id,name,owner_id').eq('cx', dx).eq('cy', dy).maybeSingle();
+    if (dErr || !destVill) {
+      showNotif('No hay una aldea en la coordenadas de destino [' + dx + ',' + dy + '].', 'err');
+      return;
+    }
+
+    // 2. Verificar o buscar origen
+    var { data: origVill, error: oErr } = await sbClient.from('villages').select('id,name').eq('cx', ox).eq('cy', oy).maybeSingle();
+    var originId = origVill ? origVill.id : null;
+
+    if (!originId) {
+      showNotif('No hay una aldea en el origen. Crea un Fantasma allí primero.', 'err');
+      return;
+    }
+
+    // Calcular velocidad y llegada
+    var minSpeed = 999;
+    Object.keys(troops).forEach(k => {
+      var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
+      if (td && td.speed < minSpeed) minSpeed = td.speed;
+    });
+    var dist = Math.max(Math.abs(dx - ox), Math.abs(dy - oy));
+    var seconds = (dist / minSpeed) * (typeof MISSION_FACTOR !== 'undefined' ? MISSION_FACTOR : 60);
+    var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
+
+    // 3. Inyectar misión tipo 'attack' con modificadores de nivel (God Mode)
+    var missionEntry = {
+      mid: 'hunt_' + Math.random().toString(36).slice(2, 6) + Date.now().toString(36),
+      type: 'attack',
+      tx: dx, ty: dy,
+      targetId: destVill.id,
+      troops: troops,
+      finish_at: finishAt,
+      start_at: new Date().toISOString(),
+      admin_test: true, // Flag para identificar
+      god_levels: { troop: lvlTroop, weapon: lvlWeapon, armor: lvlArmor }
+    };
+
+    // Usar RPC de administración si existe, o intentar inserción directa en el origen si es posible
+    // Dado que somos admin sementalac, podemos usar rpc 'admin_ghost_create' para inspirarnos, 
+    // pero aquí necesitamos inyectar en mission_queue de la aldea origen.
+
+    // Obtenemos el estado actual del origen
+    var { data: oStateData } = await sbClient.from('villages').select('state').eq('id', originId).single();
+    var s = typeof oStateData.state === 'string' ? JSON.parse(oStateData.state) : oStateData.state;
+    if (!s.mission_queue) s.mission_queue = [];
+    s.mission_queue.push(missionEntry);
+
+    var { error: upErr } = await sbClient.from('villages').update({ state: s }).eq('id', originId);
+    if (upErr) throw upErr;
+
+    showNotif('🚀 ¡Invasión lanzada! Las tropas llegarán en ' + Math.ceil(seconds) + 's.', 'ok');
+
+    if (typeof renderMap === 'function') renderMap();
+    if (typeof loadMyVillages === 'function' && originId === (activeVillage && activeVillage.id)) loadMyVillages();
+
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+
+async function adminFastBuildAll() {
+  if (!isAdmin()) return;
+  if (!confirm('⚡ ADVERTENCIA: Esta acción completará INSTANTÁNEAMENTE todas las construcciones en curso de TODOS los jugadores activos.\n\n¿Proceder?')) return;
+
+  try {
+    showNotif('⏳ Procesando construcciones globales...', 'info');
+
+    // v1.52: Usamos un RPC para procesar esto de forma atómica en el servidor si existe,
+    // o iteramos por las aldeas cargadas (fallback local).
+    // Nota: En un entorno real, esto debería ser un comando de servidor.
+
+    var { data: vills, error: vErr } = await sbClient.from('villages').select('id,state');
+    if (vErr) throw vErr;
+
+    var count = 0;
+    for (var v of vills) {
+      var s = v.state;
+      if (s && s.build_queue) {
+        // Mover de cola a edificios
+        var q = s.build_queue;
+        if (!s.buildings) s.buildings = {};
+        if (!s.buildings[q.id]) s.buildings[q.id] = { level: 0 };
+        s.buildings[q.id].level = (s.buildings[q.id].level || 0) + 1;
+        delete s.build_queue;
+
+        await sbClient.from('villages').update({ state: s }).eq('id', v.id);
+        count++;
+      }
+    }
+
+    showNotif('✅ Se han completado ' + count + ' construcciones en el servidor.', 'ok');
+    if (typeof tick === 'function') tick();
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+function adminResetMapCache() {
+  if (!isAdmin()) return;
+  if (!confirm('¿Deseas forzar la recarga de todos los datos del mapa?')) return;
+
+  try {
+    allVillages = [];
+    _lastMapLoad = 0;
+    if (typeof loadAllVillages === 'function') {
+      loadAllVillages().then(() => {
+        if (typeof renderMap === 'function') renderMap();
+        showNotif('🔄 Cache del mapa reseteada.', 'ok');
+      });
+    } else {
+      if (typeof renderMap === 'function') renderMap();
+      showNotif('🔄 Mapa refrescado.', 'ok');
+    }
+  } catch (e) {
+    showNotif('Error: ' + (e.message || e), 'err');
+  }
+}
+
+
+
+

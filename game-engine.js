@@ -763,6 +763,52 @@ async function executeAttackMission(m) {
 // PvP — Ataque entre jugadores (v1.52: Servidor Autoritativo)
 // ============================================================
 async function executeAttackPvP(m) {
+  // ── v1.60: INTERCEPTACIÓN ADMIN (DÍA DE CAZA) ──
+  if (m.admin_test) {
+    try {
+      var { data: destVR } = await sbClient.from("villages").select("state, owner_id, name").eq("id", m.targetId).maybeSingle();
+      if (!destVR) { console.warn("Admin hunt destination not found"); return; }
+      var ds = typeof destVR.state === "string" ? JSON.parse(destVR.state) : destVR.state;
+      var defOwnerId = destVR.owner_id;
+
+      // Obtener perfiles para niveles de investigación (defensor)
+      var { data: profR } = await sbClient.from('profiles').select('troop_levels,weapon_levels,armor_levels').eq('id', defOwnerId).maybeSingle();
+      var defLvls = profR || { troop_levels: {}, weapon_levels: {}, armor_levels: {} };
+
+      // Niveles God Mode del atacante
+      var g = m.god_levels || { troop: 1, weapon: 0, armor: 0 };
+      var atkStats = { troop_levels: {}, weapon_levels: {}, armor_levels: {} };
+      Object.keys(m.troops).forEach(k => {
+        atkStats.troop_levels[k] = g.troop;
+        atkStats.weapon_levels[k] = g.weapon;
+        atkStats.armor_levels[k] = g.armor;
+      });
+
+      // Simular batalla
+      var wallLvl = (ds.buildings && ds.buildings.muralla && ds.buildings.muralla.level) || 0;
+      var res = simulateBattle(m.troops, ds.troops || {}, wallLvl, atkStats, defLvls);
+
+      // Generar Reporte
+      var victoria = res.winner === 1;
+      var reportHTML = generateBattleReport('Ejército de Invasión (God Mode)', destVR.name, m.troops, ds.troops || {}, res, null, 0, 0, false);
+
+      // Notificar a ambos (vía sistema)
+      await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' DÍA DE CAZA: ' + destVR.name, reportHTML);
+      if (defOwnerId && defOwnerId !== GHOST_OWNER_ID) {
+        await sendSystemReport(defOwnerId, '🚨 ¡INVASIÓN DETECTADA!', reportHTML);
+      }
+
+      m.troops = res.survivors1;
+      m.type = 'return';
+      showNotif('¡Día de Caza resuelto! Revisa tus mensajes.', 'ok');
+      return;
+    } catch (e) {
+      console.error("Admin Hunt Error:", e);
+      _returnTroopsHome(m);
+      return;
+    }
+  }
+
   try {
     // ── v1.52: ATAQUE SEGURO EN SERVIDOR ──
     const { data: res, error: rpcErr } = await sbClient.rpc('execute_attack_secure', {

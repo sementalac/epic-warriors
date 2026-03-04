@@ -609,7 +609,24 @@
     .main-layout {
       display: grid;
       grid-template-columns: 190px 1fr;
-      min-height: calc(100vh - 52px);
+      min-height: calc(100vh - 62px);
+      padding-top: 0;
+    }
+
+    .map-page-layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .map-main-col {
+      min-width: 0;
+    }
+
+    .map-mini-col {
+      position: sticky;
+      top: 80px;
     }
 
     .sidebar {
@@ -3066,40 +3083,133 @@
       }
 
       .content {
-        padding: 12px;
+        padding: 10px;
         padding-bottom: 80px;
-        /* Espacio para que la barra inferior no tape el contenido */
+      }
+
+      .main-layout {
+        display: block;
+        padding-top: 115px;
+        /* Altura de la topbar de dos filas */
       }
 
       .topbar {
-        height: 52px;
-        padding: 0 10px;
+        height: auto;
+        min-height: 52px;
+        padding: 6px 10px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        position: fixed;
+        width: 100%;
+        top: 0;
+        left: 0;
+      }
+
+      .map-page-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      .map-mini-col {
+        position: static;
+        order: 2;
+      }
+
+      .map-main-col {
+        order: 1;
       }
 
       .logo {
         display: none;
-        /* Ganamos espacio para los recursos */
+      }
+
+      .topbar-right {
+        width: 100%;
+        margin-left: 0;
+        justify-content: space-between;
+        gap: 4px;
+        order: 1;
       }
 
       .res-bar {
-        gap: 2px;
+        width: 100%;
+        order: 2;
+        gap: 4px;
+        padding-bottom: 5px;
+      }
+
+      .save-txt {
+        display: none;
+        /* Dejar solo el punto */
+      }
+
+      #activePlayers {
+        font-size: 0 !important;
+        /* Truco para ocultar texto manteniendo el emoji */
+        padding: 4px 6px !important;
+      }
+
+      #activePlayers::first-letter {
+        font-size: .65rem !important;
+      }
+
+      #alertsBtnLabel {
+        display: none;
+      }
+
+      #adminBtn {
+        font-size: 0 !important;
+        padding: 6px 10px !important;
+      }
+
+      #adminBtn::before {
+        content: "⚙";
+        font-size: .9rem;
+      }
+
+      /* Perfil: ocultar nombre, solo icono */
+      .topbar-right button[onclick="openProfile()"] {
+        font-size: 0 !important;
+        padding: 6px 10px !important;
+      }
+
+      .topbar-right button[onclick="openProfile()"]::before {
+        content: "👤";
+        font-size: .9rem;
+      }
+
+      #topbarUsername {
+        display: none;
+      }
+
+      .logout-btn {
+        font-size: 0 !important;
+        padding: 6px !important;
+      }
+
+      .logout-btn::before {
+        content: "🚪";
+        font-size: .8rem;
       }
 
       .res-chip {
-        min-width: 70px;
-        padding: 4px 6px;
+        min-width: 80px;
+        padding: 4px 8px;
+        background: rgba(255, 255, 255, .05);
       }
 
       .res-icon {
-        font-size: 1rem;
+        font-size: 1.1rem;
       }
 
       .res-val {
-        font-size: .85rem;
+        font-size: .9rem;
       }
 
       .res-rate {
-        font-size: .7rem;
+        font-size: .65rem;
       }
 
       .profile-crown {
@@ -3137,6 +3247,75 @@
       .grid2 {
         display: flex;
         flex-direction: column;
+      }
+
+      /* Minimap adjustment */
+      .minimap-box {
+        width: 100%;
+        max-width: 300px;
+        margin: 0 auto;
+      }
+
+      #minimapCanvas {
+        width: 100% !important;
+        height: auto !important;
+      }
+    }
+
+    /* Orientación Horizontal (Landscape) - Optimización de espacio vertical */
+    @media (max-width: 900px) and (orientation: landscape) {
+      .topbar {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        height: 48px;
+        min-height: 48px;
+        padding: 4px 10px;
+      }
+
+      .main-layout {
+        padding-top: 55px;
+      }
+
+      .res-bar {
+        width: auto;
+        order: 1;
+        flex: 1;
+        overflow-x: auto;
+        padding-bottom: 0;
+      }
+
+      .topbar-right {
+        width: auto;
+        order: 2;
+        gap: 8px;
+      }
+
+      .res-chip {
+        min-width: unset;
+        font-size: 0.75rem;
+      }
+
+      .res-name {
+        display: none;
+      }
+
+      .sidebar {
+        width: 50px;
+        height: 100%;
+        flex-direction: column;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        border-top: none;
+        border-right: 1px solid var(--border);
+      }
+
+      .nav-text {
+        display: none;
+      }
+
+      .content {
+        padding-left: 60px;
       }
     }
 

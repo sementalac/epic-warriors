@@ -512,6 +512,15 @@ function selectNPC(npc, x, y) {
   } else {
     actions.innerHTML = '<span style="color:var(--danger);font-size:.72rem;">⚠ Fuera de alcance — mejora la Torre de Vigía</span>';
   }
+
+  // ── MODO DIOS (ADMIN) ──
+  if (typeof isAdmin === 'function' && isAdmin()) {
+    actions.innerHTML += '<div style="margin-top:12px;border-top:1px dashed rgba(255,215,0,0.3);padding-top:10px;">'
+      + '<button class="btn btn-sm" style="background:rgba(255,61,90,0.1);color:var(--danger);border-color:rgba(255,61,90,0.3);width:100%;" '
+      + 'onclick="ghostDelete(\'' + npc.id + '\', \'' + escapeAttr(npc.name) + '\'); document.getElementById(\'mapPanel\').classList.remove(\'show\');">'
+      + '💀 Eliminar Fantasma (God Mode)</button>'
+      + '</div>';
+  }
 }
 
 async function openMissionModal(type, targetId, x, y) {
@@ -938,6 +947,18 @@ function selectCell(village, isOwn, isAlly, x, y) {
         ? '<span style="font-size:.72rem;color:var(--danger);">⚠ Construye una Torre de Vigía para fundar aldeas.</span>'
         : '<span style="font-size:.72rem;color:var(--danger);">⚠ Fuera de rango (Tu torre: ' + rng2 + '). Mejora la Torre de Vigía.</span>';
     }
+
+    // ── MODO DIOS (ADMIN) ──
+    if (typeof isAdmin === 'function' && isAdmin()) {
+      actions.innerHTML += '<div style="margin-top:12px;border-top:1px dashed rgba(255,215,0,0.3);padding-top:10px;">'
+        + '<div style="font-size:.65rem;color:var(--gold);margin-bottom:6px;letter-spacing:.05em;">⚙️ MODO DIOS (ADMIN)</div>'
+        + '<div style="display:flex;gap:4px;flex-wrap:wrap;">'
+        + '<button class="btn btn-sm" style="background:rgba(255,215,0,0.1);color:var(--gold);border-color:rgba(255,215,0,0.3);flex:1;" onclick="adminSpawnGhostMap(' + x + ',' + y + ')">👻 Fantasma</button>'
+        + '<button class="btn btn-sm" style="background:rgba(255,215,0,0.1);color:var(--gold);border-color:rgba(255,215,0,0.3);flex:1;" onclick="adminSpawnCaveMap(' + x + ',' + y + ')">⛏️ Cueva</button>'
+        + '<button class="btn btn-sm" style="background:rgba(255,215,0,0.1);color:var(--gold);border-color:rgba(255,215,0,0.3);flex:1;" onclick="adminTeleportMap(' + x + ',' + y + ')">🌌 Mover mi aldea</button>'
+        + '</div></div>';
+    }
+
     return;
   }
 

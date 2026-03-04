@@ -281,6 +281,15 @@ function selectCave(cave, x, y) {
     + (currentSum > 0
       ? '<div style="font-size:.62rem;color:var(--gold);margin-top:6px;">🧿 Criaturas de cueva en tu aldea: ' + currentSum + '</div>'
       : '');
+
+  // ── MODO DIOS (ADMIN) ──
+  if (typeof isAdmin === 'function' && isAdmin()) {
+    actions.innerHTML += '<div style="margin-top:12px;border-top:1px dashed rgba(255,215,0,0.3);padding-top:10px;">'
+      + '<button class="btn btn-sm" style="background:rgba(255,61,90,0.1);color:var(--danger);border-color:rgba(255,61,90,0.3);width:100%;" '
+      + 'onclick="adminDeleteCaveMap(\'' + cave.id + '\'); document.getElementById(\'mapPanel\').classList.remove(\'show\');">'
+      + '💀 Eliminar Cueva (God Mode)</button>'
+      + '</div>';
+  }
 }
 
 // Cuenta guardianes capturados en la aldea activa (incluye los que están en misión)

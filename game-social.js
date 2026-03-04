@@ -86,7 +86,7 @@ function renderRankingRows(box, rows, fetchedAt) {
   const nextStr = nextUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
   let html = '<div style="font-size:.6rem;color:var(--dim);margin-bottom:8px;">⏱ Próxima actualización: ~' + nextStr + ' (cada 6h) &nbsp;·&nbsp; 1 tropa = 1 punto militar</div>';
-  var podiumBg = ['rgba(255,215,0,.07)','rgba(192,192,192,.05)','rgba(205,127,50,.05)'];
+  var podiumBg = ['rgba(255,215,0,.07)', 'rgba(192,192,192,.05)', 'rgba(205,127,50,.05)'];
   html += '<div class="table"><div class="trow thead"><div>#</div><div>Jugador</div><div>Alianza</div><div style="text-align:right;">⚔️ Puntos</div></div>';
 
   rows.forEach((r, i) => {
@@ -136,10 +136,10 @@ function getTroopStatsAtLevel(troopKey, lvl) {
   var spikes = Math.floor(lvl / 5);
   mult += spikes * 0.10;
   return {
-    hp:      Math.round(base.hp * mult),
-    damage:  Math.round(base.damage * mult),
+    hp: Math.round(base.hp * mult),
+    damage: Math.round(base.damage * mult),
     defense: Math.round(base.defense * mult),
-    attackChance: Math.min(95, base.attackChance + Math.floor((lvl-1)*0.5))
+    attackChance: Math.min(95, base.attackChance + Math.floor((lvl - 1) * 0.5))
   };
 }
 
@@ -155,12 +155,12 @@ async function loadResearchData(forceReload) {
       .single();
     if (error) throw error;
     _researchData = {
-      experience:   data.experience || 0,
+      experience: data.experience || 0,
       troop_levels: data.troop_levels || {},
       weapon_levels: data.weapon_levels || {},
-      armor_levels:  data.armor_levels || {}
+      armor_levels: data.armor_levels || {}
     };
-  } catch(e) {
+  } catch (e) {
     console.warn('loadResearchData error:', e);
     _researchData = { experience: 0, troop_levels: {}, weapon_levels: {}, armor_levels: {} };
   }
@@ -185,10 +185,10 @@ async function renderResearch() {
   var grid = document.getElementById('researchTroopGrid');
   if (!grid) return;
 
-  var troopKeys = ['aldeano','soldado','mago','druida','explorador','asesino','paladin','chaman'];
+  var troopKeys = ['aldeano', 'soldado', 'mago', 'druida', 'explorador', 'asesino', 'paladin', 'chaman'];
   var html = '';
 
-  troopKeys.forEach(function(key) {
+  troopKeys.forEach(function (key) {
     var tDef = TROOP_TYPES[key];
     if (!tDef) return;
     var curLvl = rd.troop_levels[key] || 1;
@@ -217,8 +217,8 @@ async function renderResearch() {
     if (!isMax) {
       html += '<div style="font-size:.62rem;color:' + (canAfford ? 'var(--gold)' : 'var(--dim)') + ';margin-bottom:4px;">' + formatNumber(cost) + ' XP</div>';
       html += '<button class="btn btn-sm" style="' + (!canAfford ? 'opacity:.4;cursor:not-allowed;' : '') + '"'
-            + (canAfford ? ' onclick="upgradeTroopLevel(\'' + key + '\')"' : '')
-            + '>⬆ Subir</button>';
+        + (canAfford ? ' onclick="upgradeTroopLevel(\'' + key + '\')"' : '')
+        + '>⬆ Subir</button>';
     } else {
       html += '<div style="font-size:.75rem;color:var(--gold);">✨ Maestría</div>';
     }
@@ -230,13 +230,13 @@ async function renderResearch() {
     function statRow(icon, label, cur, nxt) {
       var diff = nxt ? (nxt - cur > 0 ? ' <span style="color:var(--ok);">+' + (nxt - cur) + '</span>' : '') : '';
       return '<div style="color:var(--dim);padding:2px 0;">' + icon + ' ' + label + '</div>'
-           + '<div style="color:var(--text);padding:2px 0;font-family:VT323,monospace;">' + cur + diff + '</div>';
+        + '<div style="color:var(--text);padding:2px 0;font-family:VT323,monospace;">' + cur + diff + '</div>';
     }
-    html += statRow('⚔️','Daño', stats.damage, statsNext && statsNext.damage);
-    html += statRow('🎯','Prob. Golpe', stats.attackChance, statsNext && statsNext.attackChance);
+    html += statRow('⚔️', 'Daño', stats.damage, statsNext && statsNext.damage);
+    html += statRow('🎯', 'Prob. Golpe', stats.attackChance, statsNext && statsNext.attackChance);
     html += '<div style="grid-column:1/-1;font-size:.6rem;color:var(--dim);letter-spacing:.12em;opacity:.7;padding:5px 0 4px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:3px;">DEFENSA</div>';
-    html += statRow('❤️','HP', stats.hp, statsNext && statsNext.hp);
-    html += statRow('🛡️','Defensa', stats.defense, statsNext && statsNext.defense);
+    html += statRow('❤️', 'HP', stats.hp, statsNext && statsNext.hp);
+    html += statRow('🛡️', 'Defensa', stats.defense, statsNext && statsNext.defense);
     html += '</div>';
     html += '</div>';
   });
@@ -273,7 +273,7 @@ async function upgradeTroopLevel(troopKey) {
     await renderResearch();
     var tDef = TROOP_TYPES[troopKey];
     _showToast('✅ ' + (tDef ? tDef.icon + ' ' + tDef.name : troopKey) + ' subido a nivel ' + newLvl + '!');
-  } catch(e) {
+  } catch (e) {
     console.error('upgradeTroopLevel error:', e);
     alert('Error al subir nivel: ' + e.message);
   }
@@ -284,7 +284,7 @@ function _showToast(msg) {
   t.textContent = msg;
   t.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:.85rem;box-shadow:0 2px 12px #0008;pointer-events:none;';
   document.body.appendChild(t);
-  setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity .5s'; setTimeout(function(){ t.remove(); }, 500); }, 2500);
+  setTimeout(function () { t.style.opacity = '0'; t.style.transition = 'opacity .5s'; setTimeout(function () { t.remove(); }, 500); }, 2500);
 }
 
 // ================================================================
@@ -414,11 +414,11 @@ async function _loadAllianceList() {
   var mr = await sbClient.from('alliance_members').select('alliance_id').eq('status', 'active');
   var memberCounts = {};
   if (!mr.error && mr.data) {
-    mr.data.forEach(function(m) { memberCounts[m.alliance_id] = (memberCounts[m.alliance_id] || 0) + 1; });
+    mr.data.forEach(function (m) { memberCounts[m.alliance_id] = (memberCounts[m.alliance_id] || 0) + 1; });
   }
 
   let html = '<div class="table"><div class="trow thead"><div>TAG</div><div>Nombre</div><div style="text-align:center">👥</div><div style="text-align:right;"></div></div>';
-  r.data.forEach(function(al) {
+  r.data.forEach(function (al) {
     var count = memberCounts[al.id] || 0;
     var tagPill = '<span style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.2);border-radius:3px;padding:1px 6px;color:var(--accent);font-family:VT323,monospace;font-size:.75rem;">' + escapeHtml(al.tag) + '</span>';
     html += '<div class="trow">'
@@ -450,17 +450,17 @@ async function _loadMembersList(allianceId, isLeader) {
   // Intentar cargar puntuación militar para mostrar en la lista
   var scoreMap = {};
   try {
-    var userIds = r.data.map(function(m) { return m.user_id; });
+    var userIds = r.data.map(function (m) { return m.user_id; });
     var rankR = await sbClient.from('ranking')
       .select('user_id,military_score')
       .in('user_id', userIds);
     if (!rankR.error && rankR.data) {
-      rankR.data.forEach(function(row) { scoreMap[row.user_id] = row.military_score || 0; });
+      rankR.data.forEach(function (row) { scoreMap[row.user_id] = row.military_score || 0; });
     }
-  } catch(e) { /* ranking opcional */ }
+  } catch (e) { /* ranking opcional */ }
 
   var total = r.data.length;
-  var leaders = r.data.filter(function(m) { return m.role === 'leader'; }).length;
+  var leaders = r.data.filter(function (m) { return m.role === 'leader'; }).length;
 
   let html = '<div style="font-size:.62rem;color:var(--dim);margin-bottom:8px;">'
     + total + ' miembro' + (total !== 1 ? 's' : '') + ' activo' + (total !== 1 ? 's' : '')
@@ -472,7 +472,7 @@ async function _loadMembersList(allianceId, isLeader) {
     + (isLeader ? '<div></div>' : '')
     + '</div>';
 
-  r.data.forEach(function(m) {
+  r.data.forEach(function (m) {
     var uname = (m.profiles && m.profiles.username) ? escapeHtml(m.profiles.username) : m.user_id.slice(0, 8);
     var isMe = m.user_id === currentUser.id;
     var isLeaderRole = m.role === 'leader';
@@ -608,7 +608,7 @@ async function renderAllianceRanking() {
     return;
   }
 
-  var alPodiumBg = ['rgba(255,215,0,.07)','rgba(192,192,192,.05)','rgba(205,127,50,.05)'];
+  var alPodiumBg = ['rgba(255,215,0,.07)', 'rgba(192,192,192,.05)', 'rgba(205,127,50,.05)'];
   var html = '<div class="table"><div class="trow thead"><div>#</div><div>Alianza</div><div>Miembros</div><div style="text-align:right;">⚔️ Puntos</div></div>';
   sorted.forEach(function (al, i) {
     var isMyAl = window._playerAllianceTag && window._playerAllianceTag === al.tag;
@@ -859,7 +859,7 @@ async function transferLeadership() {
 
   if (r.error) { showNotif('Error: ' + r.error.message, 'err'); return; }
 
-  var member = (r.data || []).find(function(m) {
+  var member = (r.data || []).find(function (m) {
     return m.profiles && m.profiles.username.toLowerCase() === username.toLowerCase();
   });
 
@@ -989,26 +989,26 @@ async function renderThreads() {
 
   // Para DMs: cargar el nombre del otro participante en una sola query
   var dmPartnerMap = {};
-  var dmRows = rows.filter(function(x) {
+  var dmRows = rows.filter(function (x) {
     return (x.message_threads && x.message_threads.thread_type === 'dm');
   });
   if (dmRows.length > 0) {
-    var dmIds = dmRows.map(function(x) { return x.thread_id; });
+    var dmIds = dmRows.map(function (x) { return x.thread_id; });
     try {
       var membersR = await sbClient.from('thread_members')
         .select('thread_id,user_id,profiles(username)')
         .in('thread_id', dmIds)
         .neq('user_id', currentUser.id);
       if (!membersR.error && membersR.data) {
-        membersR.data.forEach(function(m) {
+        membersR.data.forEach(function (m) {
           dmPartnerMap[m.thread_id] = (m.profiles && m.profiles.username) ? m.profiles.username : 'Usuario';
         });
       }
-    } catch(e) { /* si falla, usaremos label genérico */ }
+    } catch (e) { /* si falla, usaremos label genérico */ }
   }
 
   var html = '';
-  rows.forEach(function(x) {
+  rows.forEach(function (x) {
     var t = (x.message_threads && x.message_threads.thread_type) || 'dm';
     var m = threadMeta(t);
     var isActive = (x.thread_id == currentThreadId);
@@ -1384,7 +1384,7 @@ async function openReport(msgId, body, isRead) {
   var overlay = document.createElement('div');
   overlay.id = 'reportPopupOverlay';
   overlay.className = 'bld-modal-overlay';
-  overlay.addEventListener('click', function(e) {
+  overlay.addEventListener('click', function (e) {
     if (e.target === overlay) overlay.remove();
   });
 
@@ -1397,8 +1397,8 @@ async function openReport(msgId, body, isRead) {
   head.innerHTML =
     '<span style="font-size:1.6rem;">' + sStyle.icon + '</span>'
     + '<div style="flex:1;min-width:0;">'
-    +   '<div class="bld-modal-title" style="color:' + sStyle.color + ';">' + escapeHtml(parsed.title) + '</div>'
-    +   '<div class="bld-modal-sub">' + sStyle.label.toUpperCase() + '</div>'
+    + '<div class="bld-modal-title" style="color:' + sStyle.color + ';">' + escapeHtml(parsed.title) + '</div>'
+    + '<div class="bld-modal-sub">' + sStyle.label.toUpperCase() + '</div>'
     + '</div>'
     + '<button onclick="deleteReport(\'' + msgId + '\')" style="padding:5px 12px;background:rgba(224,64,64,.1);border:1px solid var(--danger);border-radius:4px;color:var(--danger);font-family:VT323,monospace;font-size:.75rem;cursor:pointer;margin-right:8px;">🗑 Eliminar</button>'
     + '<button class="bld-modal-close" onclick="document.getElementById(&quot;reportPopupOverlay&quot;).remove()">×</button>';
@@ -1610,3 +1610,28 @@ async function openAllianceChat() {
 // ============================================================
 // ADMIN — rol leído desde Supabase profiles.role
 // ============================================================
+
+// v1.52: initGlobalAnnouncements — Escucha anuncios directos del administrador
+function initGlobalAnnouncements() {
+  if (typeof sbClient === 'undefined') return;
+
+  sbClient.channel('global-announcements')
+    .on('broadcast', { event: 'announcement' }, function (payload) {
+      if (payload && payload.payload && payload.payload.message) {
+        var msg = payload.payload.message;
+        var el = document.getElementById('motdModalText');
+        if (el) {
+          el.textContent = msg;
+          var modal = document.getElementById('motdModal');
+          if (modal) modal.style.display = 'flex';
+          if (typeof showNotif === 'function') showNotif('📢 NUEVO ANUNCIO DEL ADMINISTRADOR', 'ok');
+        }
+      }
+    })
+    .subscribe();
+}
+
+// Inicializar al cargar el módulo si estamos logueados o al menos el cliente existe
+if (typeof sbClient !== 'undefined') {
+  initGlobalAnnouncements();
+}
