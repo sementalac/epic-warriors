@@ -1181,11 +1181,16 @@ async function adminTeleportMap(x, y) {
   if (!confirm('¿Teletransportar "' + activeVillage.name + '" a [' + x + ',' + y + ']?')) return;
 
   try {
-    var { error: rErr } = await sbClient.from('villages').update({ x: x, y: y }).eq('id', activeVillage.id);
+    // v1.68: usa RPC admin_teleport_village (columnas correctas cx/cy, valida colisión)
+    var { error: rErr } = await sbClient.rpc('admin_teleport_village', {
+      p_village_id: activeVillage.id,
+      p_cx: x,
+      p_cy: y
+    });
     if (rErr) throw rErr;
 
-    activeVillage.x = x;
-    activeVillage.y = y;
+    activeVillage.x = x; activeVillage.cx = x;
+    activeVillage.y = y; activeVillage.cy = y;
     showNotif('🌌 Aldea teletransportada!', 'ok');
     if (typeof renderMap === 'function') {
       mapCamX = x;
@@ -1541,16 +1546,13 @@ async function adminFastBuildAll() {
     var count = 0;
     for (var v of vills) {
       var s = v.state;
-      if (s && s.build_queue) {
-        // Mover de cola a edificios
-        var q = s.build_queue;
-        if (!s.buildings) s.buildings = {};
-        if (!s.buildings[q.id]) s.buildings[q.id] = { level: 0 };
-        s.buildings[q.id].level = (s.buildings[q.id].level || 0) + 1;
-        delete s.build_queue;
-
-        await sbClient.from('villages').update({ state: s }).eq('id', v.id);
-        count++;
+      if (s && s.build_queue && s.build_queue.id) {
+        var finishAt = s.build_queue.finish_at ? new Date(s.build_queue.finish_at).getTime() : 0;
+        if (finishAt <= Date.now()) {
+          // v1.68: usa RPC admin_repair_complete_builds (preserva aldeanos, atómico)
+          var { data: repaired } = await sbClient.rpc('admin_repair_complete_builds', { p_village_id: v.id });
+          if (repaired > 0) count++;
+        }
       }
     }
 

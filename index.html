@@ -6,7 +6,7 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.50</title>
+  <title>Epic Warriors Online v1.70</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
@@ -1043,7 +1043,7 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.50</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.70</div>
 
   <script src="game-data.js"></script>
   <script src="game-constants.js?v=1.50"></script>
@@ -1414,14 +1414,24 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
         v.state = s;
         v.x = Number(v.cx); v.y = Number(v.cy);
 
+        // v1.69: resolver todas las colas que vencieron offline, no solo build_queue
+        var needsSave = false;
         if (v.state.build_queue) {
           const oldQ = JSON.stringify(v.state.build_queue);
           v.state = resolveQueue(v.state);
-          const newQ = JSON.stringify(v.state.build_queue);
-          if (oldQ !== newQ) {
-            await saveVillage(v, { updateScore: false });
-          }
+          if (oldQ !== JSON.stringify(v.state.build_queue)) needsSave = true;
         }
+        if (v.state.training_queue && v.state.training_queue.length > 0) {
+          const oldT = JSON.stringify(v.state.training_queue);
+          v.state = resolveTrainingQueue(v.state);
+          if (oldT !== JSON.stringify(v.state.training_queue)) needsSave = true;
+        }
+        if (v.state.summoning_queue && v.state.summoning_queue.length > 0) {
+          const oldS = JSON.stringify(v.state.summoning_queue);
+          v.state = resolveSummoningQueue(v.state);
+          if (oldS !== JSON.stringify(v.state.summoning_queue)) needsSave = true;
+        }
+        if (needsSave) await saveVillage(v, { updateScore: false });
 
         loaded.push(v);
       }

@@ -1,5 +1,5 @@
 // ============================================================
-// EPIC WARRIORS — game-globals.js  (v1.39)
+// EPIC WARRIORS — game-globals.js  (v1.70)
 // Cargado en <head> ANTES que cualquier otro módulo.
 // Define sbClient y todos los globals compartidos.
 // ⚠️ NUNCA referenciar DOM aquí — el body no existe aún.
@@ -8,7 +8,7 @@
 var SUPABASE_URL = 'https://plrsfepvdgxlaxzejfbu.supabase.co';
 var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBscnNmZXB2ZGd4bGF4emVqZmJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMjIzNjksImV4cCI6MjA4NjU5ODM2OX0.7ypfPPSwvNCyU-QdQe-58gjBYV7glm3fD9yPLHQstTc';
 
-var GAME_VERSION = '0.71';
+var GAME_VERSION = '1.70';
 var MAP_SIZE = 380;
 var MAP_VIEW = 7;
 var GHOST_OWNER_ID = '00000000-0000-0000-0000-000000000000';

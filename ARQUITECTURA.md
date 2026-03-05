@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 3.0 — Última actualización: v1.66 (Modelo Ogame — Acciones server-authoritative)
+> Versión del documento: 3.3 — Última actualización: v1.70 (DT-01 resuelto — Modelo Ogame puro, RPCs atómicos sin tick previo)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -382,6 +382,8 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 23. **Fundación de aldeas**: Usar siempre `execute_founding_secure` RPC. Valida misión previa en servidor.
 24. **Sincronización**: Llamar a `sync_village_resources` RPC tras acciones críticas para evitar "resource drift".
 
+25. **RPCs de gasto (`start_build_secure`, `start_training_secure`, `start_summoning_secure`) calculan recursos inline.** No deben llamar `secure_village_tick` internamente. La fórmula de producción vive en el cuerpo del RPC. `secure_village_tick` es solo para la sincronización periódica de 60s.
+
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
 ---
@@ -411,6 +413,15 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.70 — DT-01: Modelo Ogame puro — RPCs de gasto 100% atómicos
+- **Filosofía**: `start_build_secure`, `start_training_secure`, `start_summoning_secure` ya NO llaman `PERFORM secure_village_tick` antes de validar. Calculan los recursos reales directamente en su cuerpo mediante la misma fórmula que `secure_village_tick` (producción × horas transcurridas + cap almacén).
+- **Resultado**: cada acción de gasto es ahora 1 lock + 1 write en vez de 2 locks + 2 writes. Elimina el riesgo de que el tick fallase silenciosamente y dejase los recursos desactualizados.
+- [Supabase] `start_build_secure` → bloque de cálculo inline reemplaza `PERFORM secure_village_tick`
+- [Supabase] `start_training_secure` → ídem
+- [Supabase] `start_summoning_secure` → ídem; además actualiza todos los recursos (no solo esencia) al hacer el write final
+- `secure_village_tick` sigue existiendo sin cambios — su rol es la sincronización periódica de 60s desde JS y el recálculo de aldeanos
+- [Deuda técnica] DT-01 ✅ **cerrada**
 
 ### v1.64 — Seguridad de Colas y Anti-Bloat
 - **State Striping**: `saveVillage` ahora limpia el JSON de `state` eliminando las colas (`build_queue`, `training_queue`, etc.) antes de guardar, garantizando que las columnas especializadas sean la única fuente de verdad y evitando el crecimiento infinito del JSON.
@@ -532,6 +543,37 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - 50 nuevas criaturas añadidas (mitología clásica y medieval): Kobold, Sílfide, Troll, Banshee, Quimera, Cíclope, Basilisco, Valquiria, Minotauro, Salamandra, Manticora, Ondina, Centauro, Medusa, Wyvern, Nereida, Gigante, Harpía, Cerbero, Quetzal, Leviatán, Serafín, Titán, Lich, Pegaso, Naga, Yeti, Sátiro, Simurgh, Gorgona, Kraken, Ángel Caído, Ammit, Roc, Coloso, Sleipnir, Abismo, Nemea, Tifón, Equidna, Tarasca, Garuda, Jörmungandr, Valquiria Oscura, Primordio, Azrael, Ignis Rex, Fenrir, Moloch, Metatrón
 - [Supabase] Tabla `creatures` necesita 50 columnas nuevas (ALTER TABLE — ver propuesta_criaturas.html)
 
+### v1.68 — Auditoría de seguridad admin + RLS caves
+- **Bug crítico**: tabla `caves` sin RLS — cualquier usuario autenticado podía leer, escribir, borrar y capturar cuevas ajenas directamente desde el cliente sin pasar por ninguna RPC.
+- **Bug**: `adminTeleportMap` usaba columnas `x,y` (no existen en `villages`) → el teletransporte nunca funcionó. Corregido a `cx,cy` via nueva RPC `admin_teleport_village`.
+- **Bug**: `admin_repair` escribía `state` directamente con `UPDATE` sin incluir `aldeanos` en resources — mismo bug que v1.67. Corregido via nueva RPC `admin_repair_complete_builds`.
+- **Inconsistencia resuelta**: `isAdmin()` cliente usaba email hardcodeado; `is_admin()` servidor usaba `profiles.role`. Sincronizados — `profiles.role = 'admin'` confirmado en DB.
+- [Supabase] RLS activado en `caves` con 4 políticas: `caves_select_public` (todos), `caves_insert_admin_only`, `caves_update_owner_or_admin`, `caves_delete_admin_only`
+- [Supabase] Nueva RPC `admin_teleport_village(village_id, cx, cy)` — valida columnas correctas y colisión de coordenadas
+- [Supabase] Nueva RPC `admin_repair_complete_builds(village_id)` — completa build_queue vencidas preservando `aldeanos`
+- [JS] `adminTeleportMap` → usa `admin_teleport_village` RPC en vez de UPDATE directo
+- [JS] `admin_repair` loop → usa `admin_repair_complete_builds` RPC en vez de `villages.update({state})`
+- [Regla nueva] **Toda tabla con datos de jugador debe tener RLS activado.** Verificar con: `SELECT relname, relrowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relrowsecurity = false`
+- [Regla nueva] El admin nunca hace `UPDATE villages SET state = ...` directo desde el cliente. Siempre via RPC SECURITY DEFINER que preserve `aldeanos`.
+
+### v1.67 — Fix crítico: aldeanos borrados en cada operación servidor
+- **Bug raíz**: todas las RPCs que reconstruyen el objeto `resources` con `jsonb_build_object(...)` omitían el campo `aldeanos`. PostgreSQL reemplaza el objeto entero, no hace merge, por lo que cada llamada al servidor ponía `aldeanos` a `null`.
+- **Afectaba**: `secure_village_tick`, `start_build_secure`, `cancel_build_secure`, `start_training_secure`, `cancel_training_secure`, `save_village_client`.
+- [Supabase] `secure_village_tick` → añade `'aldeanos', v_ald_current` en el jsonb de resources
+- [Supabase] `start_build_secure` → añade `'aldeanos'` preservando `troops.aldeano` del servidor. Fix adicional: check de `build_queue` vacía ahora comprueba `->>'id' IS NOT NULL` en vez de `NOT IN ('null','{}','')` (jsonb vacío es `'{}'` no `'[]'`)
+- [Supabase] `cancel_build_secure` → ídem
+- [Supabase] `start_training_secure` → añade `'aldeanos', v_new_ald` (aldeanos tras descontar los reclutados)
+- [Supabase] `cancel_training_secure` → añade `'aldeanos', v_new_ald` (aldeanos devueltos)
+- [Supabase] `save_village_client` → 4 versiones duplicadas eliminadas con `DROP FUNCTION` dinámico. Versión canónica única (12 parámetros). `aldeanos` en `v_res_patch` se toma siempre de `v_cur_trp->>'aldeano'` (servidor), nunca del cliente.
+- [Regla nueva] **Toda RPC que reconstruya `resources` con `jsonb_build_object` DEBE incluir `'aldeanos'` tomado de `troops.aldeano` del estado actual en DB.**
+- [Regla nueva] `save_village_client` solo debe existir en una versión. Antes de crear una nueva versión, hacer DROP de todas las anteriores.
+- [Supabase] Limpieza de políticas RLS duplicadas y cierre de agujero de seguridad:
+  - `"Users can update own villages."` **ELIMINADA** — permitía UPDATE directo al cliente, saltando todas las RPCs
+  - Eliminados duplicados: `alliances_insert_owner`, `alliances_select_public`, `"Users can insert their own villages."`, `"Villages are viewable by everyone."`
+  - `"Users manage own guest troops"` (ALL) eliminada — solapaba con las 6 políticas específicas
+- [Regla nueva] Políticas RLS de `villages`: solo las 4 canónicas: `villages_insert`, `villages_select`, `villages_update_admin_only`, `villages_delete_admin_only`. Nunca añadir UPDATE genérico para usuarios normales.
+- [Regla nueva] Antes de añadir política RLS, verificar duplicados: `SELECT tablename, policyname, COUNT(*) FROM pg_policies WHERE schemaname='public' GROUP BY tablename, policyname HAVING COUNT(*)>1`
+
 ### v1.66 — Modelo Ogame: acciones server-authoritative
 - **Filosofía**: el cliente ya NO descuenta recursos localmente para construir/entrenar/invocar. Solo manda intenciones al servidor. El servidor valida, descuenta y devuelve el estado actualizado.
 - [Supabase] Nuevas RPCs SECURITY DEFINER:
@@ -568,6 +610,17 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - Bug foundVillage: misión sin `mid` → RPC no la encontraba. Fix: generar `mid` al crear la misión.
 - Bug provisiones: `foundVillage` no descontaba provisiones. Fix: `snapshotResources` + descuento antes de crear misión.
 - `battles_won_npc` movido de `state` a `profiles` (fuente de verdad global). RPC `update_battle_stats`.
+
+### v1.69 — Fix sync multi-aldea + colas offline + build_secure atómico
+- **Bug**: `switchVillage` nunca llamaba `syncVillageResourcesFromServer` → aldeas no activas no recibían tick y acumulaban 0 aldeanos/recursos entre sesiones. Fix: llamada async a `syncVillageResourcesFromServer` al final de `switchVillage`.
+- **Bug**: `last_aldeano_at = null` en aldeas → `secure_village_tick` no podía calcular aldeanos nuevos. Fix: query puntual `UPDATE villages SET state = jsonb_set(state, '{last_aldeano_at}', to_jsonb(now()::text)) WHERE state->>'last_aldeano_at' IS NULL`.
+- **Bug**: `loadMyVillages` solo resolvía `build_queue` offline, ignoraba `training_queue` y `summoning_queue`. Fix: resolver las tres colas en el load con `needsSave` unificado.
+- **Bug**: `start_build_secure` fallaba con "Recursos insuficientes" cuando el cliente tenía recursos interpolados no guardados en DB. Fix: `PERFORM secure_village_tick(p_village_id)` al inicio del RPC antes de leer recursos.
+- [JS] `switchVillage` → llama `syncVillageResourcesFromServer()` tras activar aldea
+- [JS] `loadMyVillages` → resuelve `training_queue` y `summoning_queue` offline además de `build_queue`
+- [Supabase] `start_build_secure` → `PERFORM secure_village_tick` antes de validar recursos
+- [Eliminado] Bloque duplicado `_profileBattles` en `switchVillage`
+- [Deuda técnica] Ver sección DEUDA TÉCNICA más abajo
 
 ### vX.XX — [Plantilla para nuevas versiones]
 - descripción del cambio principal
@@ -618,3 +671,14 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ### v0.95 — Correcciones de mecánicas
 - Muralla reimplementada como escudo HP
 - Criaturas: visibilidad por `torreLevel`
+
+---
+
+## DEUDA TÉCNICA
+
+### ✅ Sin deuda técnica abierta
+
+| ID | Descripción | Estado |
+|---|---|---|
+| ~~DT-01~~ | ~~RPCs de gasto usaban `PERFORM secure_village_tick` antes de validar — doble lock + doble write. Si el tick fallaba silenciosamente, se leían recursos desactualizados.~~ | ✅ Resuelto v1.70 |
+| ~~DT-02~~ | ~~`start_training_secure` y `start_summoning_secure` con bug de recursos desactualizados.~~ | ✅ Resuelto v1.69 |

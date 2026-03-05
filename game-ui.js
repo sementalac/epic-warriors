@@ -31,6 +31,8 @@ async function startBuild(id) {
 
     if (newState) {
       activeVillage.state.resources    = newState.resources    || vs.resources;
+      // v1.70: inyectar start_at para calcular progreso de barra correctamente
+      if (newState.build_queue) newState.build_queue.start_at = new Date().toISOString();
       activeVillage.state.build_queue  = newState.build_queue  || null;
       activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
     }
@@ -114,8 +116,14 @@ function renderBuildings(res) {
     if (inQueue) {
       var finish = new Date(vs.build_queue.finish_at).getTime();
       timeLeftSec = Math.max(0, Math.ceil((finish - Date.now()) / 1000));
-      var total = def.time(lvl);
-      pct = Math.min(100, Math.round(((total - timeLeftSec) / total) * 100));
+      var bqTotal;
+      if (vs.build_queue.start_at) {
+        bqTotal = Math.max(1, (finish - new Date(vs.build_queue.start_at).getTime()) / 1000);
+      } else {
+        bqTotal = def.time(lvl + 1);
+        if (!bqTotal || bqTotal <= 0) bqTotal = 60;
+      }
+      pct = Math.min(100, Math.max(0, Math.round(((bqTotal - timeLeftSec) / bqTotal) * 100)));
     }
 
     var prodHTML = '';
@@ -297,8 +305,16 @@ function renderQueue(vs) {
     var finish = new Date(q.finish_at).getTime();
     var tl = Math.max(0, Math.ceil((finish - Date.now()) / 1000));
     var lvl = ((vs.buildings[q.id] && vs.buildings[q.id].level) || 0);
-    var total = def ? def.time(lvl) : 60;
-    var pct = Math.min(100, Math.round(((total - tl) / total) * 100));
+    // v1.70: calcular duración total desde start_at→finish_at (evita dep. en def.time)
+    // Fallback: def.time(lvl+1) si no hay start_at (build cargada desde DB sin start_at)
+    var total;
+    if (q.start_at) {
+      total = Math.max(1, (finish - new Date(q.start_at).getTime()) / 1000);
+    } else {
+      total = def ? def.time(lvl + 1) : 60;
+      if (!total || total <= 0) total = 60;
+    }
+    var pct = Math.min(100, Math.max(0, Math.round(((total - tl) / total) * 100)));
     var icon = def ? def.icon : '🏗️';
     el.innerHTML = '<div class="queue-item" style="display:flex;align-items:center;gap:8px;">'
       + '<div class="queue-icon">' + icon + '</div>'

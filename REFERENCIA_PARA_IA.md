@@ -1,4 +1,4 @@
-# REFERENCIA PARA IA — Epic Warriors v1.66
+# REFERENCIA PARA IA — Epic Warriors v1.70
 
 ---
 
@@ -27,6 +27,99 @@
 | Bug multi-archivo | Máximo 2 archivos por turno |
 
 ---
+
+---
+
+## v1.68 — Auditoría de seguridad admin
+
+### Checklist de seguridad (ejecutar tras cualquier migración)
+```sql
+-- 1. Tablas sin RLS (deben ser 0)
+SELECT relname FROM pg_class
+WHERE relnamespace = 'public'::regnamespace
+  AND relkind = 'r' AND relrowsecurity = false;
+
+-- 2. Funciones duplicadas (deben ser 0 con count > 1)
+SELECT proname, COUNT(*) FROM pg_proc
+WHERE pronamespace = 'public'::regnamespace
+GROUP BY proname HAVING COUNT(*) > 1;
+
+-- 3. Políticas RLS duplicadas (deben ser 0)
+SELECT tablename, policyname, COUNT(*) FROM pg_policies
+WHERE schemaname = 'public'
+GROUP BY tablename, policyname HAVING COUNT(*) > 1;
+```
+
+### Reglas admin (caves + villages)
+- `caves`: 4 políticas — select público, insert/delete solo admin, update owner o admin
+- `villages`: 4 políticas — insert owner, select público, update/delete solo admin
+- **Nunca** `UPDATE villages SET state = ...` directo desde cliente — siempre RPC
+- **Nunca** `UPDATE villages SET state = ...` sin incluir `aldeanos` en resources
+
+### Sincronización isAdmin() ↔ is_admin()
+- Cliente (`isAdmin()`): comprueba `currentUser.email === 'sementalac@gmail.com'`
+- Servidor (`is_admin()`): comprueba `profiles.role = 'admin'`
+- Ambos deben estar sincronizados. Tu perfil tiene `role = 'admin'` confirmado.
+
+### Nuevas RPCs admin v1.68
+| RPC | Qué hace |
+|---|---|
+| `admin_teleport_village(village_id, cx, cy)` | Mueve aldea a coordenadas cx/cy, valida colisión |
+| `admin_repair_complete_builds(village_id)` | Completa build_queue vencida preservando aldeanos |
+
+---
+
+## v1.67 — Fix crítico: aldeanos borrados en RPCs
+
+### Bug raíz
+Todas las RPCs que usaban `jsonb_build_object(...)` para reconstruir `resources` omitían el campo `aldeanos`. PostgreSQL reemplaza el objeto entero (no hace merge), así que cada llamada ponía `aldeanos` a `null`.
+
+### Regla nueva (crítica)
+> **Toda RPC que reconstruya `resources` con `jsonb_build_object` DEBE incluir `'aldeanos'` tomado de `troops.aldeano` del estado actual en DB — NUNCA del cliente.**
+
+```sql
+-- Patrón correcto en cualquier RPC que toque resources:
+v_new_res := jsonb_build_object(
+  'madera',      ...,
+  'piedra',      ...,
+  'hierro',      ...,
+  'provisiones', ...,
+  'esencia',     ...,
+  'aldeanos',    COALESCE((v_troops->>'aldeano')::int, 0)  -- ← SIEMPRE
+);
+```
+
+### RPCs corregidas
+| RPC | Fix aplicado |
+|---|---|
+| `secure_village_tick` | `aldeanos = v_ald_current` (valor recién calculado) |
+| `start_build_secure` | `aldeanos` de `troops.aldeano` DB + fix check `build_queue` vacía |
+| `cancel_build_secure` | `aldeanos` de `troops.aldeano` DB |
+| `start_training_secure` | `aldeanos = v_new_ald` (tras descontar reclutados) |
+| `cancel_training_secure` | `aldeanos = v_new_ald` (tras devolver aldeanos) |
+| `save_village_client` | 4 versiones duplicadas → 1 canónica. `aldeanos` del servidor siempre |
+
+### Regla save_village_client
+`save_village_client` debe existir en **una sola versión**. Si hay que modificarla, hacer DROP de todas las versiones anteriores primero (ver `fix_save_village_client_v167.sql`).
+
+### Seguridad RLS — reglas fijas para `villages`
+Las únicas 4 políticas permitidas en `villages` son:
+
+| Política | Tipo | Quién |
+|---|---|---|
+| `villages_insert` | INSERT | `auth.uid() = owner_id` |
+| `villages_select` | SELECT | todos |
+| `villages_update_admin_only` | UPDATE | solo admin |
+| `villages_delete_admin_only` | DELETE | solo admin |
+
+**Nunca añadir UPDATE genérico para usuarios normales** — rompe la seguridad server-authoritative. Los jugadores modifican su aldea solo a través de RPCs SECURITY DEFINER.
+
+Antes de añadir cualquier política RLS, verificar duplicados:
+```sql
+SELECT tablename, policyname, COUNT(*)
+FROM pg_policies WHERE schemaname='public'
+GROUP BY tablename, policyname HAVING COUNT(*) > 1;
+```
 
 ---
 
@@ -59,15 +152,42 @@
 | `switchVillage` | index.html | Inyecta `_profileBattles` al cambiar aldea |
 | `save_village_client` call | index.html | Ahora envía troops, creatures, buildings |
 
-### Estado de archivos v1.66
+### v1.70 — DT-01 resuelto: RPCs de gasto 100% atómicos
+
+**Cambio:** `start_build_secure`, `start_training_secure` y `start_summoning_secure` ya **NO** hacen `PERFORM secure_village_tick` al inicio. Calculan los recursos reales directamente inline con la misma fórmula de producción.
+
+**Patrón v1.70 correcto en cualquier RPC de gasto:**
+```sql
+-- Al inicio del RPC, tras el FOR UPDATE:
+v_last_updated := COALESCE((v_state->>'last_updated')::timestamptz, NOW());
+v_hrs := LEAST(24.0, GREATEST(0, EXTRACT(EPOCH FROM (NOW() - v_last_updated)) / 3600.0));
+-- ... calcular prod_xxx igual que secure_village_tick
+cur_madera := LEAST(cap, FLOOR(COALESCE((v_res->>'madera')::float, 0) + prod_madera * v_hrs));
+-- ... validar y descontar con cur_xxx (no con v_res->>'xxx')
+```
+
+**Regla nueva (crítica):**
+> **`secure_village_tick` NO debe llamarse dentro de otros RPCs de gasto.** Su único rol es la sincronización periódica de 60s desde JS y el recálculo de aldeanos. Los RPCs de gasto son autónomos.
+
+**RPCs actualizadas en v1.70:**
+| RPC | Cambio |
+|---|---|
+| `start_build_secure` | Cálculo inline reemplaza `PERFORM secure_village_tick` |
+| `start_training_secure` | Ídem |
+| `start_summoning_secure` | Ídem + escribe todos los recursos en el write final (no solo esencia) |
+
+### Estado de archivos v1.70
 | Archivo | Versión | Estado |
 |---|---|---|
-| index.html | **v1.66** | ✅ save_village_client completo + switchVillage battles |
+| index.html | **v1.69** | ✅ switchVillage sync + loadMyVillages colas offline |
 | game-ui.js | **v1.66** | ✅ startBuild/cancelBuild async + sync corregido |
 | game-engine.js | **v1.66** | ✅ update_battle_stats + execute_founding_secure fix |
 | game-troops.js | **v1.66** | ✅ startRecruitment/cancel/summon async |
 | game-constants.js | **v1.65** | Sin cambios |
-| game-admin.js | **v1.63** | Sin cambios |
+| game-admin.js | **v1.68** | ✅ admin_teleport + admin_repair RPCs |
+| start_build_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |
+| start_training_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |
+| start_summoning_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |
 
 ## v1.64 — Seguridad de Colas y Anti-Bloat
 **Reglas críticas:**
