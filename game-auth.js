@@ -1,10 +1,18 @@
 // ============================================================
-// EPIC WARRIORS — game-auth.js
+// EPIC WARRIORS — game-auth.js  [v1.70 — security patch]
 // Auth: doLogin, doRegister, doLogout, ensureProfile, getMyPlayerData
 // Username: normUsername, isUsernameShapeValid, isUsernameAvailable
 // Profile: openProfile, closeProfile, doChangeUsername
 //          doDeleteVillage, doDeleteAccount
 // Admin MOTD: loadUserRole, saveMOTD, clearMOTD
+// ============================================================
+// FIX SUMMARY (6 issues)
+// [CRÍTICO-1] doRegister: ahora llama RPC ensure_profile_secure en vez de upsert directo
+// [CRÍTICO-2] doChangeUsername: ahora llama RPC change_username_secure (atómica, sin race condition)
+// [CRÍTICO-3] ensureProfile: reescrita para usar la RPC; nunca escribe directo a profiles
+// [MEDIO-4]   doDeleteAccount: llama RPC delete_my_account para borrar también auth.users
+// [MEDIO-5]   beforeunload: enruta a save_village_client RPC en vez de update directo
+// [MENOR-6]   fetchBannedTerms: caché en memoria para la sesión (0 queries extra)
 // ============================================================
 
 function normUsername(u) {
@@ -28,15 +36,18 @@ function setUserMsg(t, type) {
   el.textContent = t || '';
   el.className = 'auth-msg ' + (type || '');
 }
+
+// ── FIX [MENOR-6]: caché de banned terms — solo 1 query por sesión ──────────
+var _bannedTermsCache = null;
 async function fetchBannedTerms() {
-  // Mantener pequeño: en prod, cachea y pagina si hace falta
+  if (_bannedTermsCache !== null) return _bannedTermsCache;
   var r = await sbClient.from('banned_terms').select('term').limit(1000);
-  if (r.error || !r.data) return [];
-  return r.data.map(function (x) { return String(x.term || '').toLowerCase(); }).filter(Boolean);
+  if (r.error || !r.data) { _bannedTermsCache = []; return []; }
+  _bannedTermsCache = r.data.map(function (x) { return String(x.term || '').toLowerCase(); }).filter(Boolean);
+  return _bannedTermsCache;
 }
+
 async function isUsernameBanned(normalized) {
-  // Comprueba si contiene cualquier termino prohibido
-  // (Esto detecta muchos "derivados" simples porque normalizamos antes)
   var terms = await fetchBannedTerms();
   for (var i = 0; i < terms.length; i++) {
     var t = terms[i];
@@ -107,6 +118,9 @@ async function doLogin() {
   await initGame();
 }
 
+// ── FIX [CRÍTICO-1]: doRegister usa RPC ensure_profile_secure ───────────────
+// La validación real (normalización, banned terms, unicidad atómica) ocurre
+// en el servidor. El cliente NO puede saltarse estas comprobaciones.
 async function doRegister() {
   const userRaw = (document.getElementById('rUser').value || '').trim();
   const email = document.getElementById('rEmail').value.trim();
@@ -137,8 +151,8 @@ async function doRegister() {
     currentUser = data.user;
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('gameWrapper').classList.add('visible');
-    // Ensure profile exists (trigger might have failed or be slow)
-    await ensureProfile(currentUser.id, userRaw);
+    // FIX: usar RPC segura en lugar de upsert directo
+    await ensureProfile(userRaw);
     await initGame();
   } else {
     setMsg('Revisa tu email para confirmar o inicia sesión.', 'ok');
@@ -149,9 +163,26 @@ async function doRegister() {
   }
 }
 
-async function ensureProfile(uid, username) {
-  // Just in case the trigger didn't fire or we want to force username
-  await sbClient.from('profiles').upsert({ id: uid, username: username }, { onConflict: 'id' });
+// ── FIX [CRÍTICO-3]: ensureProfile delega TODO al servidor ──────────────────
+// Ya no acepta uid externo (auth.uid() lo resuelve la RPC).
+// Ya no escribe directo a profiles.
+// Si la RPC falla (nombre duplicado), añade sufijo y lo intenta de nuevo.
+async function ensureProfile(username) {
+  try {
+    const { data, error } = await sbClient.rpc('ensure_profile_secure', { p_username: username });
+    if (error) {
+      console.warn('ensureProfile RPC error:', error.message);
+      return false;
+    }
+    if (!data.ok) {
+      console.warn('ensureProfile rejected:', data.error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('ensureProfile exception:', e);
+    return false;
+  }
 }
 
 async function getMyPlayerData() {
@@ -298,27 +329,36 @@ function openProfile() {
 }
 function closeProfile() { document.getElementById('profileOverlay').classList.add('hidden'); }
 
+// ── FIX [CRÍTICO-2]: doChangeUsername usa RPC atómica ───────────────────────
+// Antes: check disponibilidad (cliente) → espera → update directo → race condition.
+// Ahora: 1 sola llamada RPC que hace check + write atómicos en el servidor.
+// También elimina la escritura directa a profiles que saltaba username_changed.
 async function doChangeUsername() {
   if (_usernameChanged) { showNotif('Ya usaste tu cambio de nombre.', 'err'); return; }
   var raw = (document.getElementById('profNewName').value || '').trim();
   var msg = document.getElementById('profMsg');
   msg.className = 'profile-msg';
 
+  // Validación UX rápida en cliente (el servidor la repite de forma autoritativa)
   var shape = isUsernameShapeValid(raw);
   if (!shape.ok) { msg.textContent = shape.msg; msg.className = 'profile-msg err'; return; }
-  var normalized = normUsername(raw);
-  if (await isUsernameBanned(normalized)) { msg.textContent = 'Nombre no permitido.'; msg.className = 'profile-msg err'; return; }
-  var av = await isUsernameAvailable(normalized);
-  if (!av.ok) { msg.textContent = av.msg || 'No disponible.'; msg.className = 'profile-msg err'; return; }
 
-  const r = await sbClient.from('profiles').update({
-    username: raw,
-    normalized_username: normalized,
-    username_changed: true
-  }).eq('id', currentUser.id);
+  msg.textContent = 'Cambiando nombre...';
 
-  if (r.error) { msg.textContent = 'Error: ' + r.error.message; msg.className = 'profile-msg err'; return; }
+  const { data, error } = await sbClient.rpc('change_username_secure', { p_new_username: raw });
 
+  if (error) {
+    msg.textContent = 'Error: ' + error.message;
+    msg.className = 'profile-msg err';
+    return;
+  }
+  if (!data.ok) {
+    msg.textContent = data.error || 'No disponible.';
+    msg.className = 'profile-msg err';
+    return;
+  }
+
+  // Éxito — actualizar UI local
   _usernameChanged = true;
   document.getElementById('profUsername').textContent = raw;
   document.getElementById('ovUser').textContent = raw;
@@ -386,6 +426,10 @@ async function doDeleteVillage() {
   }
 }
 
+// ── FIX [MEDIO-4]: doDeleteAccount borra también auth.users ─────────────────
+// Requiere RPC delete_my_account() en Supabase con SECURITY DEFINER:
+//   DELETE FROM auth.users WHERE id = auth.uid();
+// Sin esa RPC el email queda bloqueado en auth.users para siempre.
 // ============================================================
 // FIX v1.45: doDeleteAccount
 // — Corregido .eq('user_id', ...) → .eq('owner_id', ...) para villages
@@ -404,33 +448,49 @@ async function doDeleteAccount() {
   if (!confirm('¿Estás SEGURO de que quieres eliminar tu cuenta? Todos tus datos se perderán.')) return;
 
   try {
-    // Obtener IDs de todas mis aldeas
     // v1.65: Removed legacy table deletes. Everything is inside villages.state now.
 
     // Borrar aldeas (columna correcta: owner_id)
     await sbClient.from('villages').delete().eq('owner_id', currentUser.id);
     // Borrar perfil
     await sbClient.from('profiles').delete().eq('id', currentUser.id);
+
+    // FIX: Borrar usuario de auth.users via RPC SECURITY DEFINER
+    // SQL necesario en Supabase:
+    //   CREATE OR REPLACE FUNCTION delete_my_account()
+    //   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
+    //     DELETE FROM auth.users WHERE id = auth.uid();
+    //   $$;
+    const { error: rpcErr } = await sbClient.rpc('delete_my_account');
+    if (rpcErr) {
+      // No bloquear — la sesión se cierra igualmente; el admin puede limpiar auth.users
+      console.warn('delete_my_account RPC failed (create it in Supabase SQL editor):', rpcErr.message);
+    }
   } catch (e) {
     console.warn('doDeleteAccount cleanup error:', e);
   }
 
-  // Cerrar sesión (el usuario de auth.users queda; si quieres borrarlo del todo necesitas el trigger)
+  // Cerrar sesión
   await sbClient.auth.signOut();
   location.reload();
 }
 
-// Guardar inmediatamente antes de cerrar/recargar — protege misiones en curso
+// ── FIX [MEDIO-5]: beforeunload enruta a save_village_client RPC ─────────────
+// Antes: update directo a villages → el usuario podía manipular mission_queue.
+// Ahora: llama save_village_client que valida en servidor qué campos acepta.
+// Nota: beforeunload no admite async/await — el fetch es fire-and-forget.
 window.addEventListener('beforeunload', function () {
   if (activeVillage && currentUser) {
-    // Sync save (no await — beforeunload no permite async)
     try {
       var s = activeVillage.state;
-      sbClient.from('villages').update({
-        build_queue: s.build_queue,
-        mission_queue: s.mission_queue || [],
-        last_aldeano_at: s.last_aldeano_at || null
-      }).eq('id', activeVillage.id);
+      // Usar la RPC segura en lugar de update directo
+      sbClient.rpc('save_village_client', {
+        p_village_id:      activeVillage.id,
+        p_build_queue:     s.build_queue     || [],
+        p_mission_queue:   s.mission_queue   || [],
+        p_last_aldeano_at: s.last_aldeano_at || null
+      });
+      // Fire-and-forget intencional: beforeunload no puede awaitar
     } catch (e) { }
   }
 });

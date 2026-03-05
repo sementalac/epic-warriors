@@ -23,9 +23,11 @@ function renderSimulator() {
       baseArm:        t.armor  || 0,
     };
   });
+  // FIX [MENOR-2]: excluir guardianes de cueva — no son invocables en el juego real
   var simCreatures = {};
   Object.keys(CREATURE_TYPES).forEach(function(k) {
     var c = CREATURE_TYPES[k];
+    if (c.isCaveGuardian) return;
     simCreatures[k] = {
       name:           c.name,
       icon:           c.icon,
@@ -580,8 +582,10 @@ function showResult(atk, def, atkSnap, defSnap, winSide, wallLvl, wallResisted, 
   const atkSt   = mergeSnapByCont(atkSnap);
   const defSt   = mergeSnapByCont(defSnap);
 
+  // FIX [MEDIO-1]: tasa fija 0.15 — igual que RECOVERY_RATE del motor real.
+  // Antes era Math.random() entre 0.10–0.30, lo que hacía las predicciones incorrectas.
   const recRates = {};
-  [...atkConts, ...defConts].forEach(c => { recRates[c.id] = 0.10 + Math.random() * 0.20; });
+  [...atkConts, ...defConts].forEach(c => { recRates[c.id] = 0.15; });
 
   const buildRows = (cid, st, surv, wallResisted, side) => {
     const names = Object.keys(st[cid] || {}).filter(n => st[cid][n].count > 0);

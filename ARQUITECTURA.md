@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 3.3 — Última actualización: v1.70 (DT-01 resuelto — Modelo Ogame puro, RPCs atómicos sin tick previo)
+> Versión del documento: 3.5 — Última actualización: v1.71 (Auditoría Ogame: 6 fixes index.html)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -414,6 +414,15 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
 
+### v1.71 — DT-03: Llegadas de misiones 100% atómicas
+- **Bug**: `executeMove` y `executeTransport` escribían recursos y tropas en el destino con `sbClient.from('villages').update({state})` directo — el cliente leía el state, sumaba y escribía sin lock, dejando una ventana de race condition si dos misiones llegaban simultáneamente.
+- [Supabase] Nueva RPC `apply_cargo_arrival(village_id, cargo)` → calcula producción inline + suma cargo atómicamente. Usada por `executeTransport`.
+- [Supabase] Nueva RPC `apply_move_arrival(village_id, troops, creatures, cargo, troop_slots)` → calcula producción inline + suma tropas + cargo atómicamente + respeta cap de barracas con FOR UPDATE lock. Devuelve `{state, accepted, rejected}`. Usada por `executeMove`.
+- [JS] `executeTransport` → usa `apply_cargo_arrival` RPC en vez de `villages.update` directo
+- [JS] `executeMove` → usa `apply_move_arrival` RPC; la lógica de barracas y reasignación de cuevas se mantiene en JS usando el resultado `accepted/rejected` del servidor
+- [Eliminado] Lectura previa del state del destino desde cliente en ambas funciones
+- [Deuda técnica] DT-03 ✅ **cerrada**
+
 ### v1.70 — DT-01: Modelo Ogame puro — RPCs de gasto 100% atómicos
 - **Filosofía**: `start_build_secure`, `start_training_secure`, `start_summoning_secure` ya NO llaman `PERFORM secure_village_tick` antes de validar. Calculan los recursos reales directamente en su cuerpo mediante la misma fórmula que `secure_village_tick` (producción × horas transcurridas + cap almacén).
 - **Resultado**: cada acción de gasto es ahora 1 lock + 1 write en vez de 2 locks + 2 writes. Elimina el riesgo de que el tick fallase silenciosamente y dejase los recursos desactualizados.
@@ -622,6 +631,16 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - [Eliminado] Bloque duplicado `_profileBattles` en `switchVillage`
 - [Deuda técnica] Ver sección DEUDA TÉCNICA más abajo
 
+### v1.71 — Auditoría Ogame: 6 fixes index.html
+- **[CRÍTICO]** `createFirstVillage()` reescrita: ya no hace 100 queries + INSERT directo. Ahora llama `create_first_village_secure` RPC SECURITY DEFINER → búsqueda de coordenadas e INSERT atómicos en una sola transacción. Imposible race condition entre registros simultáneos.
+- **[MEDIO]** `tick()`: añadido check `_lastResourceSync > 60000` → llama `syncVillageResourcesFromServer` cada 60s. Antes `_lastResourceSync` estaba declarado pero nunca se comprobaba; los recursos del servidor dejaban de sincronizar tras el boot.
+- **[MEDIO]** Resolución de misiones en tick: `saveVillage(v)` → `saveVillage(v, { updateScore: false })`. `refreshMilitaryScore` movido a una sola llamada post-resolución para evitar ráfagas de queries en llegadas múltiples.
+- **[MENOR]** `switchVillage()`: eliminado bloque `_profileBattles` duplicado (v1.65 + v1.66 hacían lo mismo dos veces).
+- **[MENOR]** Title y footer actualizados a v1.71.
+- **[MENOR]** Cache busters de todos los scripts JS/CSS actualizados de `?v=1.50` a `?v=1.71`.
+- [Supabase] Nueva RPC `create_first_village_secure(p_user_id, p_name)`: busca coordenadas libres + INSERT atómico. Buildings todos a level 1. Devuelve `{ok, village_id, cx, cy}`.
+- [Regla nueva] La lista de buildings en `create_first_village_secure` debe ser idéntica a `BUILDINGS.map(b => b.id)` en JS. Actualizarla si se añade un edificio nuevo.
+
 ### vX.XX — [Plantilla para nuevas versiones]
 - descripción del cambio principal
 - [Supabase] nuevas tablas/columnas/triggers/RPCs si aplica
@@ -680,5 +699,6 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 
 | ID | Descripción | Estado |
 |---|---|---|
-| ~~DT-01~~ | ~~RPCs de gasto usaban `PERFORM secure_village_tick` antes de validar — doble lock + doble write. Si el tick fallaba silenciosamente, se leían recursos desactualizados.~~ | ✅ Resuelto v1.70 |
+| ~~DT-01~~ | ~~RPCs de gasto usaban `PERFORM secure_village_tick` antes de validar — doble lock + doble write.~~ | ✅ Resuelto v1.70 |
 | ~~DT-02~~ | ~~`start_training_secure` y `start_summoning_secure` con bug de recursos desactualizados.~~ | ✅ Resuelto v1.69 |
+| ~~DT-03~~ | ~~`executeMove` y `executeTransport` escribían recursos al destino con `villages.update` directo — race condition posible.~~ | ✅ Resuelto v1.71 |

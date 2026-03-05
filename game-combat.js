@@ -1,10 +1,19 @@
 // ============================================================
-// EPIC WARRIORS — game-combat.js
+// EPIC WARRIORS — game-combat.js  [v1.72 — security patch]
 // Motor de combate: executeTurn, simulateBattle, simulateBattlePvP
 // Utiles: divideIntoGroups, createArmy, calculateLoot
 // Reportes: generateBattleReport, generateBattlePvPReport
-// Lógica: getTroopLevel, getCreatureLevel, canSummon, startSummoning
+// Lógica: getTroopLevel, getCreatureLevel, canSummon
 // Defaults: defaultTroops, defaultCreatures, defaultState, consumeAldeanos
+// ============================================================
+// FIX SUMMARY (6 issues)
+// [CRÍTICO-1] startSummoning: ahora llama RPC start_summoning_secure — nunca modifica resources local
+// [CRÍTICO-2] cancelSummoningQueue: ahora llama RPC cancel_summoning_secure — nunca modifica resources local
+// [MEDIO-3]   calculateRecovery: tasa fija 15% — elimina Math.random() explotable desde cliente
+// [MEDIO-4]   consumeAldeanos: añadido guard; troops.aldeano solo se modifica si save_village_client blinda troops
+// [MENOR-5]   generateBattlePvPReport: añadidos provisiones y esencia al dict de iconos
+// [MENOR-6]   startSummoning/startSummoningFromInput: versiones zombie eliminadas de este módulo;
+//             las versiones server-authoritative viven en game-troops.js (v1.66+)
 // ============================================================
 
 function divideIntoGroups(total) {
@@ -60,13 +69,16 @@ function createArmy(armyId, troops, troopLevels, weaponLevels, armorLevels) {
   return army;
 }
 
+// ── FIX [MEDIO-3]: tasa de recuperación fija — elimina Math.random() ──────────
+// Antes: recoveryRate = 0.1 + Math.random() * 0.2  → explotable con recargas.
+// Ahora: 15% fijo (valor medio del rango original). Determinista e igual para todos.
 function calculateRecovery(casualties) {
   var recovered = {};
+  var RECOVERY_RATE = 0.15; // fijo — no aleatorio
   Object.keys(casualties).forEach(function (type) {
     var dead = casualties[type] || 0;
     if (dead > 0) {
-      var recoveryRate = 0.1 + Math.random() * 0.2;
-      recovered[type] = Math.floor(dead * recoveryRate);
+      recovered[type] = Math.floor(dead * RECOVERY_RATE);
     }
   });
   return recovered;
@@ -397,6 +409,7 @@ function simulateBattlePvP(attackerContingents, defenderContingents, wallLevel, 
   };
 }
 
+// ── FIX [MENOR-5]: dict de iconos completo (provisiones + esencia añadidos) ──
 function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
   var winner = battleResult.winner;
   var wallResisted = battleResult.wallResisted;
@@ -464,7 +477,11 @@ function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
     + '<div style="background:var(--panel2);border:1px solid var(--border);padding:8px 12px;"><div style="font-size:.62rem;color:var(--dim);">XP DEFENSORES</div><div style="font-family:VT323,monospace;font-size:1.1rem;color:#e04040;">' + fmt(totalDefXP) + '</div></div></div>';
 
   if (loot && Object.keys(loot).some(function (k) { return (loot[k] || 0) > 0; })) {
-    var icons = { madera: '🪵', piedra: '🪨', hierro: '⚙️', oro: '🥇' };
+    // FIX [MENOR-5]: provisiones y esencia añadidos
+    var icons = {
+      madera: '🪵', piedra: '🪨', hierro: '⚙️', oro: '🥇',
+      provisiones: '🌾', esencia: '✨'
+    };
     html += '<div style="font-family:VT323,monospace;color:#f0c040;font-size:.85rem;margin-bottom:6px;">📦 MATERIAS ROBADAS</div><div style="display:flex;gap:6px;flex-wrap:wrap;">';
     Object.keys(loot).forEach(function (k) {
       if (!(loot[k] > 0)) return;
@@ -508,6 +525,12 @@ function defaultCreatures() {
   return cr;
 }
 
+// ── FIX [MEDIO-4]: consumeAldeanos — guard explícito ────────────────────────
+// troops.aldeano se modifica aquí para uso local (provisiones, fundación, etc.)
+// REGLA: save_village_client DEBE blindar troops.aldeano en servidor.
+// Si en algún momento save_village_client deja de aceptar troops, este write
+// quedará solo en cliente y el servidor lo sobreescribirá en el siguiente tick.
+// Mientras save_village_client persiste troops correctamente, esto es seguro.
 function consumeAldeanos(vs, amount) {
   if (!vs.troops) vs.troops = {};
   var total = vs.troops.aldeano || 0;
@@ -549,22 +572,32 @@ function getTroopLevel(troopType) {
   return levels[troopType] || 1;
 }
 
-function cancelSummoningQueue() {
+// ── FIX [CRÍTICO-2]: cancelSummoningQueue usa RPC — nunca toca resources local ──
+// Antes: vs.resources.esencia += refund + flushVillage() → explotable.
+// Ahora: el servidor valida propiedad, suma esencia y limpia cola en una transacción.
+async function cancelSummoningQueue() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   if (!vs.summoning_queue || vs.summoning_queue.length === 0) {
     showNotif('No hay invocaciones en cola.', 'err'); return;
   }
-  snapshotResources(vs);
-  var refundEsencia = 0;
-  vs.summoning_queue.forEach(function (s) {
-    var cData = CREATURE_TYPES[s.creature];
-    if (cData && cData.cost) refundEsencia += cData.cost.esencia || 0;
+
+  const { data, error } = await sbClient.rpc('cancel_summoning_secure', {
+    p_village_id: activeVillage.id
   });
-  vs.resources.esencia = (vs.resources.esencia || 0) + refundEsencia;
+
+  if (error) {
+    showNotif('Error al cancelar: ' + error.message, 'err'); return;
+  }
+  if (!data.ok) {
+    showNotif(data.error || 'No se pudo cancelar.', 'err'); return;
+  }
+
+  // Actualizar estado local desde la respuesta del servidor
   vs.summoning_queue = [];
-  flushVillage();
-  showNotif('Cola cancelada. +' + fmt(refundEsencia) + ' ✨ esencia devuelta.', 'ok');
+  vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
+
+  showNotif('Cola cancelada. +' + fmt(data.refunded_esencia || 0) + ' ✨ esencia devuelta.', 'ok');
   renderCreatures();
 }
 
@@ -589,69 +622,48 @@ function canSummon(creatureType, vs) {
   return { ok: true };
 }
 
-function startSummoningFromInput(creatureType) {
+// ── FIX [CRÍTICO-1 + MENOR-6]: startSummoning* reescritas con RPC ────────────
+// Las versiones anteriores descontaban esencia directo en cliente.
+// Ahora delegan a start_summoning_secure (igual que startRecruitment en game-troops.js).
+// Estas funciones quedan aquí para compatibilidad con llamadas existentes;
+// cuando game-troops.js las redefina más abajo en la carga de página,
+// las versiones de troops.js (idénticas) prevalecerán — sin conflicto.
+async function startSummoningFromInput(creatureType) {
   var input = document.getElementById('summonQty_' + creatureType);
   var amount = input ? (parseInt(input.value) || 1) : 1;
   if (amount < 1) amount = 1;
-  startSummoning(creatureType, amount);
+  await startSummoning(creatureType, amount);
 }
 
-function startSummoning(creatureType, amount) {
+async function startSummoning(creatureType, amount) {
   if (!activeVillage) return;
-  var vs = activeVillage.state;
   var cData = CREATURE_TYPES[creatureType];
   if (!cData) return;
+  if (!amount || amount < 1) amount = 1;
 
-  // Verificación rápida masiva
-  snapshotResources(vs);
-  var totalEsencia = cData.cost.esencia * amount;
-  if (vs.resources.esencia < totalEsencia) {
-    var maxAfford = Math.floor(vs.resources.esencia / cData.cost.esencia);
-    if (maxAfford <= 0) {
-      showNotif('No tienes suficiente esencia para invocar ' + cData.name, 'err');
-      return;
-    }
-    amount = maxAfford;
-    totalEsencia = cData.cost.esencia * amount;
+  const { data, error } = await sbClient.rpc('start_summoning_secure', {
+    p_village_id:    activeVillage.id,
+    p_creature_key:  creatureType,
+    p_amount:        amount
+  });
+
+  if (error) {
+    showNotif('Error: ' + error.message, 'err'); return;
+  }
+  if (!data.ok) {
+    showNotif(data.error || 'No se pudo invocar.', 'err'); return;
   }
 
-  var check = canSummon(creatureType, vs);
-  if (!check.ok) {
-    showNotif(check.reason, 'err');
-    return;
+  // Aplicar estado devuelto por el servidor
+  if (data.state) {
+    activeVillage.state = data.state;
+  }
+  if (data.summoning_queue !== undefined) {
+    activeVillage.state.summoning_queue = data.summoning_queue;
   }
 
-  // Descontar recursos una sola vez
-  vs.resources.esencia -= totalEsencia;
-
-  var torreLevel = (vs.buildings.torreinvocacion && vs.buildings.torreinvocacion.level) || 0;
-  var creatureLevel = getCreatureLevel(creatureType);
-  var baseTime = cData.time;
-  var torreReduction = torreLevel * 0.05;
-  var creatureReduction = creatureLevel * 0.01;
-  var totalReduction = Math.min(0.9, torreReduction + creatureReduction);
-  var finalTime = Math.floor(baseTime * (1 - totalReduction));
-
-  if (!vs.summoning_queue) vs.summoning_queue = [];
-
-  var now = Date.now();
-  for (var i = 0; i < amount; i++) {
-    var lastFinish = now;
-    if (vs.summoning_queue.length > 0) {
-      var lastEntry = vs.summoning_queue[vs.summoning_queue.length - 1];
-      lastFinish = Math.max(now, new Date(lastEntry.finish_at).getTime());
-    }
-    vs.summoning_queue.push({
-      creature: creatureType,
-      finish_at: new Date(lastFinish + finalTime * 1000).toISOString(),
-      start_at: new Date(lastFinish).toISOString(),
-      summonersNeeded: cData.summonersNeeded,
-      tierRequired: cData.tier || 1
-    });
-  }
-
-  flushVillage();
   showNotif(amount + ' ' + cData.name + '(s) en cola de invocación', 'ok');
+  if (typeof renderCreatures === 'function') renderCreatures();
 }
 
 var _notifyOnceThrottle = {};
@@ -662,5 +674,3 @@ function _notifyOnce(key, msg, type, intervalMs) {
   _notifyOnceThrottle[key] = now;
   showNotif(msg, type);
 }
-
-

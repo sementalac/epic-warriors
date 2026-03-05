@@ -85,14 +85,10 @@ function getProd(blds, aldGranja, workers) {
   };
 }
 
-// ⚠️ OPT-E ADVERTENCIA DE SIDE-EFFECT:
-// calcRes() NO es una función pura. Internamente llama a calcAndApplyAldeanos(vs)
-// que MODIFICA vs.troops.aldeano y vs.last_aldeano_at.
-// Nunca llamar calcRes() en paths de solo lectura/render sin ser consciente de esto.
-// Para obtener producción sin modificar estado, usar getProd() directamente.
+// v1.71: calcAndApplyAldeanos() eliminada (era código muerto — servidor autoritativo).
+// calcRes() ya NO tiene side-effects sobre vs. Es seguro usarla en paths de solo lectura.
+// Para obtener solo producción sin recursos calculados, usar getProd() directamente.
 function calcRes(vs) {
-  // Aplicar aldeanos discretos antes de calcular (actualiza vs.resources.aldeanos)
-  calcAndApplyAldeanos(vs);
 
   var now = Date.now();
   var last = new Date(vs.last_updated).getTime();
@@ -161,49 +157,31 @@ function calcRes(vs) {
 // ============================================================
 async function cancelMission(missionRef) {
   if (!activeVillage) return;
-  var vs = activeVillage.state;
-  // Buscar por mid (nuevo) con fallback a finish_at (misiones guardadas antes de v0.92)
-  var idx = vs.mission_queue.findIndex(m => m.mid === missionRef || m.finish_at === missionRef);
-  if (idx === -1) { showNotif('Misión no encontrada', 'err'); return; }
 
-  var m = vs.mission_queue[idx];
-  if (m.type === 'return') { showNotif('No puedes cancelar el retorno', 'err'); return; }
+  // v1.71: RPC atómica — antes el cliente calculaba distancia viajada y tiempo
+  // de retorno localmente, permitiendo manipulación. Ahora el servidor calcula
+  // returnSecs = tiempo ya transcurrido (simetría del viaje).
+  try {
+    const { data: res, error: rpcErr } = await sbClient.rpc('cancel_mission_secure', {
+      p_village_id: activeVillage.id,
+      p_mission_id: missionRef
+    });
 
-  var now = Date.now();
-  var start = new Date(m.start_at).getTime();
-  var finish = new Date(m.finish_at).getTime();
-  var progress = Math.max(0, Math.min(1, (now - start) / (finish - start)));
-
-  var dx = Math.abs(m.tx - activeVillage.x);
-  var dy = Math.abs(m.ty - activeVillage.y);
-  var totalDist = Math.max(dx, dy);
-  var distTraveled = totalDist * progress;
-
-  var minSpeed = 999;
-  Object.keys(m.troops).forEach(k => {
-    var troopData = TROOP_TYPES[k] || CREATURE_TYPES[k];
-    if ((m.troops[k] || 0) > 0 && troopData && troopData.speed < minSpeed) {
-      minSpeed = troopData.speed;
+    if (rpcErr) throw rpcErr;
+    if (!res || !res.ok) {
+      showNotif(res?.error || 'No se pudo cancelar la misión', 'err');
+      return;
     }
-  });
-  if (minSpeed === 999) minSpeed = 1;
 
-  var returnSecs = (distTraveled / minSpeed) * MISSION_FACTOR;
-  var returnAt = new Date(now + returnSecs * 1000).toISOString();
+    showNotif('Misión cancelada. Tropas regresan en ' + fmtTime(Math.ceil(res.return_secs)), 'ok');
 
-  vs.mission_queue.splice(idx, 1);
-  vs.mission_queue.push({
-    type: 'return',
-    tx: activeVillage.x,
-    ty: activeVillage.y,
-    troops: m.troops,
-    finish_at: returnAt,
-    start_at: new Date(now).toISOString()
-  });
-
-  showNotif('Misión cancelada. Tropas regresan en ' + fmtTime(Math.ceil(returnSecs)), 'ok');
-  await flushVillage();
-  tick();
+    // Sincronizar estado local desde el servidor
+    await loadMyVillages();
+    tick();
+  } catch (e) {
+    console.error('cancelMission error:', e);
+    showNotif('Error al cancelar: ' + (e.message || e), 'err');
+  }
 }
 
 async function startMission(type, tx, ty, targetId, troops, guestContingents) {
@@ -495,8 +473,8 @@ async function executeSpyMission(m, v) {
     await sendSystemReport(currentUser.id, '🔍 ESPIONAJE: Cueva', report);
     showNotif('¡Cueva espiada! Ya puedes ver su contenido en el mapa.', 'ok');
   } else {
-    // Puede ser aldea PvP o fantasma — buscar en villages
-    var spyR = await sbClient.from('villages').select('id,name,owner_id,cx,cy,refugio').eq('id', m.targetId).maybeSingle();
+    // Puede ser aldea PvP o fantasma — buscar en villages (1 sola query con state incluido)
+    var spyR = await sbClient.from('villages').select('id,name,owner_id,cx,cy,refugio,state').eq('id', m.targetId).maybeSingle();
     if (spyR.data) {
       var sv = spyR.data;
       var spyRefugio = sv.refugio || {};
@@ -505,19 +483,16 @@ async function executeSpyMission(m, v) {
       var wallLvlSpy = 0;
       var spyTroops = {}, spyCreatures = {};
 
-      // Leer state (v1.49 jsonb)
-      {
-        var spyVR = await sbClient.from("villages").select("state").eq("id", m.targetId).maybeSingle();
-        var spyState = null;
-        if (spyVR.data && spyVR.data.state) {
-          spyState = typeof spyVR.data.state === "string" ? JSON.parse(spyVR.data.state) : spyVR.data.state;
-        }
-        if (spyState) {
-          spyTroops = spyState.troops || {};
-          spyCreatures = spyState.creatures || {};
-          var spyBlds = spyState.buildings || {};
-          wallLvlSpy = (spyBlds.muralla && spyBlds.muralla.level) || 0;
-        }
+      // v1.71: state ya viene en la misma query (antes eran 2 roundtrips)
+      var spyState = null;
+      if (sv.state) {
+        spyState = typeof sv.state === 'string' ? JSON.parse(sv.state) : sv.state;
+      }
+      if (spyState) {
+        spyTroops = spyState.troops || {};
+        spyCreatures = spyState.creatures || {};
+        var spyBlds = spyState.buildings || {};
+        wallLvlSpy = (spyBlds.muralla && spyBlds.muralla.level) || 0;
       }
 
       // Obtener niveles de investigación del defensor (solo jugadores reales)
@@ -885,7 +860,7 @@ async function executeAttackPvP(m, v) {
       var sNext = res.attacker_village_state.state || res.attacker_village_state;
       if (sNext && sNext.buildings && Object.keys(sNext.buildings).length > 0) {
         v.state = sNext;
-        if (v.id === activeVillage.id && typeof updateResourceUI === 'function') updateResourceUI();
+        // v1.71: updateResourceUI eliminada — tick() actualiza la UI en el siguiente ciclo
       } else {
         console.error('[CRÍTICO] El servidor devolvió un estado de aldea inválido. Ignorando para evitar reset.', sNext);
       }
@@ -1030,69 +1005,25 @@ async function _clearActiveMission(missionId) {
 
 async function cancelAlliedMission(missionId, leaderVillageId) {
   if (!confirm('¿Cancelar este ataque conjunto? Las tropas de TODOS los participantes regresarán.')) return;
-  if (_activeMissionsTableExists === false) return;
-  try {
-    // Marcar como cancelada
-    await sbClient.from('active_missions').update({ status: 'cancelled' }).eq('mission_id', missionId);
 
-    // Cargar aldea del líder y eliminar la misión de su queue
-    var lvr = await sbClient.from('villages').select('id,x,y,state').eq('id', leaderVillageId).maybeSingle();
-    if (!lvr.error && lvr.data) {
-      var lvState = typeof lvr.data.state === 'string' ? JSON.parse(lvr.data.state) : lvr.data.state;
-      var mObj = (lvState.mission_queue || []).find(function (q) { return q.mid === missionId; });
-      if (mObj) {
-        // Devolver propias tropas al líder
-        var lMinSpd = 999;
-        Object.keys(mObj.troops || {}).forEach(function (k) {
-          var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-          if ((mObj.troops[k] || 0) > 0 && td && td.speed < lMinSpd) lMinSpd = td.speed;
-        });
-        if (lMinSpd === 999) lMinSpd = 1;
-        var lDist = Math.max(Math.abs(mObj.tx - lvr.data.x), Math.abs(mObj.ty - lvr.data.y));
-        var lSecs = Math.ceil((lDist / lMinSpd) * MISSION_FACTOR);
-        // Eliminar misión de ataque y crear retorno
-        lvState.mission_queue = (lvState.mission_queue || []).filter(function (q) { return q.mid !== missionId; });
-        if (Object.values(mObj.troops || {}).some(function (n) { return n > 0; })) {
-          lvState.mission_queue.push({
-            type: 'return', tx: lvr.data.x, ty: lvr.data.y, troops: mObj.troops, loot: {},
-            finish_at: new Date(Date.now() + lSecs * 1000).toISOString(), start_at: new Date().toISOString()
-          });
-        }
-        // Devolver tropas de cada aliado
-        for (var ci = 0; ci < (mObj.guest_contingents || []).length; ci++) {
-          var c = mObj.guest_contingents[ci];
-          if (!Object.values(c.troops || {}).some(function (n) { return n > 0; })) continue;
-          var origVR = await sbClient.from('villages').select('id,x,y,state').eq('id', c.origin_village_id).maybeSingle();
-          if (origVR.error || !origVR.data) continue;
-          var ov = origVR.data;
-          var ovState = typeof ov.state === 'string' ? JSON.parse(ov.state) : ov.state;
-          var aMinSpd = 999;
-          Object.keys(c.troops).forEach(function (k) {
-            var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-            if ((c.troops[k] || 0) > 0 && td && td.speed < aMinSpd) aMinSpd = td.speed;
-          });
-          if (aMinSpd === 999) aMinSpd = 1;
-          var aDist = Math.max(Math.abs(mObj.tx - ov.x), Math.abs(mObj.ty - ov.y));
-          var aSecs = Math.ceil((aDist / aMinSpd) * MISSION_FACTOR);
-          if (!ovState.mission_queue) ovState.mission_queue = [];
-          ovState.mission_queue.push({
-            type: 'return_reinforce', tx: ov.x, ty: ov.y, troops: c.troops,
-            finish_at: new Date(Date.now() + aSecs * 1000).toISOString(), start_at: new Date().toISOString()
-          });
-          await sbClient.from('villages').update({
-            state: JSON.stringify(ovState),
-            mission_queue: ovState.mission_queue || []
-          }).eq('id', ov.id);
-        }
-        await sbClient.from('villages').update({
-          state: JSON.stringify(lvState),
-          mission_queue: lvState.mission_queue || []
-        }).eq('id', lvr.data.id);
-      }
+  // v1.71: RPC atómica — antes el cliente leía y escribía state directamente a DB
+  // sin validación server-side, usando cx/cy como x/y (bug de campos). Ahora el
+  // servidor gestiona el retorno del líder y todos los contingentes en una sola
+  // transacción con campos correctos.
+  try {
+    const { data: res, error: rpcErr } = await sbClient.rpc('cancel_allied_mission_secure', {
+      p_mission_id:        missionId,
+      p_leader_village_id: leaderVillageId
+    });
+
+    if (rpcErr) throw rpcErr;
+    if (!res || !res.ok) {
+      showNotif(res?.error || 'No se pudo cancelar la misión conjunta', 'err');
+      return;
     }
-    await sbClient.from('active_missions').delete().eq('mission_id', missionId);
+
     showNotif('⚔️ Ataque conjunto cancelado. Tropas regresando.', 'ok');
-    if (activeVillage && activeVillage.id === leaderVillageId) await flushVillage();
+    await loadMyVillages();
     tick();
   } catch (e) {
     console.error('cancelAlliedMission error:', e);
@@ -1104,11 +1035,15 @@ function _returnTroopsHome(m, v) {
   // Encola retorno inmediato de las tropas
   if (!v) return;
   var dist = Math.max(Math.abs((m.tx || 0) - v.x), Math.abs((m.ty || 0) - v.y));
-  var minSpeed = 1;
+  // v1.71: BUG FIX — minSpeed debe inicializarse en 999 (centinela),
+  // no en 1. Con 1, Math.min(1, speed_real) siempre daba 1 → retorno a
+  // velocidad de 1 casilla/hora independientemente de las tropas enviadas.
+  var minSpeed = 999;
   Object.keys(m.troops || {}).forEach(function (k) {
     var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-    if ((m.troops[k] || 0) > 0 && td) minSpeed = Math.min(minSpeed, td.speed || 1);
+    if ((m.troops[k] || 0) > 0 && td && td.speed < minSpeed) minSpeed = td.speed;
   });
+  if (minSpeed === 999) minSpeed = 1;
   var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
   if (!v.state.mission_queue) v.state.mission_queue = [];
   v.state.mission_queue.push({

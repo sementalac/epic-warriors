@@ -1,14 +1,19 @@
 // ============================================================
-// EPIC WARRIORS — game-smithy.js  (v1.39)
+// EPIC WARRIORS — game-smithy.js  (v1.74 — security patch)
 // Herrería: mejora de armas y armaduras individuales por tropa.
 // Los niveles se guardan en profiles.weapon_levels / armor_levels.
 // Nivel máximo de mejora: limitado por nivel de la Herrería (máx 15).
 // Bonificación en combate: +1 stat weapon / +1 stat armor por nivel.
 // ============================================================
+// FIX SUMMARY (2 issues → 1 RPC)
+// [CRÍTICO-1] upgradeSmithyItem: ahora llama upgrade_smithy_secure en vez de:
+//   - descontar recursos en cliente (manipulable en consola)
+//   - dos escrituras no atómicas (profiles + scheduleSave)
+//   - validar nivel herrería desde cliente (manipulable)
+// [MEDIO-2]   nivel herrería validado en servidor dentro de la misma RPC
+// ============================================================
 
 // ── Nombres y costes multiplicadores por tropa ─────────────
-// costMult: escala el coste base. Tropas elite = más caro.
-// magical: usa esencia en lugar de parte de madera/piedra.
 var SMITHY_DATA = {
   aldeano: {
     costMult: 1.0,
@@ -60,10 +65,6 @@ var SMITHY_DATA = {
 var SMITHY_MAX_LEVEL = 15;
 
 // ── Fórmulas de coste ──────────────────────────────────────
-// phasedVal(nivel, base, ×2 hasta nv10, ×1.3 hasta nv15, ×1.05 más allá)
-// Armas: hierro (primario) + madera (mangos/astiles)
-// Armaduras: hierro + piedra (temple y refuerzo)
-// Mágicos: hierro reducido + esencia (en lugar de madera/piedra)
 
 function smithyWeaponCost(troopKey, level) {
   var d = SMITHY_DATA[troopKey]; if (!d) return null;
@@ -106,53 +107,72 @@ function smithyCostHtml(cost, res) {
 }
 
 // ── Upgrade ────────────────────────────────────────────────
-
+// FIX [CRÍTICO-1 + MEDIO-2]: toda la validación y escritura ocurre en
+// upgrade_smithy_secure. El cliente solo calcula el coste para mostrarlo
+// en la UI; el servidor lo verifica de forma independiente.
 async function upgradeSmithyItem(troopKey, type) {
   if (!activeVillage || !currentUser) return;
-  var vs = activeVillage.state;
-  var bldLvl = (vs.buildings['herreria'] && vs.buildings['herreria'].level) || 0;
-  if (bldLvl === 0) { showNotif('Construye la Herrería primero.', 'err'); return; }
 
   var rd = await loadResearchData();
   var key = type === 'weapon' ? 'weapon_levels' : 'armor_levels';
   var currentLvl = (rd[key] && rd[key][troopKey]) || 0;
   var nextLvl = currentLvl + 1;
 
-  if (nextLvl > SMITHY_MAX_LEVEL) { showNotif('Ya está al nivel máximo.', 'err'); return; }
-  if (nextLvl > bldLvl) {
-    showNotif('La Herrería (nv.' + bldLvl + ') limita las mejoras a nv.' + bldLvl + '. Sube la Herrería primero.', 'err'); return;
-  }
-
+  // Calcular coste para pasarlo a la RPC (que lo verificará en servidor)
   var cost = type === 'weapon' ? smithyWeaponCost(troopKey, nextLvl) : smithyArmorCost(troopKey, nextLvl);
   if (!cost) return;
-  var res = calcRes(vs);
-  if (!smithyCanAfford(cost, res)) {
-    var needed = Object.keys(cost).map(function(k){ return fmt(cost[k]) + ' ' + k; }).join(', ');
-    showNotif('Faltan recursos: ' + needed, 'err'); return;
+
+  // Validación UI rápida (no de seguridad — la seguridad está en el servidor)
+  var vs = activeVillage.state;
+  var bldLvl = (vs.buildings['herreria'] && vs.buildings['herreria'].level) || 0;
+  if (bldLvl === 0) { showNotif('Construye la Herrería primero.', 'err'); return; }
+  if (nextLvl > SMITHY_MAX_LEVEL) { showNotif('Ya está al nivel máximo.', 'err'); return; }
+
+  setSave('saving');
+  try {
+    var { data, error } = await sbClient.rpc('upgrade_smithy_secure', {
+      p_village_id: activeVillage.id,
+      p_troop_key:  troopKey,
+      p_type:       type,
+      p_cost:       cost
+    });
+
+    if (error) throw error;
+    if (!data.ok) {
+      var msgs = {
+        'village_not_found':      'Aldea no encontrada.',
+        'herreria_not_built':     'Construye la Herrería primero.',
+        'already_max_level':      'Ya está al nivel máximo.',
+        'herreria_level_too_low': 'La Herrería (nv.' + bldLvl + ') no es suficiente. Sube la Herrería primero.',
+        'insufficient_resources': 'Recursos insuficientes.',
+        'invalid_type':           'Tipo inválido.'
+      };
+      showNotif(msgs[data.error] || ('Error: ' + data.error), 'err');
+      setSave('error');
+      return;
+    }
+
+    // Aplicar estado devuelto por servidor
+    if (data.new_resources) {
+      activeVillage.state.resources = data.new_resources;
+    }
+
+    // Actualizar cache local de investigación
+    rd[key] = rd[key] || {};
+    rd[key][troopKey] = data.new_level;
+
+    var d = SMITHY_DATA[troopKey];
+    var icon = d[type].icon;
+    var name = d[type].name;
+    showNotif(icon + ' ' + name + ' → Nv.' + data.new_level + '!', 'ok');
+    setSave('saved');
+    // OPT-D: pasar rd precargado para que renderSmithy no haga otra query a Supabase
+    renderSmithy(rd);
+  } catch (e) {
+    setSave('error');
+    showNotif('Error: ' + (e.message || 'No se pudo mejorar'), 'err');
+    console.error('upgradeSmithyItem error:', e);
   }
-
-  // Descontar recursos del estado
-  snapshotResources(vs);
-  for (var rk in cost) vs.resources[rk] = Math.max(0, (vs.resources[rk] || 0) - cost[rk]);
-  scheduleSave();
-
-  // Guardar en profiles
-  var newLevels = Object.assign({}, rd[key]);
-  newLevels[troopKey] = nextLvl;
-  var upd = {};
-  upd[key] = newLevels;
-  var { error } = await sbClient.from('profiles').update(upd).eq('id', currentUser.id);
-  if (error) { showNotif('Error al guardar mejora.', 'err'); console.error(error); return; }
-
-  // Actualizar cache local
-  rd[key] = newLevels;
-
-  var d = SMITHY_DATA[troopKey];
-  var icon = d[type].icon;
-  var name = d[type].name;
-  showNotif(icon + ' ' + name + ' → Nv.' + nextLvl + '!', 'ok');
-  // OPT-D: pasar rd precargado para que renderSmithy no haga otra query a Supabase
-  renderSmithy(rd);
 }
 
 // ── Render ─────────────────────────────────────────────────
@@ -255,12 +275,11 @@ async function renderSmithy(preloadedRd) {
     }
 
     html += '<div class="card" style="padding:14px;">';
-    // Cabecera tropa
     html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">'
       + '<span style="font-size:1.8rem;">' + troop.icon + '</span>'
       + '<div style="flex:1;">'
       + '<div style="font-size:.88rem;color:var(--accent);font-family:VT323,monospace;">' + troop.name.toUpperCase() + '</div>'
-      + '<div class="muted" style="font-size:.6rem;">Ataque base: ' + troop.weapon + ' · Defensa base: ' + troop.armor + (d.magical ? '' : '') + '</div>'
+      + '<div class="muted" style="font-size:.6rem;">Ataque base: ' + troop.weapon + ' · Defensa base: ' + troop.armor + '</div>'
       + (d.magical ? '<div style="font-size:.58rem;color:var(--esencia,#c084fc);margin-top:1px;">✨ Tropa mágica — usa Esencia</div>' : '')
       + '</div>'
       + '<div style="text-align:right;font-size:.68rem;color:var(--dim);line-height:1.9;">'

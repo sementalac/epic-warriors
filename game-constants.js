@@ -616,10 +616,11 @@ const CREATURE_TYPES = {
 // ============================================================
 // SCALING LOGIC
 // ============================================================
-// ⚠️ ATENCIÓN — Problema 1: existen DOS funciones de stats de tropas con fórmulas distintas:
-//   • getTroopStatsWithLevel  (aquí, en game-constants.js) → COMBATE REAL (+4%/nivel)
-//   • getTroopStatsAtLevel    (en game-social.js)          → UI de Investigación (+8%/nivel + spike ×5)
-// NO mezclar. Si se rebalancea una, actualizar también la otra.
+// ⚠️ DEUDA DE DISEÑO — DOS FUNCIONES DE STATS CON FÓRMULAS DISTINTAS:
+//   • getTroopStatsWithLevel  (aquí)           → COMBATE REAL      (+4%/nivel)
+//   • getTroopStatsAtLevel    (game-social.js) → UI Investigación  (+8%/nivel + spike ×5)
+// Si se rebalancea una, ACTUALIZAR TAMBIÉN la otra.
+// Objetivo futuro: unificar en una sola función con parámetro de contexto.
 // ============================================================
 function getTroopStatsWithLevel(type, level) {
   const base = TROOP_TYPES[type];
@@ -948,13 +949,12 @@ function getAldeanosIntervalMs(blds) {
   return Math.round(mins * 60 * 1000);
 }
 
-function calcAndApplyAldeanos(vs) {
-  // v1.65: El servidor es la autoridad (secure_village_tick).
-  // Esta función ya no modifica troops.aldeano en el cliente.
-  // El contador visual se actualiza desde syncVillageResourcesFromServer cada 60s.
-}
+// v1.71: calcAndApplyAldeanos eliminada — era código muerto.
+// El servidor es la autoridad (secure_village_tick).
+// El contador visual se actualiza desde syncVillageResourcesFromServer cada 60s.
 
 function almacenCapForLevel(l) {
+  if (l <= 0) return 0; // v1.71: nivel 0 → capacidad 0 (sin almacén operativo)
   if (l <= 10) return 1000 * Math.pow(2, l);
   var v10 = 1000 * Math.pow(2, 10);
   if (l <= 30) return v10 * Math.pow(1.3, l - 10);

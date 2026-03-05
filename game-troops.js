@@ -1,5 +1,5 @@
 // ============================================================
-// EPIC WARRIORS — game-troops.js v1.48
+// EPIC WARRIORS — game-troops.js v1.73 — security patch
 // UI: renderTroops, renderCreatures, renderSummoningQueue,
 // renderCreaturesList, showCreatureStats, renderSummonOptions,
 // showBarracasModal, startRecruitment, showTroopStats,
@@ -8,6 +8,17 @@
 // v1.48: renderCaughtCreatures() cross-check con caves table
 //        para múltiples aldeas + auto-corrección de estado
 // v1.47: renderCaughtCreatures() para apartado de guardianes capturados
+// ============================================================
+// FIX SUMMARY (6 issues)
+// [CRÍTICO-1] renderTroops: box.innerHTML = html (no = '') — panel de tropas dejaba de renderizarse
+// [CRÍTICO-2] applyRefugio: cancela invocaciones via RPC cancel_summoning_secure en vez de
+//             modificar vs.resources.esencia directo (explotable para duplicar recursos)
+// [MEDIO-3]   startSummoningFromInput: lee summonQty_ y pasa p_amount — el input de cantidad
+//             no tenía efecto (siempre invocaba 1)
+// [MEDIO-4]   resolveSummoningQueue: devuelve esencia al cancelar por invocadores perdidos/nivel
+//             insuficiente — antes la esencia desaparecía sin reembolso
+// [MENOR-5]   showBarracasModal: lee recAmount-{key} antes de llamar startRecruitment
+// [MENOR-6]   startSummoning: añadido p_amount a la llamada RPC start_summoning_secure
 // ============================================================
 
 function renderTroops() {
@@ -53,7 +64,8 @@ function renderTroops() {
     + '</div>'
     + '<div style="margin-bottom:4px;"></div>';
 
-  box.innerHTML = '';
+  // FIX [CRÍTICO-1]: era box.innerHTML = '' — el html construido nunca se mostraba
+  box.innerHTML = html;
 }
 
 // ============================================================
@@ -374,19 +386,26 @@ function renderSummonOptions() {
   box.innerHTML = html;
 }
 
-// v1.66: invocar criatura via servidor
+// FIX [MEDIO-3]: lee summonQty_ y pasa amount — antes siempre invocaba 1
 function startSummoningFromInput(key) {
-  startSummoning(key);
+  var input = document.getElementById('summonQty_' + key);
+  var amount = input ? (parseInt(input.value) || 1) : 1;
+  if (amount < 1) amount = 1;
+  startSummoning(key, amount);
 }
 
-async function startSummoning(key) {
+// FIX [MENOR-6]: añadido p_amount a la llamada RPC
+// v1.66: server-authoritative — valida invocadores, esencia y torre en servidor
+async function startSummoning(key, amount) {
   if (!activeVillage) return;
+  if (!amount || amount < 1) amount = 1;
 
   setSave('saving');
   try {
     var { data: newState, error } = await sbClient.rpc('start_summoning_secure', {
       p_village_id:   activeVillage.id,
-      p_creature_key: key
+      p_creature_key: key,
+      p_amount:       amount   // FIX: antes faltaba este parámetro
     });
     if (error) throw error;
 
@@ -398,7 +417,7 @@ async function startSummoning(key) {
     }
 
     var c = typeof CREATURE_TYPES !== 'undefined' ? CREATURE_TYPES[key] : null;
-    showNotif((c ? c.name : key) + ' añadido a la cola de invocación', 'ok');
+    showNotif((c ? c.name : key) + (amount > 1 ? ' ×' + amount : '') + ' añadido(s) a la cola de invocación', 'ok');
     setSave('saved');
     tick();
     if (typeof renderCreatures === 'function') renderCreatures();
@@ -443,10 +462,11 @@ function showBarracasModal() {
     if (cost.hierro) html += '<span>⚙️ ' + cost.hierro + '</span>';
     if (cost.prov) html += '<span>🌾 ' + cost.prov + '</span>';
     if (cost.esencia) html += '<span>✨ ' + cost.esencia + '</span>';
+    // FIX [MENOR-5]: botón ahora lee recAmount-{key} antes de llamar startRecruitment
     html += '</div>'
       + '<div style="display:flex;gap:6px;margin-top:4px;">'
       + '<input type="number" id="recAmount-' + key + '" value="1" min="1" class="input" style="flex:1;padding:4px 8px;font-size:.8rem;">'
-      + '<button class="btn" style="padding:6px 12px;font-size:.75rem;" onclick="startRecruitment(\'' + key + '\')">Reclutar</button>'
+      + '<button class="btn" style="padding:6px 12px;font-size:.75rem;" onclick="startRecruitment(\'' + key + '\', parseInt(document.getElementById(\'recAmount-' + key + '\').value)||1)">Reclutar</button>'
       + '</div>'
       + '</div>';
   });
@@ -578,8 +598,6 @@ function showTroopStats(key) {
     + '<button onclick="_closeTroopStats()" style="margin-left:auto;background:none;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;">✕</button>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem;margin-bottom:14px;">'
-
-    // — OFENSA —
     + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">OFENSA</div>'
     + '<div style="color:var(--dim);">⚔️ Daño</div>'
     + '<div style="color:var(--text);">' + realDamage
@@ -587,8 +605,6 @@ function showTroopStats(key) {
     + '<div style="color:var(--dim);">⚡ Ataques/turno</div><div style="color:var(--text);">' + realAtk + '</div>'
     + '<div style="color:var(--dim);">🎯 Prob. Golpe</div><div style="color:var(--text);">' + realChance + '</div>'
     + '<div style="color:var(--dim);">🌀 Destreza</div><div style="color:var(--text);">' + realDex + '</div>'
-
-    // — DEFENSA —
     + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">DEFENSA</div>'
     + '<div style="color:var(--dim);">❤️ HP</div>'
     + '<div style="color:var(--text);">' + realHp
@@ -596,18 +612,13 @@ function showTroopStats(key) {
     + '<div style="color:var(--dim);">🛡️ Defensa</div>'
     + '<div style="color:var(--text);">' + realDefense
     + (defBonus > 0 ? ' <span style="font-size:.65rem;color:var(--accent);">(+' + defBonus + ')</span>' : '') + '</div>'
-
-    // — EQUIPAMIENTO (herrería) —
     + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">EQUIPAMIENTO</div>'
     + '<div style="color:var(--dim);">🗡️ Arma</div><div style="color:' + (wLvl > 0 ? 'var(--ok)' : 'var(--dim)') + ';">+' + wLvl + (wLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
     + '<div style="color:var(--dim);">🛡 Armadura</div><div style="color:' + (aLvl > 0 ? 'var(--accent)' : 'var(--dim)') + ';">+' + aLvl + (aLvl === 0 ? ' (sin mejorar)' : '') + '</div>'
-
-    // — LOGÍSTICA —
     + '<div style="grid-column:1/-1;border-top:1px solid var(--border);margin:4px 0;padding-top:4px;font-size:.65rem;letter-spacing:.12em;color:var(--dim);opacity:.7;">LOGÍSTICA</div>'
     + '<div style="color:var(--dim);">🏃 Velocidad</div>'
     + '<div style="color:var(--text);">' + realSpeed + ' <span style="font-size:.68rem;color:var(--dim);">cas/h</span></div>'
     + '<div style="color:var(--dim);">📦 Cap. carga</div><div style="color:var(--text);">' + realCap + '</div>'
-
     + '</div>'
     + '<div style="font-size:.72rem;color:var(--dim);border-top:1px solid var(--border);padding-top:10px;">' + escapeHtml(t.desc) + '</div>'
     + '</div>';
@@ -729,6 +740,7 @@ function resolveTrainingQueue(vs) {
   return vs;
 }
 
+// FIX [MEDIO-4]: devuelve esencia al cancelar por invocadores perdidos / nivel insuficiente
 function resolveSummoningQueue(vs) {
   if (!vs.summoning_queue || vs.summoning_queue.length === 0) return vs;
   var now = Date.now();
@@ -752,22 +764,26 @@ function resolveSummoningQueue(vs) {
     var tierRequired = s.tierRequired || cData.tier || 1;
     var invocadorLevel = getTroopLevel('invocador');
 
-    // Casos de cancelación (eliminación definitiva)
+    // Casos de cancelación — FIX: devolver esencia antes de sacar de la cola
     if (invocadorLevel < tierRequired) {
       _notifyOnce('sum_cancel_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (nivel de invocador insuficiente).', 'err');
+      // FIX [MEDIO-4]: reembolso de esencia
+      if (!vs.resources) vs.resources = {};
+      vs.resources.esencia = (vs.resources.esencia || 0) + ((cData.cost && cData.cost.esencia) || 0);
       vs.summoning_queue.shift();
       changed = true;
       continue;
     }
 
-    // El sistema de cancelación por falta de invocadores TOTALES es peligroso si es reactivo,
-    // pero se mantiene según arquitectura v1.40.
     var invEnMision = 0;
     (vs.mission_queue || []).forEach(function (m) { invEnMision += (m.troops && m.troops.invocador) || 0; });
     var totalInvocadores = invocadoresActuales + invEnMision;
 
     if (totalInvocadores < s.summonersNeeded) {
       _notifyOnce('sum_cancel_dead_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (invocadores perdidos).', 'err');
+      // FIX [MEDIO-4]: reembolso de esencia
+      if (!vs.resources) vs.resources = {};
+      vs.resources.esencia = (vs.resources.esencia || 0) + ((cData.cost && cData.cost.esencia) || 0);
       vs.summoning_queue.shift();
       changed = true;
       continue;
@@ -776,7 +792,6 @@ function resolveSummoningQueue(vs) {
     // --- LÓGICA FIFO BLOQUEANTE ---
 
     // Si no hay suficientes invocadores EN LA ALDEA ahora mismo, la cola se bloquea.
-    // No saltamos al siguiente elemento.
     if (invocadoresActuales < s.summonersNeeded) {
       break;
     }
@@ -789,10 +804,8 @@ function resolveSummoningQueue(vs) {
       _notifyOnce('sum_done_' + s.creature, '¡' + cData.name + ' invocado!', 'ok', 1000);
       vs.summoning_queue.shift();
       changed = true;
-      // Seguimos el bucle 'while' para ver si la siguiente unidad en la cola ya terminó también
     } else {
-      // El primer elemento no ha terminado su tiempo todavía. 
-      // Siendo FIFO, el resto tampoco puede procesarse.
+      // El primer elemento no ha terminado su tiempo todavía.
       break;
     }
   }
@@ -974,7 +987,11 @@ function syncRefugioSlider(key, val) {
   if (el) el.textContent = val;
 }
 
-function applyRefugio() {
+// FIX [CRÍTICO-2]: applyRefugio cancela invocaciones via RPC — nunca modifica esencia local
+// Antes: vs.resources.esencia += refundEsencia → explotable para duplicar recursos.
+// Ahora: si hay que cancelar invocaciones se llama cancel_summoning_secure (server calcula
+// el reembolso). Solo después se aplica el refugio y se guarda.
+async function applyRefugio() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
   var cap = getRefugioCapacity(vs.buildings);
@@ -1007,31 +1024,38 @@ function applyRefugio() {
 
   var prevInvRef = (vs.refugio && vs.refugio.invocador) || 0;
   var newInvRef = newRefugio.invocador || 0;
+
+  // FIX [CRÍTICO-2]: si añadir invocadores al refugio obliga a cancelar invocaciones,
+  // usar la RPC en vez de tocar esencia local
   if (newInvRef > prevInvRef) {
     var totalInv = vs.troops.invocador || 0;
     var invInMission = inMission.invocador || 0;
     var invOutsideAfter = totalInv - invInMission - newInvRef;
     var invLevel = (typeof _researchData !== 'undefined' && _researchData && _researchData.troop_levels && _researchData.troop_levels.invocador) || 1;
     var queue = vs.summoning_queue || [];
-    var refundEsencia = 0;
-    var cancelCount = 0;
-    var kept = [];
-    queue.forEach(function (s) {
+
+    var needsCancel = queue.some(function (s) {
       var cData = CREATURE_TYPES[s.creature];
-      if (!cData) return;
+      if (!cData) return false;
       var tierReq = s.tierRequired || cData.tier || 1;
-      if (invOutsideAfter < s.summonersNeeded || invLevel < tierReq) {
-        refundEsencia += (cData.cost && cData.cost.esencia) || 0;
-        cancelCount++;
-      } else {
-        kept.push(s);
-      }
+      return invOutsideAfter < s.summonersNeeded || invLevel < tierReq;
     });
-    if (cancelCount > 0) {
-      snapshotResources(vs);
-      vs.resources.esencia = (vs.resources.esencia || 0) + refundEsencia;
-      vs.summoning_queue = kept;
-      showNotif(cancelCount + ' invocación(es) cancelada(s). +' + fmt(refundEsencia) + ' ✨ devuelta.', 'ok');
+
+    if (needsCancel && queue.length > 0) {
+      try {
+        var { data, error } = await sbClient.rpc('cancel_summoning_secure', {
+          p_village_id: activeVillage.id
+        });
+        if (error) throw error;
+        if (data && data.ok) {
+          vs.summoning_queue = [];
+          vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
+          showNotif('Invocaciones canceladas por refugio. +' + fmt(data.refunded_esencia || 0) + ' ✨ devuelta.', 'ok');
+        }
+      } catch (e) {
+        showNotif('Error al cancelar invocaciones: ' + (e.message || ''), 'err');
+        return; // No continuar si el servidor falló
+      }
     }
   }
 

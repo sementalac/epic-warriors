@@ -17,12 +17,7 @@ async function startBuild(id) {
 
   setSave('saving');
   try {
-    // v1.67: Sincronizar con servidor antes de validar recursos
-    clearTimeout(saveDebounce); // v1.67: cancelar autosave pendiente antes de sync
-    snapshotResources(vs);
-    await syncVillageResourcesFromServer();
-    vs = activeVillage.state; // re-leer referencia tras el sync
-
+    // v1.70: pre-sync eliminado — start_build_secure calcula recursos inline (DT-01)
     var { data: newState, error } = await sbClient.rpc('start_build_secure', {
       p_village_id:  activeVillage.id,
       p_building_id: id
@@ -30,9 +25,8 @@ async function startBuild(id) {
     if (error) throw error;
 
     if (newState) {
+      // v1.70: start_at viene del servidor incluido en build_queue
       activeVillage.state.resources    = newState.resources    || vs.resources;
-      // v1.70: inyectar start_at para calcular progreso de barra correctamente
-      if (newState.build_queue) newState.build_queue.start_at = new Date().toISOString();
       activeVillage.state.build_queue  = newState.build_queue  || null;
       activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
     }
@@ -1804,132 +1798,88 @@ async function executeMove(m) {
       await sendSystemReport(currentUser.id, '\u26a0\ufe0f MOVIMIENTO FALLIDO', 'Las tropas llegaron a [' + m.tx + ', ' + m.ty + '] pero la aldea no existe o ya no es tuya.');
       return;
     }
-    var dvs = destVillage.state;
 
-    // Entregar recursos si hay cargo
-    var cargoMsg = '';
-    if (m.cargo && Object.keys(m.cargo).length > 0) {
-      // v1.49: Leer recursos destino desde state jsonb
-      var rr = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
-      if (!rr.error && rr.data && rr.data.state) {
-        var destRes = rr.data.state.resources || {};
-        var newResObj = {
-          madera: (Number(destRes.madera) || 0) + (m.cargo.madera || 0),
-          piedra: (Number(destRes.piedra) || 0) + (m.cargo.piedra || 0),
-          hierro: (Number(destRes.hierro) || 0) + (m.cargo.hierro || 0),
-          provisiones: (Number(destRes.provisiones) || 0) + (m.cargo.provisiones || 0),
-          esencia: (Number(destRes.esencia) || 0) + (m.cargo.esencia || 0),
-          aldeanos: destRes.aldeanos || 0
-        };
-        var updState = rr.data.state;
-        updState.resources = newResObj;
-        updState.last_updated = new Date().toISOString();
-        await sbClient.from('villages').update({ state: updState }).eq('id', m.targetId);
-        dvs.resources.madera = newResObj.madera;
-        dvs.resources.piedra = newResObj.piedra;
-        dvs.resources.hierro = newResObj.hierro;
-        dvs.resources.provisiones = newResObj.provisiones;
-        dvs.resources.esencia = newResObj.esencia;
+    // v1.71: apply_move_arrival — suma atómica de tropas + cargo (DT-03)
+    // Construir troop_slots desde TROOP_TYPES para que el servidor calcule cap barracas
+    var troopSlots = {};
+    Object.keys(TROOP_TYPES).forEach(function (k) {
+      troopSlots[k] = TROOP_TYPES[k].barracasSlots || 1;
+    });
+    troopSlots['aldeano'] = 1; // aldeanos: 1 slot cada uno
 
-        var cargoList = Object.keys(m.cargo).filter(function (k) { return m.cargo[k] > 0; })
-          .map(function (k) { return fmt(m.cargo[k]) + ' ' + k; }).join(', ');
-        cargoMsg = '\n📦 Entregaron: ' + cargoList;
-      }
+    var { data: result, error: rpcErr } = await sbClient.rpc('apply_move_arrival', {
+      p_village_id:  m.targetId,
+      p_troops:      m.troops    || {},
+      p_creatures:   m.creatures || {},
+      p_cargo:       m.cargo     || {},
+      p_troop_slots: troopSlots
+    });
+    if (rpcErr) throw rpcErr;
+
+    var accepted = result.accepted || {};
+    var rejected = result.rejected || {};
+    var anyRejected = Object.keys(rejected).some(function (k) { return (rejected[k] || 0) > 0; });
+
+    // Sincronizar caché local del destino
+    if (result.state) {
+      destVillage.state.resources    = result.state.resources    || destVillage.state.resources;
+      destVillage.state.troops       = result.state.troops       || destVillage.state.troops;
+      destVillage.state.creatures    = result.state.creatures    || destVillage.state.creatures;
+      destVillage.state.last_updated = result.state.last_updated || destVillage.state.last_updated;
     }
 
-    // Leer state fresco de destino para no pisar cambios concurrentes
-    var freshDestR = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
-    var freshDestState = (!freshDestR.error && freshDestR.data && freshDestR.data.state)
-      ? (typeof freshDestR.data.state === 'string' ? JSON.parse(freshDestR.data.state) : freshDestR.data.state)
-      : dvs;
-
-    // Calcular barracas sobre el state fresco
-    var freeSlots = Math.max(0, getBarracksCapacity(freshDestState.buildings) - getBarracksUsed(freshDestState));
-    var slotsNeeded = 0;
-    Object.keys(m.troops).forEach(function (k) {
-      var count = m.troops[k] || 0;
-      if (count > 0 && TROOP_TYPES[k]) {
-        slotsNeeded += (k === 'aldeano') ? count : count * (TROOP_TYPES[k].barracasSlots || 1);
-      }
-    });
-    var pct = (slotsNeeded > 0 && slotsNeeded > freeSlots) ? freeSlots / slotsNeeded : 1;
-    var accepted = {}, rejected = {}, anyRejected = false;
-    Object.keys(m.troops).forEach(function (k) {
-      var count = m.troops[k] || 0;
-      if (count <= 0) { accepted[k] = 0; return; }
-      if (CREATURE_TYPES[k]) {
-        accepted[k] = count; // criaturas siempre aceptadas (no ocupan barracas)
-      } else {
-        var toAccept = Math.floor(count * pct);
-        accepted[k] = toAccept;
-        if (toAccept < count) { rejected[k] = count - toAccept; anyRejected = true; }
-      }
-    });
-
-    // Aplicar sobre el state fresco
-    if (!freshDestState.troops) freshDestState.troops = {};
-    if (!freshDestState.creatures) freshDestState.creatures = defaultCreatures();
-    Object.keys(accepted).forEach(function (k) {
-      if ((accepted[k] || 0) <= 0) return;
-      if (TROOP_TYPES[k]) freshDestState.troops[k] = (freshDestState.troops[k] || 0) + accepted[k];
-      else if (CREATURE_TYPES[k]) freshDestState.creatures[k] = (freshDestState.creatures[k] || 0) + accepted[k];
-    });
-
-    // ── v1.51 BUGFIX: Reasignar cuevas si se mudaron guardianes permanentemente ──
-    if (accepted.guardiancueva && accepted.guardiancueva > 0) {
-      try {
-        var cavesR = await sbClient.from('caves').select('id').eq('village_id', m.origin_village_id).limit(accepted.guardiancueva);
-        if (cavesR.data && cavesR.data.length > 0) {
-          var caveIds = cavesR.data.map(function (c) { return c.id; });
-          await sbClient.from('caves').update({ village_id: m.targetId }).in('id', caveIds);
-          // Actualizar caché en tiempo real para q la UI no los "mate"
-          if (typeof _cavesCache !== 'undefined') {
-            _cavesCache.forEach(function (c) {
-              if (caveIds.includes(c.id)) c.village_id = m.targetId;
-            });
-          }
-        }
-      } catch (ce) { console.warn('Error reasignando cuevas al mover:', ce); }
-    }
-    // ─────────────────────────────────────────────────────────
-
-    freshDestState.last_updated = new Date().toISOString();
-    // Guardar directamente via sbClient para evitar race conditions con saveVillage
-    await sbClient.from('villages').update({ state: JSON.stringify(freshDestState) }).eq('id', m.targetId);
-    // Sincronizar objeto local
-    dvs.troops = freshDestState.troops;
-    dvs.creatures = freshDestState.creatures;
+    // Devolver rechazadas al origen
     if (anyRejected) {
       var origV = myVillages.find(function (v) { return v.id === m.origin_village_id; });
       if (origV) {
         Object.keys(rejected).forEach(function (k) {
           if ((rejected[k] || 0) <= 0) return;
-          if (TROOP_TYPES[k]) origV.state.troops[k] = (origV.state.troops[k] || 0) + rejected[k];
+          if (TROOP_TYPES[k])   origV.state.troops[k]   = (origV.state.troops[k]   || 0) + rejected[k];
           else if (CREATURE_TYPES[k]) origV.state.creatures[k] = (origV.state.creatures[k] || 0) + rejected[k];
         });
         await saveVillage(origV);
       }
     }
-    var rejMsg = anyRejected ? '\n⚠️ Algunas tropas volvieron (barracas llenas en destino).' : '';
-    // Tabla de tropas
+
+    // Reasignar cuevas si se mudaron guardianes
+    if ((accepted.guardiancueva || 0) > 0) {
+      try {
+        var cavesR = await sbClient.from('caves').select('id').eq('village_id', m.origin_village_id).limit(accepted.guardiancueva);
+        if (cavesR.data && cavesR.data.length > 0) {
+          var caveIds = cavesR.data.map(function (c) { return c.id; });
+          await sbClient.from('caves').update({ village_id: m.targetId }).in('id', caveIds);
+          if (typeof _cavesCache !== 'undefined') {
+            _cavesCache.forEach(function (c) { if (caveIds.includes(c.id)) c.village_id = m.targetId; });
+          }
+        }
+      } catch (ce) { console.warn('Error reasignando cuevas al mover:', ce); }
+    }
+
+    var rejMsg = anyRejected ? '\n\u26a0\ufe0f Algunas tropas volvieron (barracas llenas en destino).' : '';
+    var cargoMsg = '';
+    if (m.cargo && Object.keys(m.cargo).some(function (k) { return m.cargo[k] > 0; })) {
+      var cargoList = Object.keys(m.cargo).filter(function (k) { return m.cargo[k] > 0; })
+        .map(function (k) { return fmt(m.cargo[k]) + ' ' + k; }).join(', ');
+      cargoMsg = '\n\ud83d\udce6 Entregaron: ' + cargoList;
+    }
     var troopLines = '';
     Object.keys(m.troops || {}).forEach(function (k) {
-      var qty = m.troops[k] || 0;
-      if (qty <= 0) return;
+      var qty = m.troops[k] || 0; if (qty <= 0) return;
       var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
       if (td) troopLines += '\n  ' + td.icon + ' ' + td.name + ': ' + fmt(qty);
     });
     var origV2 = myVillages.find(function (v) { return v.id === m.origin_village_id; }) || activeVillage;
     var origName2 = origV2 ? (origV2.name || 'Origen') : 'Origen';
     var origCoords2 = origV2 ? '[' + origV2.x + ', ' + origV2.y + ']' : '';
-    await sendSystemReport(currentUser.id, '⚔ TROPAS TRASLADADAS',
-      '📍 Origen: ' + origName2 + ' ' + origCoords2 + '\n'
-      + '🏠 Destino: ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + ']\n\n'
-      + '⚔ Tropas trasladadas:' + troopLines
+    await sendSystemReport(currentUser.id, '\u2694\ufe0f TROPAS TRASLADADAS',
+      '\ud83d\udccd Origen: ' + origName2 + ' ' + origCoords2 + '\n'
+      + '\ud83c\udfe0 Destino: ' + (destVillage.name || 'aldea') + ' [' + m.tx + ', ' + m.ty + ']\n\n'
+      + '\u2694\ufe0f Tropas trasladadas:' + troopLines
       + cargoMsg + rejMsg);
     renderMap();
   } catch (e) { console.error('executeMove error:', e); }
 }
+
 
 async function executeReinforce(m) {
   if (_guestTroopsTableExists === false) {
@@ -1978,28 +1928,20 @@ async function executeReinforce(m) {
 async function executeTransport(m) {
   try {
     var cargo = m.cargo || {};
-    // v1.49: Leer/escribir recursos destino via state jsonb
-    var rr = await sbClient.from('villages').select('state').eq('id', m.targetId).single();
-    if (rr.error) throw rr.error;
-    var destState = rr.data.state || {};
-    var destRes = destState.resources || {};
-    var newResObj = {
-      madera: (Number(destRes.madera) || 0) + (cargo.madera || 0),
-      piedra: (Number(destRes.piedra) || 0) + (cargo.piedra || 0),
-      hierro: (Number(destRes.hierro) || 0) + (cargo.hierro || 0),
-      provisiones: (Number(destRes.provisiones) || 0) + (cargo.provisiones || 0),
-      esencia: (Number(destRes.esencia) || 0) + (cargo.esencia || 0),
-      aldeanos: destRes.aldeanos || 0
-    };
-    destState.resources = newResObj;
-    destState.last_updated = new Date().toISOString();
-    await sbClient.from('villages').update({ state: destState }).eq('id', m.targetId);
+    // v1.71: apply_cargo_arrival — suma atómica en servidor (DT-03)
+    var { data: newState, error: rpcErr } = await sbClient.rpc('apply_cargo_arrival', {
+      p_village_id: m.targetId,
+      p_cargo:      cargo
+    });
+    if (rpcErr) throw rpcErr;
+
+    // Sincronizar caché local si el destino es una de nuestras aldeas
     var destV = myVillages.find(function (v) { return v.id === m.targetId; });
-    if (destV) {
-      destV.state.resources.madera = newResObj.madera; destV.state.resources.piedra = newResObj.piedra;
-      destV.state.resources.hierro = newResObj.hierro; destV.state.resources.provisiones = newResObj.provisiones;
-      destV.state.resources.esencia = newResObj.esencia;
+    if (destV && newState) {
+      destV.state.resources    = newState.resources    || destV.state.resources;
+      destV.state.last_updated = newState.last_updated || destV.state.last_updated;
     }
+
     var cargoStr = Object.keys(cargo).filter(function (k) { return cargo[k] > 0; })
       .map(function (k) { return fmt(cargo[k]) + ' ' + k; }).join(', ');
     await sendSystemReport(currentUser.id, '\ud83d\udce6 CARAVANA LLEG\u00d3',
@@ -2016,9 +1958,6 @@ async function executeTransport(m) {
       'Los recursos volvieron a tu aldea. Error: ' + (e.message || e));
   }
 }
-
-var _guestTroopsTableExists = null; // null=unknown, true=yes, false=no
-
 async function renderReinforcementsPanel() {
   var card = document.getElementById('ovReinforcementsCard');
   var box = document.getElementById('ovReinforcementsBox');

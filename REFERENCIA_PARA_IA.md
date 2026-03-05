@@ -1,4 +1,4 @@
-# REFERENCIA PARA IA — Epic Warriors v1.70
+# REFERENCIA PARA IA — Epic Warriors v1.71
 
 ---
 
@@ -176,15 +176,18 @@ cur_madera := LEAST(cap, FLOOR(COALESCE((v_res->>'madera')::float, 0) + prod_mad
 | `start_training_secure` | Ídem |
 | `start_summoning_secure` | Ídem + escribe todos los recursos en el write final (no solo esencia) |
 
-### Estado de archivos v1.70
+### Estado de archivos v1.71
 | Archivo | Versión | Estado |
 |---|---|---|
-| index.html | **v1.69** | ✅ switchVillage sync + loadMyVillages colas offline |
-| game-ui.js | **v1.66** | ✅ startBuild/cancelBuild async + sync corregido |
+| index.html | **v1.71** | ✅ Fix buildings lvl0 · createFirstVillage→RPC · sync 60s en tick · dedup profileBattles · versión+cache |
+| game-ui.js | **v1.71** | ✅ barra construcción, startBuild sin pre-sync, executeTransport/executeMove via RPCs atómicas |
 | game-engine.js | **v1.66** | ✅ update_battle_stats + execute_founding_secure fix |
 | game-troops.js | **v1.66** | ✅ startRecruitment/cancel/summon async |
 | game-constants.js | **v1.65** | Sin cambios |
 | game-admin.js | **v1.68** | ✅ admin_teleport + admin_repair RPCs |
+
+### ⚠️ Regla: buildings en create_first_village_secure
+El `jsonb_build_object` de buildings en la RPC `create_first_village_secure` debe ser **idéntico** a `BUILDINGS.map(b => b.id)` de `game-constants.js`. Si se añade un building nuevo en JS, actualizar también el SQL.
 | start_build_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |
 | start_training_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |
 | start_summoning_secure | **v1.70** | ✅ Cálculo inline — sin tick previo |

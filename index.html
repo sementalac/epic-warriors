@@ -6,13 +6,13 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.70</title>
+  <title>Epic Warriors Online v1.71</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="game-globals.js?v=1.50"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.50">
+  <script src="game-globals.js?v=1.71"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.71">
 </head>
 
 <body>
@@ -1043,20 +1043,20 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.70</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.71</div>
 
   <script src="game-data.js"></script>
-  <script src="game-constants.js?v=1.50"></script>
-  <script src="game-troops.js?v=1.50"></script>
-  <script src="game-combat.js?v=1.50"></script>
-  <script src="game-engine.js?v=1.50"></script>
-  <script src="game-ui.js?v=1.50"></script>
-  <script src="game-social.js?v=1.50"></script>
-  <script src="game-smithy.js?v=1.50"></script>
-  <script src="game-auth.js?v=1.50"></script>
-  <script src="game-simulator.js?v=1.50"></script>
-  <script src="game-admin.js?v=1.50"></script>
-  <script src="game-caves.js?v=1.50"></script>
+  <script src="game-constants.js?v=1.71"></script>
+  <script src="game-troops.js?v=1.71"></script>
+  <script src="game-combat.js?v=1.71"></script>
+  <script src="game-engine.js?v=1.71"></script>
+  <script src="game-ui.js?v=1.71"></script>
+  <script src="game-social.js?v=1.71"></script>
+  <script src="game-smithy.js?v=1.71"></script>
+  <script src="game-auth.js?v=1.71"></script>
+  <script src="game-simulator.js?v=1.71"></script>
+  <script src="game-admin.js?v=1.71"></script>
+  <script src="game-caves.js?v=1.71"></script>
 
   <script>
     // ============================================================
@@ -1403,9 +1403,12 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
 
         var starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
         var allBldKeys = typeof BUILDINGS !== 'undefined' ? BUILDINGS.map(function (b) { return b.id; }) : starterBlds;
+        // v1.71: Todos los edificios arrancan en level 1 — igual que defaultState().
+        // Antes los no-starter se inicializaban en 0, causando "recursos insuficientes"
+        // al intentar mejorarlos (el RPC calculaba coste 0→1 con fórmulas incorrectas).
         allBldKeys.forEach(function (k) {
           if (!s.buildings[k]) {
-            s.buildings[k] = { level: starterBlds.includes(k) ? 1 : 0 };
+            s.buildings[k] = { level: 1 };
           }
         });
 
@@ -1479,12 +1482,6 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
           v.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp || 0;
           v.state.battles_won_npc  = window._profileBattles.battles_won_npc  || 0;
         }
-        // v1.65: sincronizar contadores globales de batallas en cada cambio de aldea
-        if (window._profileBattles && v.state) {
-          v.state.battles_won_pvp  = window._profileBattles.battles_won_pvp  || 0;
-          v.state.battles_lost_pvp = window._profileBattles.battles_lost_pvp || 0;
-          v.state.battles_won_npc  = window._profileBattles.battles_won_npc  || 0;
-        }
         mapCamX = null;
         mapCamY = null;
         resetUiAnimation();
@@ -1513,31 +1510,17 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
     async function createFirstVillage() {
       showNotif('Fundando primera colonia...', 'ok');
 
-      let cx, cy;
-      let found = false;
-      for (let i = 0; i < 100; i++) {
-        cx = Math.floor(Math.random() * MAP_SIZE);
-        cy = Math.floor(Math.random() * MAP_SIZE);
-        const { error } = await sbClient.from('villages').select('id').eq('cx', cx).eq('cy', cy).single();
-        if (error) { found = true; break; }
-      }
+      // v1.71: RPC atómica — búsqueda de coordenadas + INSERT en una sola transacción.
+      // Antes: 100 queries individuales + INSERT directo → race condition entre jugadores.
+      const { data: res, error: err } = await sbClient.rpc('create_first_village_secure', {
+        p_user_id: currentUser.id,
+        p_name: 'Aldea 1'
+      });
 
-      const vName = 'Aldea 1';
-
-      var initialState = defaultState();
-      initialState.last_updated = new Date().toISOString();
-
-      const { data: v, error: err } = await sbClient.from('villages').insert({
-        owner_id: currentUser.id,
-        name: vName,
-        cx: cx,
-        cy: cy,
-        state: initialState
-      }).select().single();
-
-      if (err) {
-        console.error('CRITICAL: Failed to create first village:', err);
-        throw new Error(err.message);
+      if (err || !res || !res.ok) {
+        const msg = (err && err.message) || (res && res.error) || 'Error al crear aldea inicial';
+        console.error('CRITICAL: create_first_village_secure failed:', msg);
+        throw new Error(msg);
       }
 
       showNotif('¡Aldea base establecida!', 'ok');
@@ -1784,14 +1767,14 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
           resolveMissions(v).then(function (updated) {
             v.state = updated;
             _missionWatchScheduled = false;
-            saveVillage(v); // Guardado inmediato tras resolución
+            saveVillage(v, { updateScore: false }); // v1.71: sin score en cada resolución
             updateUnreadCount && updateUnreadCount();
+            refreshMilitaryScore && refreshMilitaryScore(); // v1.71: una sola vez post-resolución
             if (v.id === activeVillage.id) {
               if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) renderTroops();
               if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) renderCreatures();
               if (document.getElementById('page-defense') && document.getElementById('page-defense').classList.contains('active')) renderRefugio();
             }
-            refreshMilitaryScore && refreshMilitaryScore();
           }).catch(function (e) {
             console.error('Resolution tick error:', e);
             _missionWatchScheduled = false;
@@ -1915,6 +1898,14 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
       updateGranjaPanel();
 
       var nowMs = Date.now();
+      // v1.71: Sincronización periódica 60s con el servidor (recursos reales)
+      // _lastResourceSync estaba declarado pero nunca se comprobaba dentro del tick.
+      if (nowMs - _lastResourceSync > 60000) {
+        _lastResourceSync = nowMs;
+        syncVillageResourcesFromServer && syncVillageResourcesFromServer().catch(function (e) {
+          console.warn('[tick] sync 60s error:', e);
+        });
+      }
       if (nowMs - _lastReinforcementsCheck > 60000 && document.getElementById('page-overview').classList.contains('active')) {
         _lastReinforcementsCheck = nowMs;
         renderReinforcementsPanel();
