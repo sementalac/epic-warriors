@@ -1269,7 +1269,6 @@ clearInterval(autoSaveTimer);
       try {
         clearTimeout(saveDebounce); // cancelar saves pendientes antes de sync
         await syncVillageResourcesFromServer();
-        tick(); // tick scheduleará su propio save si hay colas que resolver
       } catch (bootErr) {
   console.warn('[v1.67] Boot sync error (no crítico):', bootErr);
 }
@@ -1553,11 +1552,7 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
         p_mission_queue:     v.state.mission_queue    || [],
         p_build_queue:       v.state.build_queue      || null,
         p_training_queue:    v.state.training_queue   || [],
-        p_summoning_queue:   v.state.summoning_queue  || [],
-        p_resources:         s.resources  || {},
-        p_troops:            s.troops     || {},
-        p_creatures:         s.creatures  || {},
-        p_buildings:         s.buildings  || {}
+        p_summoning_queue:   v.state.summoning_queue  || []
       });
 
       if (error) {
@@ -1620,7 +1615,7 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
           }
         });
 
-        await sbClient.from('profiles').update({ military_score: grandTotal }).eq('id', currentUser.id);
+        await sbClient.rpc('update_military_score', { p_score: grandTotal });
       } catch (e) { console.warn('refreshMilitaryScore failed', e); }
     }
 

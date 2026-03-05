@@ -321,14 +321,20 @@ async function resolveMissions(v) {
           await executeTransport(m, v);
           // NO hacer continue - permitir que las tropas vuelvan
         } else if (m.type === 'return_reinforce') {
-          // Tropas volviendo de refuerzo a su aldea origen
-          // Se añaden a las tropas del village origen
-          Object.keys(m.troops || {}).forEach(function (k) {
-            if ((m.troops[k] || 0) <= 0) return;
-            if (TROOP_TYPES[k]) vs.troops[k] = (vs.troops[k] || 0) + m.troops[k];
-            else if (CREATURE_TYPES[k]) { if (!vs.creatures) vs.creatures = defaultCreatures(); vs.creatures[k] = (vs.creatures[k] || 0) + m.troops[k]; }
-          });
-          // No enviar mensaje - no es importante
+          // v1.72: RPC atómica — antes mutaba vs.troops localmente, lo que se perdía
+          // tras el fix de save_village_client (p_troops eliminado en v1.72).
+          // Ahora el servidor suma las tropas devueltas con FOR UPDATE lock.
+          try {
+            await sbClient.rpc('finalize_reinforce_return', {
+              p_village_id: v.id,
+              p_mission_id: m.mid || m.finish_at,
+              p_troops:     m.troops || {}
+            });
+            // Sincronizar estado local desde servidor
+            await loadMyVillages();
+          } catch (e) {
+            console.error('finalize_reinforce_return error:', e);
+          }
           continue;
         } else if (m.type === 'return') {
           // ── TROPAS REGRESAN (v1.50: RESOLUCIÓN EN SERVIDOR) ──
@@ -518,8 +524,6 @@ async function executeSpyMission(m, v) {
           html += '<div style="font-size:.7rem;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:4px;">' + title + '</div>';
         }
 
-        // Función auxiliar eliminada debido a que el usuario no quiere los iconos para tropas.
-
         // Paginar de 6 en 6
         var CHUNK = 6;
         for (var i = 0; i < entities.length; i += CHUNK) {
@@ -690,8 +694,6 @@ async function executeAttackMission(m, v) {
     var victoria = res.winner === 1;
     var bResult = res;
 
-    // Calcular XP (Simplificado: 100 XP base + 10 por cada tropa enemiga derrotada, 
-    // pero aquí usamos rounds como aproximación rápida o podrías sumar bajas del log)
     var attackerXP = bResult.rounds * 50;
 
     // Generar reporte
@@ -743,9 +745,6 @@ async function executeAttackMission(m, v) {
   }
 }
 
-// ============================================================
-// PvP — Ataque entre jugadores
-// ============================================================
 // ============================================================
 // PvP — Ataque entre jugadores (v1.52: Servidor Autoritativo)
 // ============================================================
@@ -821,12 +820,8 @@ async function executeAttackPvP(m, v) {
     var loot = res.loot;
     var victoria = bResult.winner === 1;
 
-    // 2. Generar Reporte Visual (Usamos el log del servidor)
-    // Nota: generateBattleReport espera contingentes, adaptamos o creamos uno nuevo simplificado
     var leaderName = (profileCache[currentUser.id] && profileCache[currentUser.id].username) || v.name || 'Atacante';
 
-    // Simular estructura para el generador de reportes legacy si es necesario, 
-    // o usar el log textual directamente.
     var reportHTML = '<div style="font-family:inherit;line-height:1.4;">';
     reportHTML += '<div style="font-size:1.1rem;color:var(--gold);margin-bottom:10px;">' + (victoria ? '🏆 VICTORIA' : '💀 DERROTA') + '</div>';
     reportHTML += '<div style="background:rgba(0,0,0,.3);padding:10px;border-radius:5px;max-height:300px;overflow-y:auto;font-size:0.8rem;color:var(--dim);border:1px solid rgba(255,255,255,0.05);">';
@@ -849,18 +844,15 @@ async function executeAttackPvP(m, v) {
     m.troops = bResult.survivors1;
     m.loot = loot;
     m.type = 'return';
-    // El servidor ya actualizó el estado en la DB, solo notificamos
 
     await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' ATAQUE: ' + (m.targetName || 'PvP'), reportHTML);
     showNotif(victoria ? '¡Victoria! Tropas regresando con botín.' : 'Derrota en combate.', victoria ? 'ok' : 'err');
 
     // Sincronizar estado local si es la aldea activa (Con red de seguridad anti-reset)
-    // v1.62d: IMPORTANTE - Extraer .state del objeto devuelto por el RPC
     if (v && res.attacker_village_state && res.attacker_village_state.id === v.id) {
       var sNext = res.attacker_village_state.state || res.attacker_village_state;
       if (sNext && sNext.buildings && Object.keys(sNext.buildings).length > 0) {
         v.state = sNext;
-        // v1.71: updateResourceUI eliminada — tick() actualiza la UI en el siguiente ciclo
       } else {
         console.error('[CRÍTICO] El servidor devolvió un estado de aldea inválido. Ignorando para evitar reset.', sNext);
       }
@@ -957,8 +949,6 @@ async function executeTransport(m, v) {
 
 // ============================================================
 // ACTIVE MISSIONS — visibilidad multi-jugador para ataques conjuntos
-// Tabla Supabase: active_missions (id, mission_id, leader_id, host_village_id,
-//   target_x, target_y, participant_id, troops jsonb, finish_at, status)
 // ============================================================
 var _activeMissionsTableExists = null;
 
@@ -966,7 +956,6 @@ async function _insertActiveMission(missionId, m, contingents) {
   if (_activeMissionsTableExists === false) return;
   try {
     var rows = [];
-    // Fila del líder
     rows.push({
       mission_id: missionId,
       leader_id: currentUser.id,
@@ -977,7 +966,6 @@ async function _insertActiveMission(missionId, m, contingents) {
       finish_at: m.finish_at,
       status: 'active'
     });
-    // Fila por contingente aliado
     (contingents || []).forEach(function (c) {
       rows.push({
         mission_id: missionId,
@@ -1006,10 +994,6 @@ async function _clearActiveMission(missionId) {
 async function cancelAlliedMission(missionId, leaderVillageId) {
   if (!confirm('¿Cancelar este ataque conjunto? Las tropas de TODOS los participantes regresarán.')) return;
 
-  // v1.71: RPC atómica — antes el cliente leía y escribía state directamente a DB
-  // sin validación server-side, usando cx/cy como x/y (bug de campos). Ahora el
-  // servidor gestiona el retorno del líder y todos los contingentes en una sola
-  // transacción con campos correctos.
   try {
     const { data: res, error: rpcErr } = await sbClient.rpc('cancel_allied_mission_secure', {
       p_mission_id:        missionId,
@@ -1032,12 +1016,8 @@ async function cancelAlliedMission(missionId, leaderVillageId) {
 }
 
 function _returnTroopsHome(m, v) {
-  // Encola retorno inmediato de las tropas
   if (!v) return;
   var dist = Math.max(Math.abs((m.tx || 0) - v.x), Math.abs((m.ty || 0) - v.y));
-  // v1.71: BUG FIX — minSpeed debe inicializarse en 999 (centinela),
-  // no en 1. Con 1, Math.min(1, speed_real) siempre daba 1 → retorno a
-  // velocidad de 1 casilla/hora independientemente de las tropas enviadas.
   var minSpeed = 999;
   Object.keys(m.troops || {}).forEach(function (k) {
     var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
@@ -1054,8 +1034,6 @@ function _returnTroopsHome(m, v) {
   });
 }
 
-// updateObjective definida más abajo (única versión — upsert)
-
 function resolveQueue(vs) {
   if (!vs.build_queue) return vs;
 
@@ -1063,7 +1041,6 @@ function resolveQueue(vs) {
   if (Date.now() >= finishAt) {
     var id = vs.build_queue.id;
 
-    // UPGRADE BUILDING
     if (!vs.buildings[id]) vs.buildings[id] = { level: 1 };
     else vs.buildings[id].level++;
 
@@ -1071,9 +1048,6 @@ function resolveQueue(vs) {
 
     var def = BUILDINGS.find(function (b) { return b.id === id; });
     showNotif((def ? def.name : id) + ' mejorada!', 'ok');
-
-    // ⚠️ CRITICAL: Save changes removed from here to avoid side-effects.
-    // Caller (tick or loadMyVillages) MUST check if queue changed and save.
   }
   return vs;
 }
