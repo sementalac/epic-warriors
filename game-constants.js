@@ -5,6 +5,19 @@
 // v1.44+: speed ahora en CASILLAS/HORA (antes era casillas/minuto)
 //   Fórmula ETA: dist / speed * 3600 segundos
 //   Ejemplos: speed 60 = 1 cas/min | speed 200 = 18s/casilla
+//
+// v1.82 — Reequilibrio de costes y capacidades:
+//   • almacenCapForLevel: capacity(L) = phasedVal(L,500,...) × 1.20
+//     Garantiza que almacén lleno siempre cubre su propia siguiente mejora.
+//   • getBarracksCapacity: nueva curva 3 fases (100→5k→50k→5M en nv.50)
+//   • Costes de edificios reequilibrados por jerarquía:
+//       CARO   (85% almacén) base_max=425: muralla, lab, torreinvocacion
+//       MEDIO  (70% almacén) base_max=350: barracas, cuarteles, refugio, herreria
+//       BARATO (60% almacén) base_max=300: aserradero, cantera, minehierro,
+//                                          granja, circulo, torre, reclutamiento
+//     Solo el recurso MÁS CARO de cada edificio cae en ese %. Los demás
+//     mantienen sus ratios originales relativos al recurso más caro.
+//   IMPORTANTE: actualizar también get_building_cost RPC en Supabase.
 // ============================================================
 
 function getTorreRange(blds) {
@@ -653,81 +666,101 @@ function phasedVal(l, base, m1, e1, m2, e2, m3) {
   return v2 * Math.pow(m3, l - e2);
 }
 
+// ============================================================
+// JERARQUÍA DE COSTES v1.82
+// El recurso MÁS CARO de cada edificio se define como % de la
+// capacidad del almacén en ese nivel. Los demás recursos
+// mantienen sus ratios originales relativos al más caro.
+//
+//   REFERENCIA (almacén): base_max = 500
+//   CARO   (85%): base_max = 425  → muralla, lab, torreinvocacion
+//   MEDIO  (70%): base_max = 350  → barracas, cuarteles, refugio, herreria
+//   BARATO (60%): base_max = 300  → aserradero, cantera, minehierro,
+//                                   granja, circulo, torre, reclutamiento
+// ============================================================
+
 const BUILDINGS = [
   // ── RECURSOS ─────────────────────────────────────────────
   {
+    // BARATO — max=madera(300), piedra/madera=0.246
     id: 'aserradero', name: 'Aserradero', icon: '🌲',
-    desc: 'Produce madera por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio. Coste nv.10: ~67k madera / 16k piedra. Coste nv.30: ~13M madera / 3M piedra.',
+    desc: 'Produce madera por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio.',
     prod: function (l) { return { madera: Math.floor(30 + 40 * l * Math.pow(1.1, l)) }; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 65, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 16, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 74,  2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=madera(300), piedra/madera=0.68
     id: 'cantera', name: 'Cantera', icon: '⛰️',
     desc: 'Produce piedra por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio.',
     prod: function (l) { return { piedra: Math.floor(20 + 30 * l * Math.pow(1.1, l)) }; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 50, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 34, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 204, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=madera(300), piedra/madera=0.80, hierro/madera=0.294
     id: 'minehierro', name: 'Mina de Hierro', icon: '⚒️',
     desc: 'Produce hierro por hora de forma pasiva. Los aldeanos asignados multiplican la producción. Nivel 1 activo desde el inicio.',
     prod: function (l) { return { hierro: Math.floor(10 + 20 * l * Math.pow(1.1, l)) }; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 85, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 68, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 25, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 240, 2, 10, 1.3, 30, 1.05)),
+        hierro: Math.floor(phasedVal(l, 88,  2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 18, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=madera(300), piedra/madera=0.68
     id: 'granja', name: 'Granja', icon: '🌾',
     desc: 'Aumenta las provisiones generadas por aldeano asignado. Nivel 1 = 6 prov./aldeano/h, +1 por nivel.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 50, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 34, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 204, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=madera(300)=piedra(300), esencia/madera=0.218
     id: 'circulo', name: 'Círculo Místico', icon: '✨',
     desc: 'Canaliza la Esencia. La Esencia no ocupa almacén.',
     prod: function (l) { return { esencia: Math.floor(5 + 15 * l * Math.pow(1.1, l)) }; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 170, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 170, 2, 10, 1.3, 30, 1.05)),
-        esencia: Math.floor(phasedVal(l, 37, 2, 10, 1.3, 30, 1.05))
+        madera:  Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra:  Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        esencia: Math.floor(phasedVal(l, 65,  2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 30, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // REFERENCIA — base_max=500 (madera=piedra), hierro/madera=0.50
+    // capacity(L) = phasedVal(L, 500, ...) × 1.20  — ver almacenCapForLevel
     id: 'almacen', name: 'Almacén', icon: '🏛️',
     desc: 'Aumenta la capacidad máxima de madera, piedra, hierro y provisiones.',
     prod: function () { return {}; },
@@ -743,109 +776,117 @@ const BUILDINGS = [
   },
 
   {
+    // MEDIO — max=piedra(350), madera/piedra=0.667, hierro/piedra=0.333
     id: 'barracas', name: 'Barracas', icon: '🏰',
-    desc: 'Capacidad máxima de tropas normales (no criaturas). Nivel 1 = 50 plazas, ×1.40 por nivel.',
+    desc: 'Capacidad máxima de tropas normales (no criaturas).',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 200, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 233, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 350, 2, 10, 1.3, 30, 1.05)),
+        hierro: Math.floor(phasedVal(l, 117, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(15, phasedVal(l, 40, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=madera(300), piedra/madera=0.692, hierro/madera=0.346
     id: 'reclutamiento', name: 'Reclutamiento', icon: '⚔️',
     desc: 'Genera aldeanos automáticamente. Nv.1 ≈ 9 min 54s por aldeano.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 130, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 90, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 45, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 208, 2, 10, 1.3, 30, 1.05)),
+        hierro: Math.floor(phasedVal(l, 104, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 25, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // CARO — max=piedra(425), hierro/piedra=0.40
     id: 'muralla', name: 'Muralla', icon: '🏰',
     desc: 'Escudo de la aldea con HP propio. El atacante debe destruirla antes de dañar tus tropas. +500 HP por nivel.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { piedra: 0, hierro: 0 };
       return {
-        piedra: Math.floor(phasedVal(l, 350, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 30, 1.05))
+        piedra: Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
+        hierro: Math.floor(phasedVal(l, 170, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(30, phasedVal(l, 50, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // CARO — max=piedra(425), madera/piedra=0.667, esencia/piedra=0.238
     id: 'lab', name: 'Laboratorio', icon: '📜',
     desc: 'Permite investigar nuevas tecnologías (próximamente activo).',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 280, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 420, 2, 10, 1.3, 30, 1.05)),
-        esencia: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+        madera:  Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
+        piedra:  Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
+        esencia: Math.floor(phasedVal(l, 101, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(15, phasedVal(l, 45, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // MEDIO — max=piedra(350), madera/piedra=0.733, hierro/piedra=0.40
     id: 'cuarteles', name: 'Cuarteles', icon: '🎖️',
     desc: 'Reduce el tiempo de entrenamiento de tropas (excepto aldeanos y criaturas) un 1% por nivel, hasta un máximo del 50% en nv.50.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 220, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 120, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 257, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 350, 2, 10, 1.3, 30, 1.05)),
+        hierro: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 40, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // BARATO — max=piedra(300), madera/piedra=0.50
     id: 'torre', name: 'Torre de Vigía', icon: '🗼',
     desc: 'Controla el alcance de tu aldea. Nivel 1 = 10 casillas de alcance, +10 por nivel.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 70, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 150, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 35, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // CARO — max=piedra(425), madera/piedra=0.667, esencia/piedra=0.333
     id: 'torreinvocacion', name: 'Torre de Invocación', icon: '🔮',
     desc: 'Desbloquea la invocación de criaturas poderosas. Reduce un 5% el tiempo de invocación por nivel.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera: Math.floor(phasedVal(l, 200, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        esencia: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 30, 1.05))
+        madera:  Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
+        piedra:  Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
+        esencia: Math.floor(phasedVal(l, 141, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(40, phasedVal(l, 55, 1.6, 10, 1.2, 30, 1.05))); }
   },
 
   {
+    // MEDIO — max=piedra(350), hierro/piedra=0.40
     id: 'refugio', name: 'Refugio', icon: '🕵️',
     desc: 'Esconde tropas propias (no criaturas, no aliados). Las tropas dentro son invisibles a espionajes y no participan en defensa.',
     prod: function () { return {}; },
@@ -860,15 +901,17 @@ const BUILDINGS = [
   },
 
   {
+    // MEDIO — max=hierro(350), madera/hierro=0.64, piedra/hierro=0.40
+    // Máx nv.15 — phasedVal usa e2=15 en lugar de 30
     id: 'herreria', name: 'Herrería', icon: '🔨',
     desc: 'Permite mejorar el arma y la armadura de cada tipo de tropa. Nivel de Herrería = nivel máximo de mejora de equipamiento (máx nv.15).',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { hierro: 0, madera: 0, piedra: 0 };
       return {
-        hierro: Math.floor(phasedVal(l, 250, 2, 10, 1.3, 15, 1.05)),
-        madera: Math.floor(phasedVal(l, 160, 2, 10, 1.3, 15, 1.05)),
-        piedra: Math.floor(phasedVal(l, 100, 2, 10, 1.3, 15, 1.05))
+        hierro: Math.floor(phasedVal(l, 350, 2, 10, 1.3, 15, 1.05)),
+        madera: Math.floor(phasedVal(l, 224, 2, 10, 1.3, 15, 1.05)),
+        piedra: Math.floor(phasedVal(l, 140, 2, 10, 1.3, 15, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(30, phasedVal(l, 50, 1.6, 10, 1.2, 15, 1.05))); }
@@ -880,10 +923,23 @@ function getCuartelesReduction(blds) {
   return Math.min(0.5, lvl * 0.01);
 }
 
+// v1.82 — Nueva curva de capacidad en 3 fases:
+//   Fase 1 (nv.1–10):  100 → 5.000   (×50 en 10 niveles)
+//   Fase 2 (nv.11–20): 5.000 → 50.000 (×10 en 10 niveles)
+//   Fase 3 (nv.21–50): 50.000 → 5.000.000 (×100 en 30 niveles)
+// ACTUALIZAR TAMBIÉN: get_building_cost y secure_village_tick en Supabase.
 function getBarracksCapacity(blds) {
   var lvl = (blds && blds['barracas'] && blds['barracas'].level) || 0;
-  if (lvl === 0) return 0;
-  return Math.round(50 * Math.pow(1.40, lvl - 1));
+  if (lvl <= 0) return 0;
+  var base = 100;
+  var m1 = Math.pow(50, 1 / 10);
+  var m2 = Math.pow(10, 1 / 10);
+  var m3 = Math.pow(10, 1 / 15);
+  if (lvl <= 10) return Math.round(base * Math.pow(m1, lvl));
+  var v10 = base * Math.pow(m1, 10);
+  if (lvl <= 20) return Math.round(v10 * Math.pow(m2, lvl - 10));
+  var v20 = v10 * Math.pow(m2, 10);
+  return Math.round(v20 * Math.pow(m3, lvl - 20));
 }
 
 function getBarracksUsed(vs) {
@@ -953,13 +1009,13 @@ function getAldeanosIntervalMs(blds) {
 // El servidor es la autoridad (secure_village_tick).
 // El contador visual se actualiza desde syncVillageResourcesFromServer cada 60s.
 
+// v1.82 — Nueva fórmula: capacity(L) = phasedVal(L, 500, 2, 10, 1.3, 30, 1.05) × 1.20
+// Garantiza que el almacén lleno siempre puede costear su propia siguiente mejora (+20% margen).
+// Como la base 500 es la más alta de todos los edificios, también cubre cualquier otro edificio
+// del mismo nivel. ACTUALIZAR TAMBIÉN: secure_village_tick y start_build_secure en Supabase.
 function almacenCapForLevel(l) {
-  if (l <= 0) return 0; // v1.71: nivel 0 → capacidad 0 (sin almacén operativo)
-  if (l <= 10) return 1000 * Math.pow(2, l);
-  var v10 = 1000 * Math.pow(2, 10);
-  if (l <= 30) return v10 * Math.pow(1.3, l - 10);
-  var v30 = v10 * Math.pow(1.3, 20);
-  return v30 * Math.pow(1.05, l - 30);
+  if (l <= 0) return 0;
+  return Math.floor(phasedVal(l, 500, 2, 10, 1.3, 30, 1.05) * 1.20);
 }
 
 function getCapacity(blds) {

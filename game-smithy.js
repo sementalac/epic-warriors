@@ -114,7 +114,7 @@ function smithyCostHtml(cost, res) {
     var ok = (res[k] || 0) >= cost[k];
     var label = { madera:'🌲', piedra:'🪨', hierro:'⚙️', esencia:'✨' }[k] || k;
     return '<span style="color:' + (ok ? 'var(--ok)' : 'var(--danger)') + ';margin-right:8px;">'
-      + label + ' ' + fmt(cost[k]) + '</span>';
+      + label + ' ' + fmtCost(cost[k]) + '</span>'; // v1.82: fmtCost — exacto hasta 9.999 (regla v1.73)
   }).join('');
 }
 

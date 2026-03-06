@@ -110,7 +110,7 @@ function renderBuildings(res) {
   BUILDINGS.forEach(function (def) {
     var lvl = (vs.buildings[def.id] && vs.buildings[def.id].level) || 0;
     var next = lvl + 1;
-    var cost = def.cost(lvl);
+    var cost = def.cost(next); // v1.82: fix — usar next (nivel a construir), no lvl (nivel actual)
     var prod = def.prod(next);
     var inQueue = vs.build_queue && vs.build_queue.id === def.id;
     var anyQueue = !!vs.build_queue;
@@ -2860,7 +2860,7 @@ function openBuildingDetail(id) {
     btnCls = 'busy'; btnTxt = 'Construyendo nivel ' + (curLvl + 1) + '...';
   } else if (anyQueue) {
     btnCls = 'insuf'; btnTxt = 'Cola ocupada — espera a que termine';
-  } else if (!canAfford(def.cost(curLvl), res)) {
+  } else if (!canAfford(def.cost(curLvl + 1), res)) { // v1.82: fix — curLvl+1, no curLvl
     btnCls = 'insuf'; btnTxt = 'Recursos insuficientes para nivel ' + (curLvl + 1);
   } else {
     btnCls = 'avail'; btnTxt = 'Mejorar a Nivel ' + (curLvl + 1);

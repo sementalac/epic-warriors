@@ -6,13 +6,13 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.81</title>
+  <title>Epic Warriors Online v1.82</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="game-globals.js?v=1.81"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.81">
+  <script src="game-globals.js?v=1.82"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.82">
 </head>
 
 <body>
@@ -517,13 +517,8 @@
 
         <div class="page" id="page-ranking">
           <div class="page-title">RANKING</div>
-          <div class="page-sub">Puntuación militar global · Se actualiza en tiempo real al ganar o perder tropas</div>
+          <div class="page-sub">Puntuación militar global · Se actualiza automáticamente cada hora</div>
           <div class="card">
-            <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px;">
-              <div class="muted" style="font-size:.68rem;">Actualización automática cada 6h</div>
-              <button class="btn btn-sm" onclick="forceRefreshRanking()" style="font-size:.68rem;padding:3px 10px;">↻
-                Actualizar</button>
-            </div>
             <div id="rankingBox"></div>
           </div>
         </div>
@@ -1043,20 +1038,20 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.81</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.82</div>
 
   <script src="game-data.js"></script>
-  <script src="game-constants.js?v=1.81"></script>
-  <script src="game-troops.js?v=1.81"></script>
-  <script src="game-combat.js?v=1.81"></script>
-  <script src="game-engine.js?v=1.81"></script>
-  <script src="game-ui.js?v=1.81"></script>
-  <script src="game-social.js?v=1.81"></script>
-  <script src="game-smithy.js?v=1.81"></script>
-  <script src="game-auth.js?v=1.81"></script>
-  <script src="game-simulator.js?v=1.81"></script>
-  <script src="game-admin.js?v=1.81"></script>
-  <script src="game-caves.js?v=1.81"></script>
+  <script src="game-constants.js?v=1.82"></script>
+  <script src="game-troops.js?v=1.82"></script>
+  <script src="game-combat.js?v=1.82"></script>
+  <script src="game-engine.js?v=1.82"></script>
+  <script src="game-ui.js?v=1.82"></script>
+  <script src="game-social.js?v=1.82"></script>
+  <script src="game-smithy.js?v=1.82"></script>
+  <script src="game-auth.js?v=1.82"></script>
+  <script src="game-simulator.js?v=1.82"></script>
+  <script src="game-admin.js?v=1.82"></script>
+  <script src="game-caves.js?v=1.82"></script>
 
   <script>
     // ============================================================
@@ -1636,6 +1631,7 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
 
     var saveDebounce = null;
     var modalBuildingId = null;
+    var _lastMilitaryScoreUpdate = 0; // v1.82: throttle refreshMilitaryScore — ranking se actualiza cada 1h
     function scheduleSave() {
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(flushVillage, 2000);
@@ -1763,10 +1759,12 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
         if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) {
           renderTroops();
         }
-        refreshMilitaryScore && refreshMilitaryScore();
+        // v1.82: ranking se actualiza cada 1h — cambios de tropas no se reflejan en tiempo real
+        if (refreshMilitaryScore && (Date.now() - _lastMilitaryScoreUpdate) > 3600000) {
+          _lastMilitaryScoreUpdate = Date.now();
+          refreshMilitaryScore();
+        }
       }
-
-      var _nowMs2 = Date.now();
       // v1.65: Resolver misiones en TODAS las aldeas (Solución Bug 0s)
       (myVillages || []).forEach(function (v) {
         var hasMissionDue = (v.state.mission_queue || []).some(function (m) {
@@ -1779,7 +1777,11 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
             _missionWatchScheduled = false;
             saveVillage(v, { updateScore: false }); // v1.71: sin score en cada resolución
             updateUnreadCount && updateUnreadCount();
-            refreshMilitaryScore && refreshMilitaryScore(); // v1.71: una sola vez post-resolución
+            // v1.82: mismo throttle 1h — batalla no actualiza ranking inmediatamente
+            if (refreshMilitaryScore && (Date.now() - _lastMilitaryScoreUpdate) > 3600000) {
+              _lastMilitaryScoreUpdate = Date.now();
+              refreshMilitaryScore();
+            }
             if (v.id === activeVillage.id) {
               if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) renderTroops();
               if (document.getElementById('page-creatures') && document.getElementById('page-creatures').classList.contains('active')) renderCreatures();
@@ -1930,6 +1932,16 @@ if (isTemp) {
       if (nowMs - _lastReinforcementsCheck > 60000 && document.getElementById('page-overview').classList.contains('active')) {
         _lastReinforcementsCheck = nowMs;
         renderReinforcementsPanel();
+      }
+      // v1.82: fix — _lastSeenUpdate y _lastOnlineCheck declarados en game-globals.js
+      // pero nunca usados en tick → online count congelado durante la sesión
+      if (nowMs - _lastSeenUpdate > 60000) {
+        _lastSeenUpdate = nowMs;
+        updateLastSeen();
+      }
+      if (nowMs - _lastOnlineCheck > 60000) {
+        _lastOnlineCheck = nowMs;
+        updateOnlineCount();
       }
       if (document.getElementById('page-buildings').classList.contains('active')) {
         renderBuildings(res);
