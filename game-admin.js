@@ -37,8 +37,8 @@ function closeMOTD() {
 function isAdmin() {
   if (!currentUser) return false;
   if (currentUser.email !== 'sementalac@gmail.com') return false;
-  // Verificación extra: el id debe ser un UUID válido (no manipulado)
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) return false;
+  // Nota: la seguridad real está en el servidor (profiles.role = 'admin').
+  // Este check solo controla visibilidad de UI.
   return true;
 }
 
@@ -1019,9 +1019,12 @@ async function adminInspectAlliance(allianceId, tag) {
 
 async function adminKickFromAlliance(allianceId, userId, username) {
   if (!confirm('¿Expulsar a ' + username + ' de esta alianza?')) return;
-  var r = await sbClient.from('alliance_members').delete()
-    .eq('alliance_id', allianceId).eq('user_id', userId);
+  var r = await sbClient.rpc('admin_kick_from_alliance', {
+    p_alliance_id: allianceId,
+    p_user_id: userId
+  });
   if (r.error) { showNotif('Error: ' + r.error.message, 'err'); return; }
+  if (r.data && r.data.ok === false) { showNotif('Error: ' + (r.data.error || 'desconocido'), 'err'); return; }
   showNotif('✓ ' + username + ' expulsado de la alianza', 'ok');
   // Recargar el overlay
   var overlay = document.getElementById('adminAllianceInspectBox');
@@ -1033,11 +1036,9 @@ async function adminDeleteAlliance(id, name) {
   if (!isAdmin()) return;
   if (!confirm('¿Borrar la alianza "' + name + '"?\nTodos los miembros serán expulsados.\nEsta acción no se puede deshacer.')) return;
 
-  var r1 = await sbClient.from('alliance_members').delete().eq('alliance_id', id);
-  if (r1.error) { showNotif('Error al expulsar miembros: ' + r1.error.message, 'err'); return; }
-
-  var r2 = await sbClient.from('alliances').delete().eq('id', id);
-  if (r2.error) { showNotif('Error al borrar alianza: ' + r2.error.message, 'err'); return; }
+  var r = await sbClient.rpc('admin_delete_alliance', { p_alliance_id: id });
+  if (r.error) { showNotif('Error al borrar alianza: ' + r.error.message, 'err'); return; }
+  if (r.data && r.data.ok === false) { showNotif('Error: ' + (r.data.error || 'desconocido'), 'err'); return; }
 
   showNotif('✓ Alianza "' + name + '" eliminada', 'ok');
   loadAdminAlliances();
@@ -1131,7 +1132,10 @@ async function adminSpawnGhostMap(x, y) {
   if (name === null) return;
 
   var wall = parseInt(prompt('Nivel del muro:', '1')) || 1;
-  var troops = { guerrero: 100, arquero: 50 };
+  var troopKeys = Object.keys(TROOP_TYPES).filter(function(k) { return k !== 'aldeano'; });
+  var troops = {};
+  if (troopKeys[0]) troops[troopKeys[0]] = 100;
+  if (troopKeys[1]) troops[troopKeys[1]] = 50;
   var creatures = { guardiancueva: 1 };
 
   var ir = await sbClient.rpc('admin_ghost_create', {
@@ -1159,13 +1163,14 @@ async function adminSpawnCaveMap(x, y) {
   if (!type) return;
 
   try {
-    var r = await sbClient.from('caves').insert({
-      cx: x,
-      cy: y,
-      status: 'wild',
-      guardian_type: type
+    var r = await sbClient.rpc('admin_cave_create', {
+      p_cx: x,
+      p_cy: y,
+      p_status: 'wild',
+      p_guardian_type: type
     });
     if (r.error) throw r.error;
+    if (r.data && r.data.ok === false) throw new Error(r.data.error || 'error desconocido');
 
     showNotif('⛏️ Cueva creada en [' + x + ',' + y + ']', 'ok');
     if (typeof loadCaves === 'function') await loadCaves(true);
@@ -1207,8 +1212,9 @@ async function adminDeleteCaveMap(caveId) {
   if (!confirm('¿Eliminar esta cueva permanentemente?')) return;
 
   try {
-    var { error: rErr } = await sbClient.from('caves').delete().eq('id', caveId);
+    var { data: rData, error: rErr } = await sbClient.rpc('admin_cave_delete', { p_cave_id: caveId });
     if (rErr) throw rErr;
+    if (rData && rData.ok === false) throw new Error(rData.error || 'error desconocido');
 
     showNotif('🗑️ Cueva eliminada', 'ok');
     if (typeof loadCaves === 'function') await loadCaves(true);
@@ -1444,11 +1450,10 @@ async function adminLaunchHunt() {
       if (!newOrig) throw new Error('Error al generar la base de invasión.');
       originId = newOrig.id;
 
-      // Marcar como temporal
+      // Marcar como temporal — se persiste en el write de admin_ghost_sync_hunt más abajo
       var sTmp = typeof newOrig.state === 'string' ? JSON.parse(newOrig.state) : newOrig.state;
       if (!sTmp) sTmp = {};
       sTmp.is_temp = true;
-      await sbClient.from('villages').update({ state: sTmp }).eq('id', originId);
     }
 
     // Calcular velocidad y llegada

@@ -881,7 +881,7 @@ function getCuartelesReduction(blds) {
 }
 
 function getBarracksCapacity(blds) {
-  var lvl = (blds['barracas'] && blds['barracas'].level) || 0;
+  var lvl = (blds && blds['barracas'] && blds['barracas'].level) || 0;
   if (lvl === 0) return 0;
   return Math.round(50 * Math.pow(1.40, lvl - 1));
 }
@@ -912,7 +912,7 @@ function getBarracksUsed(vs) {
   var trainingQueue = vs.training_queue || [];
   trainingQueue.forEach(function (t) {
     if (t.type && TROOP_TYPES[t.type] && t.type !== 'aldeano') {
-      used += (TROOP_TYPES[t.type].barracasSlots || 1);
+      used += (t.amount || 1) * (TROOP_TYPES[t.type].barracasSlots || 1);
     }
   });
 
@@ -941,7 +941,7 @@ function getAldeanosProd(blds) {
 }
 
 function getAldeanosIntervalMs(blds) {
-  var lvl = (blds['reclutamiento'] && blds['reclutamiento'].level) || 0;
+  var lvl = (blds && blds['reclutamiento'] && blds['reclutamiento'].level) || 0;
   if (lvl === 0) return Infinity;
   var baseMin = 10;
   var mins = baseMin * (1 - 0.01 * lvl);

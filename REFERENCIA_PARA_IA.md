@@ -1,4 +1,4 @@
-# REFERENCIA PARA IA — Epic Warriors v1.71
+# REFERENCIA PARA IA — Epic Warriors v1.74
 
 ---
 
@@ -8,6 +8,14 @@
 2. **Si el archivo está en el contexto del documento → ir directo a crear el output. Sin `ls`, sin `bash`, sin intentar leerlo desde disco.** Es el mayor desperdicio de tokens — evitarlo siempre.
 3. **Entregar siempre archivo completo en `/mnt/user-data/outputs/`** — nunca instrucciones manuales de parcheo.
 4. Si falta un archivo necesario → pedirlo. Solo pedir LO NECESARIO (ver tabla workflow).
+5. **[CRÍTICO — AUDITORÍA EN DOS PASADAS OBLIGATORIO]** Una sola lectura del archivo NO es suficiente para encontrar todos los bugs. Está demostrado que la IA comete el error de dar por cerrada la auditoría tras la primera pasada y se le escapan issues reales. **Protocolo obligatorio:**
+   - **Pasada 1:** Leer el archivo entero y listar todos los issues encontrados.
+   - **Pasada 2:** Volver a leer el archivo entero desde cero, como si la pasada 1 no hubiera existido, buscando issues que la pasada 1 pudo haber pasado por alto.
+   - Solo tras ambas pasadas: consolidar la lista final y presentarla al usuario para confirmación.
+   - **Nunca presentar la lista tras una sola pasada como si fuera completa.**
+6. **[CRÍTICO — ACTUALIZAR DOCS EN LA MISMA ENTREGA]** Cuando se corrigen bugs o se añaden reglas nuevas, `ARQUITECTURA.md`, `REFERENCIA_PARA_IA.md` y **`AUDITORIA.md`** deben actualizarse en el mismo turno. No dejarlos para después.
+
+> 📋 **Estado de auditoría por archivo → ver `AUDITORIA.md`**
 
 ---
 
@@ -152,7 +160,36 @@ GROUP BY tablename, policyname HAVING COUNT(*) > 1;
 | `switchVillage` | index.html | Inyecta `_profileBattles` al cambiar aldea |
 | `save_village_client` call | index.html | Ahora envía troops, creatures, buildings |
 
-### v1.70 — DT-01 resuelto: RPCs de gasto 100% atómicos
+### v1.73 — Reglas críticas nuevas
+
+### Regla snapshot+flush obligatorio antes de RPCs de gasto
+```js
+// PATRÓN OBLIGATORIO en startBuild, startRecruitment, startSummoning
+snapshotResources(activeVillage.state);
+await flushVillage();
+// ... luego el RPC
+```
+El servidor calcula recursos desde `last_updated` en DB. Sin flush, el cliente puede llevar segundos/minutos de interpolación sin guardar → el RPC ve recursos desactualizados → falso "Recursos insuficientes".
+
+### fmtCost() vs fmt()
+- `fmtCost(n)` — exacto hasta 9.999 — usar en costes de edificios y tropas en UI
+- `fmt(n)` — abreviado desde 1.000 — usar en producción, cantidades, ranking
+
+### RPCs admin de caves y alliances
+| RPC | Qué hace |
+|---|---|
+| `admin_cave_create(p_cx, p_cy, p_status, p_guardian_type)` | Crea cueva validando admin server-side |
+| `admin_cave_delete(p_cave_id)` | Borra cueva validando admin server-side |
+| `admin_delete_alliance(p_alliance_id)` | Borra alianza + miembros atómicamente |
+| `admin_kick_from_alliance(p_alliance_id, p_user_id)` | Expulsa miembro validando admin |
+
+### Globals declarados en game-globals.js (v1.73)
+`_lastResourceSync`, `_lastMapLoad`, `_guestTroopsTableExists`, `profileCache`
+→ Si se añade un nuevo global compartido, declararlo SIEMPRE en game-globals.js.
+
+---
+
+## v1.72 — Fix } extra + ensureProfile
 
 **Cambio:** `start_build_secure`, `start_training_secure` y `start_summoning_secure` ya **NO** hacen `PERFORM secure_village_tick` al inicio. Calculan los recursos reales directamente inline con la misma fórmula de producción.
 
@@ -176,14 +213,23 @@ cur_madera := LEAST(cap, FLOOR(COALESCE((v_res->>'madera')::float, 0) + prod_mad
 | `start_training_secure` | Ídem |
 | `start_summoning_secure` | Ídem + escribe todos los recursos en el write final (no solo esencia) |
 
-### Estado de archivos v1.71
+### Estado de archivos v1.73
 | Archivo | Versión | Estado |
 |---|---|---|
-| index.html | **v1.71** | ✅ Fix buildings lvl0 · createFirstVillage→RPC · sync 60s en tick · dedup profileBattles · versión+cache |
-| game-ui.js | **v1.71** | ✅ barra construcción, startBuild sin pre-sync, executeTransport/executeMove via RPCs atómicas |
+| index.html | **v1.73** | ✅ } extra fix · ensureProfile fix · snapshotResources+flush en startBuild |
+| game-globals.js | **v1.73** | ✅ _lastResourceSync · _lastMapLoad · _guestTroopsTableExists · profileCache declarados |
+| game-constants.js | **v1.73** | ✅ null-check blds · getBarracksUsed con t.amount |
+| game-ui.js | **v1.73** | ✅ fmtCost() · startBuild snapshot+flush · double showNotif fix |
+| game-troops.js | **v1.73** | ✅ resolveTrainingQueue t.amount · startRecruitment/startSummoning snapshot+flush |
+| game-admin.js | **v1.73** | ✅ 4 RPCs admin caves/alliance · adminLaunchHunt sin UPDATE directo · troop keys dinámicas |
 | game-engine.js | **v1.66** | ✅ update_battle_stats + execute_founding_secure fix |
-| game-troops.js | **v1.66** | ✅ startRecruitment/cancel/summon async |
-| game-constants.js | **v1.65** | Sin cambios |
+| game-combat.js | **v1.46** | ✅ |
+| game-social.js | **v1.44** | ✅ |
+| game-smithy.js | **v1.44** | ✅ |
+| game-auth.js | **v1.71** | ✅ ensureProfile un solo argumento (username) |
+| game-caves.js | **v1.49** | ✅ |
+| game-simulator.js | **v1.44** | ✅ |
+| game-data.js | **v1.0** | ✅ inmutable |
 | game-admin.js | **v1.68** | ✅ admin_teleport + admin_repair RPCs |
 
 ### ⚠️ Regla: buildings en create_first_village_secure

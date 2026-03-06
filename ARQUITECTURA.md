@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 3.5 — Última actualización: v1.71 (Auditoría Ogame: 6 fixes index.html)
+> Versión del documento: 3.6 — Última actualización: v1.73 (Auditoría seguridad + robustez multi-archivo)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -14,6 +14,8 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 - Nueva regla de arquitectura o restricción
 - Eliminación de un comportamiento o componente
 - Cambio en el modelo de red, guardado o tick
+
+> 📋 **Registro de auditorías de código → ver `AUDITORIA.md`** (qué archivos ya fueron auditados, bugs hallados y estado)
 
 ### Cómo añadir una versión nueva
 
@@ -631,6 +633,27 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - [Eliminado] Bloque duplicado `_profileBattles` en `switchVillage`
 - [Deuda técnica] Ver sección DEUDA TÉCNICA más abajo
 
+### v1.73 — Auditoría seguridad + robustez multi-archivo
+- **[CRÍTICO]** `game-admin.js`: 4 operaciones directas a DB sin validación server-side → rerouteadas a RPCs SECURITY DEFINER (`admin_delete_alliance`, `admin_kick_from_alliance`, `admin_cave_create`, `admin_cave_delete`). Vector de ataque: `currentUser.email` manipulable desde consola.
+- **[CRÍTICO]** `game-ui.js` `startBuild`: `snapshotResources + flushVillage` antes del RPC. El servidor calculaba desde `last_updated` desactualizado en DB → falso "Recursos insuficientes" en edificios con coste > 1.000.
+- **[CRÍTICO]** `game-troops.js` `resolveTrainingQueue`: `+1` hardcodeado → `+(t.amount||1)`. Colas de N tropas resolvían como 1.
+- **[MEDIO]** `game-troops.js` `startRecruitment` y `startSummoning`: snapshot+flush antes del RPC (mismo patrón que startBuild).
+- **[MEDIO]** `game-admin.js` `adminLaunchHunt`: eliminado `UPDATE villages SET state` directo — `is_temp` ya persiste vía `admin_ghost_sync_hunt`.
+- **[MEDIO]** `game-ui.js`: nueva función `fmtCost()` — exacta hasta 9.999 para evitar ambigüedad visual en costes de edificios (fmt(1020) == fmt(1040) → confusión).
+- **[MENOR]** `game-globals.js`: declarados explícitamente `_lastResourceSync`, `_lastMapLoad`, `_guestTroopsTableExists`, `profileCache`. Antes creados implícitamente → posibles ReferenceError en strict mode.
+- **[MENOR]** `game-constants.js` `getBarracksCapacity` / `getAldeanosIntervalMs`: null-check en `blds`.
+- **[MENOR]** `game-constants.js` `getBarracksUsed`: training_queue multiplicaba 1 slot fijo → ahora `t.amount * slots`.
+- **[MENOR]** `game-admin.js` `adminSpawnGhostMap`: keys `guerrero/arquero` hardcodeadas → dinámicas desde `TROOP_TYPES`.
+- **[MENOR]** `index.html`: `}` extra en admin global tick rompía todo el `<script>` → `initGame` no se definía.
+- **[MENOR]** `index.html`: `ensureProfile(currentUser.id, myName)` → `ensureProfile(myName)` (firma cambió, argumento UUID sobraba).
+- [Supabase] Nuevas RPCs: `admin_delete_alliance`, `admin_kick_from_alliance`, `admin_cave_create`, `admin_cave_delete`
+- [Supabase] `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS normalized_username TEXT`
+- [Regla nueva] `startBuild`, `startRecruitment`, `startSummoning` DEBEN hacer `snapshotResources + flushVillage` antes del RPC de gasto. El servidor calcula desde `last_updated` en DB — sin flush previo, ve recursos desactualizados.
+- [Regla nueva] `fmtCost()` para costes en UI. `fmt()` para producción y cantidades. No intercambiar.
+
+### v1.72 — Fix } extra en admin global tick + ensureProfile
+- descripción incluida en v1.73 (misma sesión de auditoría)
+
 ### v1.71 — Auditoría Ogame: 6 fixes index.html
 - **[CRÍTICO]** `createFirstVillage()` reescrita: ya no hace 100 queries + INSERT directo. Ahora llama `create_first_village_secure` RPC SECURITY DEFINER → búsqueda de coordenadas e INSERT atómicos en una sola transacción. Imposible race condition entre registros simultáneos.
 - **[MEDIO]** `tick()`: añadido check `_lastResourceSync > 60000` → llama `syncVillageResourcesFromServer` cada 60s. Antes `_lastResourceSync` estaba declarado pero nunca se comprobaba; los recursos del servidor dejaban de sincronizar tras el boot.
@@ -702,3 +725,5 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 | ~~DT-01~~ | ~~RPCs de gasto usaban `PERFORM secure_village_tick` antes de validar — doble lock + doble write.~~ | ✅ Resuelto v1.70 |
 | ~~DT-02~~ | ~~`start_training_secure` y `start_summoning_secure` con bug de recursos desactualizados.~~ | ✅ Resuelto v1.69 |
 | ~~DT-03~~ | ~~`executeMove` y `executeTransport` escribían recursos al destino con `villages.update` directo — race condition posible.~~ | ✅ Resuelto v1.71 |
+| ~~DT-04~~ | ~~`resolveTrainingQueue` añadía 1 tropa fija ignorando `t.amount`.~~ | ✅ Resuelto v1.73 |
+| ~~DT-05~~ | ~~`startBuild/startRecruitment/startSummoning` sin flush previo → falsos "Recursos insuficientes".~~ | ✅ Resuelto v1.73 |

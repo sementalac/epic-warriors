@@ -1210,7 +1210,7 @@
       if (!currentUser) return;
 
       let myName = (currentUser.email || '').split('@')[0];
-      await ensureProfile(currentUser.id, myName);
+      await ensureProfile(myName);
 
       const profile = await getMyPlayerData();
       myName = profile?.username || myName;
@@ -1845,23 +1845,34 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
 
                 console.log('⚡ Admin Hunt: Resolviendo desde', gv.name || gv.id);
                 for (var hm of toProcess) {
-                  try {
-                    await executeAttackPvP(hm);
-                  } catch (he) { console.error('Hunt mission error:', he); }
-                  mq = mq.filter(function (x) { return x.mid !== hm.mid; });
-                }
+  try {
+    await executeAttackPvP(hm);
+  } catch (he) { console.error('Hunt mission error:', he); }
 
-                // Guardar queue actualizado
-                await sbClient.from('villages').update({ mission_queue: mq }).eq('id', gv.id);
+  // v1.72: RPC atómica — antes escribía mission_queue y borraba aldea
+  // con .update()/.delete() directos sin validación server-side.
+  // Ahora el servidor gestiona queue + autodestrucción + notificación al defensor.
+  try {
+    await sbClient.rpc('admin_finalize_hunt_mission', {
+      p_attacker_village_id: gv.id,
+      p_mission_id:          hm.mid || hm.finish_at,
+      p_survivors:           hm.troops || {},
+      p_dest_village_id:     hm.targetId || null
+    });
+  } catch (hfe) {
+    console.error('admin_finalize_hunt_mission error:', hfe);
+  }
 
-                // Autodestrucción si ya no quedan misiones y es temporal
-                if (isTemp && mq.length === 0) {
-                  await sbClient.from('villages').delete().eq('id', gv.id);
-                  showNotif('🧹 Base de invasión retirada.', 'ok');
-                  if (typeof loadAllVillages === 'function') loadAllVillages();
-                  if (typeof renderMap === 'function') renderMap();
+  mq = mq.filter(function (x) { return x.mid !== hm.mid; });
+}
+
+// Refrescar mapa si la aldea temporal pudo haberse autodestruido
+if (isTemp) {
+  if (typeof loadAllVillages === 'function') loadAllVillages();
+  if (typeof renderMap === 'function') renderMap();
+  showNotif('🧹 Base de invasión retirada.', 'ok');
+}
                 }
-              }
             } catch (ge) { console.error('Admin Global Tick Exception:', ge); }
             window._globalTickRunning = false;
           })();

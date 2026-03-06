@@ -11,7 +11,8 @@ function defaultState() {
   var b = {};
   BUILDINGS.forEach(function (d) { b[d.id] = { level: 1 }; });
   return {
-    resources: { madera: 800, piedra: 600, hierro: 400, provisiones: 200, esencia: 50 },
+    // FIX Me1: aldeanos:0 incluido — requerido por RPCs que reconstruyen resources con jsonb_build_object
+    resources: { madera: 800, piedra: 600, hierro: 400, provisiones: 200, esencia: 50, aldeanos: 0 },
     aldeanos_granja: 0,
     aldeanos_assigned: defaultAssignments(),
     troops: defaultTroops(),
@@ -20,6 +21,7 @@ function defaultState() {
     build_queue: null,
     mission_queue: [],
     summoning_queue: [],
+    training_queue: [], // FIX Me2: columna separada v1.62 — evita undefined al iterar colas offline
     last_updated: new Date().toISOString()
   };
 }
@@ -118,8 +120,6 @@ function calcRes(vs) {
   var totalAssigned = (assigned.madera || 0) + (assigned.piedra || 0) + (assigned.hierro || 0)
     + (assigned.provisiones || 0) + (assigned.esencia || 0);
 
-  var barrCap = getBarracksCapacity(vs.buildings);
-
   // Aldeanos totales en la aldea (fuente de verdad)
   var aldTotal = (vs.troops && vs.troops.aldeano !== undefined) ? vs.troops.aldeano : 0;
 
@@ -210,7 +210,18 @@ async function startMission(type, tx, ty, targetId, troops, guestContingents) {
   var seconds = (dist / minSpeed) * MISSION_FACTOR;
   var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
 
+  // FIX C1+M1: snapshot+flush ANTES de mutar estado local, igual que startBuild/startRecruitment.
+  // El servidor calcula recursos desde last_updated en DB — sin flush ve estado desactualizado.
+  // Guardamos copia de tropas/criaturas para rollback si el RPC falla.
   snapshotResources(vs);
+  await flushVillage();
+
+  // Snapshot para rollback (deep copy de troops y creatures)
+  var _troopsSnapshot = JSON.parse(JSON.stringify(vs.troops || {}));
+  var _creaturesSnapshot = JSON.parse(JSON.stringify(vs.creatures || {}));
+  var _provisionesSnapshot = vs.resources.provisiones;
+
+  // Optimistic update local
   Object.keys(troops).forEach(k => {
     if (TROOP_TYPES[k]) vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - troops[k]);
     else if (CREATURE_TYPES[k]) vs.creatures[k] = Math.max(0, (vs.creatures[k] || 0) - troops[k]);
@@ -258,6 +269,10 @@ async function startMission(type, tx, ty, targetId, troops, guestContingents) {
     showNotif('¡Misión enviada! Llegada en ' + fmtTime(Math.ceil(seconds)), 'ok');
     tick();
   } catch (e) {
+    // FIX M1: Rollback del optimistic update — restaurar tropas, criaturas y provisiones
+    vs.troops = _troopsSnapshot;
+    vs.creatures = _creaturesSnapshot;
+    vs.resources.provisiones = _provisionesSnapshot;
     showNotif('Error al lanzar misión: ' + (e.message || e), 'err');
     console.error('startMission error:', e.message, e.details, e.hint, e);
   }
@@ -305,6 +320,11 @@ async function resolveMissions(v) {
           // ── Ataque a cueva NPC especial ──
           if (typeof executeAttackCave === 'function') {
             await executeAttackCave(m, v);
+          } else {
+            // FIX M3: game-caves.js no cargado — devolver tropas en lugar de perderlas silenciosamente
+            console.warn('resolveMissions: executeAttackCave no disponible, devolviendo tropas.');
+            _returnTroopsHome(m, v);
+            continue;
           }
         } else if (m.type === 'attack') {
           await executeAttackMission(m, v);
@@ -347,6 +367,8 @@ async function resolveMissions(v) {
             if (rpcErr) throw rpcErr;
 
             // v1.62d/1.63: Red de seguridad - Validar que el nuevo estado sea válido antes de asignar
+            // P3 FIX: guard previo — finalize_mission_secure puede devolver {data:null,error:null}
+            if (!newState) throw new Error('finalize_mission_secure devolvió null');
             var sNextFinal = newState.state || newState;
             if (sNextFinal && sNextFinal.buildings && Object.keys(sNextFinal.buildings).length > 0) {
               v.state = sNextFinal;
@@ -356,7 +378,9 @@ async function resolveMissions(v) {
             }
 
             // ── v1.61: MÓDULO AUTODESTRUCCIÓN (Día de Caza) ──
-            if (vs.is_temp && vs.mission_queue.length === 0) {
+            // FIX Me3: usar remaining.length (estado post-loop) en lugar de vs.mission_queue.length
+            // (que refleja el estado del servidor, potencialmente desincronizado del loop actual)
+            if (vs.is_temp && remaining.length === 0) {
               console.log('🧹 Limpieza Admin: Autodestruyendo punto de invasión temporal.');
               if (typeof ghostDelete === 'function') {
                 ghostDelete(v.id);
@@ -582,23 +606,6 @@ async function executeSpyMission(m, v) {
         html += '</div>';
         return html;
       }
-      var S = {
-        section: 'margin-bottom:14px;',
-        title: 'font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);'
-          + 'border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:4px;margin-bottom:8px;',
-        row: 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;'
-          + 'background:rgba(255,255,255,.03);margin-bottom:4px;',
-        name: 'flex:1;font-size:.8rem;color:var(--text);',
-        qty: 'font-size:.82rem;font-family:VT323,monospace;color:var(--accent);min-width:40px;text-align:right;',
-        badge: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
-          + 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:var(--dim);',
-        badgeGold: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
-          + 'background:rgba(255,210,0,.08);border:1px solid rgba(255,210,0,.25);color:var(--gold);',
-        badgeRed: 'font-size:.62rem;padding:1px 5px;border-radius:3px;white-space:nowrap;'
-          + 'background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.25);color:var(--danger);',
-        noData: 'font-size:.75rem;color:var(--dim);padding:6px 8px;font-style:italic;'
-      };
-
       // ── Header ───────────────────────────────────────────────────
       var now = new Date();
       var dateStr = ('0' + now.getDate()).slice(-2) + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + now.getFullYear();
@@ -694,7 +701,7 @@ async function executeAttackMission(m, v) {
     var victoria = res.winner === 1;
     var bResult = res;
 
-    var attackerXP = bResult.rounds * 50;
+    var attackerXP = (bResult.rounds || 0) * 50;
 
     // Generar reporte
     var reportHTML = '<div style="font-family:inherit; line-height:1.5;">';
@@ -733,7 +740,7 @@ async function executeAttackMission(m, v) {
       showNotif('Derrota contra ' + target.name + '.', 'err');
     }
 
-    m.troops = res.survivors1;
+    m.troops = res.survivors1 || {};
     m.loot = victoria ? { madera: 0, piedra: 0, hierro: 0, provisiones: 0 } : null;
 
     await sendSystemReport(currentUser.id, (victoria ? '🏆' : '💀') + ' BATALLA: ' + target.name, reportHTML);
@@ -741,7 +748,8 @@ async function executeAttackMission(m, v) {
   } catch (e) {
     console.error('NPC Battle Error:', e);
     showNotif('Fallo en la simulación de batalla.', 'err');
-    _returnTroopsHome(m);
+    // FIX M2: pasar v para que _returnTroopsHome pueda calcular distancia y crear misión de retorno
+    _returnTroopsHome(m, v);
   }
 }
 
@@ -784,7 +792,7 @@ async function executeAttackPvP(m, v) {
         await sendSystemReport(defOwnerId, '🚨 ¡INVASIÓN DETECTADA!', reportHTML);
       }
 
-      m.troops = res.survivors1;
+      m.troops = res.survivors1 || {};
       m.type = 'return';
       showNotif('¡Día de Caza resuelto! Revisa tus mensajes.', 'ok');
       return;
@@ -818,14 +826,17 @@ async function executeAttackPvP(m, v) {
     // 1. Extraer resultados
     var bResult = res.battle_report;
     var loot = res.loot;
+    // P3 FIX: guard — battle_report puede faltar en respuesta parcial del servidor
+    if (!bResult) throw new Error('execute_attack_secure no devolvió battle_report');
     var victoria = bResult.winner === 1;
-
-    var leaderName = (profileCache[currentUser.id] && profileCache[currentUser.id].username) || v.name || 'Atacante';
 
     var reportHTML = '<div style="font-family:inherit;line-height:1.4;">';
     reportHTML += '<div style="font-size:1.1rem;color:var(--gold);margin-bottom:10px;">' + (victoria ? '🏆 VICTORIA' : '💀 DERROTA') + '</div>';
     reportHTML += '<div style="background:rgba(0,0,0,.3);padding:10px;border-radius:5px;max-height:300px;overflow-y:auto;font-size:0.8rem;color:var(--dim);border:1px solid rgba(255,255,255,0.05);">';
-    bResult.log.forEach(line => { reportHTML += '<div>' + line + '</div>'; });
+    // FIX Me4: null-check igual que en NPC — bResult.log puede ser null si el servidor falla parcialmente
+    if (bResult.log && Array.isArray(bResult.log)) {
+      bResult.log.forEach(line => { reportHTML += '<div>' + line + '</div>'; });
+    }
     reportHTML += '</div>';
 
     if (victoria && loot) {
@@ -841,7 +852,7 @@ async function executeAttackPvP(m, v) {
     reportHTML += '</div>';
 
     // 3. Actualizar misiones locales para que coincidan con el estado del servidor
-    m.troops = bResult.survivors1;
+    m.troops = bResult.survivors1 || {};
     m.loot = loot;
     m.type = 'return';
 

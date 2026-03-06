@@ -1,5 +1,5 @@
 // ============================================================
-// EPIC WARRIORS — game-troops.js v1.73 — security patch
+// EPIC WARRIORS — game-troops.js v1.74 — audit patch
 // UI: renderTroops, renderCreatures, renderSummoningQueue,
 // renderCreaturesList, showCreatureStats, renderSummonOptions,
 // showBarracasModal, startRecruitment, showTroopStats,
@@ -9,7 +9,7 @@
 //        para múltiples aldeas + auto-corrección de estado
 // v1.47: renderCaughtCreatures() para apartado de guardianes capturados
 // ============================================================
-// FIX SUMMARY (6 issues)
+// FIX SUMMARY v1.74 (5 issues — auditoría completa 2 pasadas)
 // [CRÍTICO-1] renderTroops: box.innerHTML = html (no = '') — panel de tropas dejaba de renderizarse
 // [CRÍTICO-2] applyRefugio: cancela invocaciones via RPC cancel_summoning_secure en vez de
 //             modificar vs.resources.esencia directo (explotable para duplicar recursos)
@@ -19,6 +19,12 @@
 //             insuficiente — antes la esencia desaparecía sin reembolso
 // [MENOR-5]   showBarracasModal: lee recAmount-{key} antes de llamar startRecruitment
 // [MENOR-6]   startSummoning: añadido p_amount a la llamada RPC start_summoning_secure
+// [MEDIO-7]   startSummoning: añadido check newState.ok — sin él, fallo RPC mostraba éxito
+// [MEDIO-8]   startRecruitment + cancelTrainingQueue: añadido check newState.ok —
+//             sin él, training_queue se vaciaba en fallos con {ok:false}
+// [MENOR-9]   applyRefugio: llama renderSummoningQueue()+renderCreatures() tras cancel exitoso
+// [MENOR-10]  resolveSummoningQueue: scheduleSave() tras reembolso local de esencia
+// [COSMÉTICO] resolveTrainingQueue: changed flag ahora activa scheduleSave() si hubo cambios
 // ============================================================
 
 function renderTroops() {
@@ -395,6 +401,8 @@ function startSummoningFromInput(key) {
 }
 
 // FIX [MENOR-6]: añadido p_amount a la llamada RPC
+// FIX [MEDIO-7]: añadido check newState.ok — sin él, fallo de RPC con {ok:false}
+//               mostraba éxito y aplicaba estado basura
 // v1.66: server-authoritative — valida invocadores, esencia y torre en servidor
 async function startSummoning(key, amount) {
   if (!activeVillage) return;
@@ -402,6 +410,10 @@ async function startSummoning(key, amount) {
 
   setSave('saving');
   try {
+    // v1.73: snapshot + flush antes del RPC — mismo patrón que startBuild
+    snapshotResources(activeVillage.state);
+    await flushVillage();
+
     var { data: newState, error } = await sbClient.rpc('start_summoning_secure', {
       p_village_id:   activeVillage.id,
       p_creature_key: key,
@@ -409,12 +421,17 @@ async function startSummoning(key, amount) {
     });
     if (error) throw error;
 
-    if (newState) {
-      var vs = activeVillage.state;
-      vs.resources        = newState.resources        || vs.resources;
-      vs.summoning_queue  = newState.summoning_queue  || [];
-      vs.last_updated     = newState.last_updated     || vs.last_updated;
+    // Bug-7 fix: null-guard + ok check — RPC puede devolver {ok:false, error:"..."}
+    if (!newState || newState.ok === false) {
+      setSave('error');
+      showNotif((newState && newState.error) || 'No se pudo iniciar invocación.', 'err');
+      return;
     }
+
+    var vs = activeVillage.state;
+    vs.resources       = newState.resources       || vs.resources;
+    vs.summoning_queue = newState.summoning_queue  || [];
+    vs.last_updated    = newState.last_updated     || vs.last_updated;
 
     var c = typeof CREATURE_TYPES !== 'undefined' ? CREATURE_TYPES[key] : null;
     showNotif((c ? c.name : key) + (amount > 1 ? ' ×' + amount : '') + ' añadido(s) a la cola de invocación', 'ok');
@@ -484,12 +501,17 @@ function startRecruitmentFromInput(type) {
 }
 
 // v1.66: server-authoritative — valida barracas, recursos y aldeanos en servidor
+// FIX [MEDIO-8]: añadido check newState.ok — sin él, {ok:false} vaciaba training_queue
 async function startRecruitment(type, amount) {
   if (!activeVillage) return;
   if (!amount || amount <= 0) return;
 
   setSave('saving');
   try {
+    // v1.73: snapshot + flush antes del RPC — mismo patrón que startBuild
+    snapshotResources(activeVillage.state);
+    await flushVillage();
+
     var { data: newState, error } = await sbClient.rpc('start_training_secure', {
       p_village_id: activeVillage.id,
       p_troop_type: type,
@@ -497,13 +519,18 @@ async function startRecruitment(type, amount) {
     });
     if (error) throw error;
 
-    if (newState) {
-      var vs = activeVillage.state;
-      vs.resources      = newState.resources      || vs.resources;
-      vs.troops         = newState.troops          || vs.troops;
-      vs.training_queue = newState.training_queue  || [];
-      vs.last_updated   = newState.last_updated    || vs.last_updated;
+    // Bug-8 fix: null-guard + ok check — sin esto, {ok:false} vaciaba training_queue
+    if (!newState || newState.ok === false) {
+      setSave('error');
+      showNotif((newState && newState.error) || 'No se pudo iniciar entrenamiento.', 'err');
+      return;
     }
+
+    var vs = activeVillage.state;
+    vs.resources      = newState.resources      || vs.resources;
+    vs.troops         = newState.troops          || vs.troops;
+    vs.training_queue = newState.training_queue  || [];
+    vs.last_updated   = newState.last_updated    || vs.last_updated;
 
     var stats = getTroopStatsWithLevel(type, 1);
     showNotif(amount + ' ' + (stats ? stats.name : type) + ' en cola de entrenamiento', 'ok');
@@ -519,6 +546,7 @@ async function startRecruitment(type, amount) {
 }
 
 // v1.66: server-authoritative — devuelve recursos y aldeanos via servidor
+// FIX [MEDIO-8]: añadido check newState.ok — mismo patrón que startRecruitment
 async function cancelTrainingQueue() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -533,11 +561,16 @@ async function cancelTrainingQueue() {
     });
     if (error) throw error;
 
-    if (newState) {
-      vs.resources      = newState.resources  || vs.resources;
-      vs.troops         = newState.troops      || vs.troops;
-      vs.last_updated   = newState.last_updated || vs.last_updated;
+    // Bug-8 fix: null-guard + ok check
+    if (!newState || newState.ok === false) {
+      setSave('error');
+      showNotif((newState && newState.error) || 'No se pudo cancelar.', 'err');
+      return;
     }
+
+    vs.resources      = newState.resources   || vs.resources;
+    vs.troops         = newState.troops       || vs.troops;
+    vs.last_updated   = newState.last_updated || vs.last_updated;
     vs.training_queue = [];
 
     showNotif('Cola cancelada. Recursos y aldeanos devueltos.', 'ok');
@@ -730,13 +763,15 @@ function resolveTrainingQueue(vs) {
     var finishTime = new Date(t.finish_at).getTime();
     if (finishTime <= now) {
       if (!vs.troops) vs.troops = {};
-      vs.troops[t.type] = (vs.troops[t.type] || 0) + 1;
+      vs.troops[t.type] = (vs.troops[t.type] || 0) + (t.amount || 1);
       changed = true;
     } else {
       remaining.push(t);
     }
   }
   vs.training_queue = remaining;
+  // Cosmético fix: persistir tropas completadas si las hubo
+  if (changed && typeof scheduleSave === 'function') scheduleSave();
   return vs;
 }
 
@@ -767,11 +802,14 @@ function resolveSummoningQueue(vs) {
     // Casos de cancelación — FIX: devolver esencia antes de sacar de la cola
     if (invocadorLevel < tierRequired) {
       _notifyOnce('sum_cancel_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (nivel de invocador insuficiente).', 'err');
-      // FIX [MEDIO-4]: reembolso de esencia
+      // NOTA v1.73: reembolso optimista local — el servidor corregirá en el sync de 60s si discrepa.
+      // No es explotable: secure_village_tick es la autoridad final sobre esencia.
       if (!vs.resources) vs.resources = {};
       vs.resources.esencia = (vs.resources.esencia || 0) + ((cData.cost && cData.cost.esencia) || 0);
       vs.summoning_queue.shift();
       changed = true;
+      // Bug-10 fix: persistir reembolso local antes del próximo sync de 60s
+      if (typeof scheduleSave === 'function') scheduleSave();
       continue;
     }
 
@@ -781,11 +819,13 @@ function resolveSummoningQueue(vs) {
 
     if (totalInvocadores < s.summonersNeeded) {
       _notifyOnce('sum_cancel_dead_' + s.creature, '⚠️ Invocación de ' + cData.name + ' cancelada (invocadores perdidos).', 'err');
-      // FIX [MEDIO-4]: reembolso de esencia
+      // NOTA v1.73: reembolso optimista local — el servidor corregirá en el sync de 60s si discrepa.
       if (!vs.resources) vs.resources = {};
       vs.resources.esencia = (vs.resources.esencia || 0) + ((cData.cost && cData.cost.esencia) || 0);
       vs.summoning_queue.shift();
       changed = true;
+      // Bug-10 fix: persistir reembolso local antes del próximo sync de 60s
+      if (typeof scheduleSave === 'function') scheduleSave();
       continue;
     }
 
@@ -1051,6 +1091,9 @@ async function applyRefugio() {
           vs.summoning_queue = [];
           vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
           showNotif('Invocaciones canceladas por refugio. +' + fmt(data.refunded_esencia || 0) + ' ✨ devuelta.', 'ok');
+          // Bug-9 fix: actualizar paneles de criaturas e invocación tras cancelar
+          if (typeof renderSummoningQueue === 'function') renderSummoningQueue();
+          if (typeof renderCreatures === 'function') renderCreatures();
         }
       } catch (e) {
         showNotif('Error al cancelar invocaciones: ' + (e.message || ''), 'err');

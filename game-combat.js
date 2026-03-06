@@ -1,19 +1,27 @@
 // ============================================================
-// EPIC WARRIORS — game-combat.js  [v1.72 — security patch]
+// EPIC WARRIORS — game-combat.js  [v1.74 — audit patch]
 // Motor de combate: executeTurn, simulateBattle, simulateBattlePvP
 // Utiles: divideIntoGroups, createArmy, calculateLoot
 // Reportes: generateBattleReport, generateBattlePvPReport
 // Lógica: getTroopLevel, getCreatureLevel, canSummon
 // Defaults: defaultTroops, defaultCreatures, defaultState, consumeAldeanos
 // ============================================================
-// FIX SUMMARY (6 issues)
+// FIX SUMMARY v1.74 (8 issues — auditoría completa 2 pasadas)
 // [CRÍTICO-1] startSummoning: ahora llama RPC start_summoning_secure — nunca modifica resources local
-// [CRÍTICO-2] cancelSummoningQueue: ahora llama RPC cancel_summoning_secure — nunca modifica resources local
+// [CRÍTICO-2] cancelSummoningQueue: ahora llama RPC cancel_summoning_secure
 // [MEDIO-3]   calculateRecovery: tasa fija 15% — elimina Math.random() explotable desde cliente
 // [MEDIO-4]   consumeAldeanos: añadido guard; troops.aldeano solo se modifica si save_village_client blinda troops
 // [MENOR-5]   generateBattlePvPReport: añadidos provisiones y esencia al dict de iconos
 // [MENOR-6]   startSummoning/startSummoningFromInput: versiones zombie eliminadas de este módulo;
 //             las versiones server-authoritative viven en game-troops.js (v1.66+)
+// [MEDIO-7]   generateBattleReport L141/145: attackerName+defenderName escapados con escapeHtml() — XSS
+// [MEDIO-8]   generateBattleReport L169: log escapado con escapeHtml() — XSS
+// [MEDIO-9]   generateBattlePvPReport L466-467: empate (winner===0) ahora muestra texto y color correcto
+// [MENOR-10]  generateBattlePvPReport: fila "SE RECUPERAN" oculta cuando wallResisted===true
+// [MENOR-11]  cancelSummoningQueue/startSummoning: null-guard en data antes de data.ok — evita TypeError
+// [MENOR-12]  cancelSummoningQueue: llama loadMyVillages()+tick() tras RPC exitoso para resync completo
+// [MENOR-13]  startSummoning: llama tick() tras renderCreatures() para actualizar recursos y provisiones
+// [COSMÉTICO] comentarios que afirmaban "nunca toca resources local" corregidos (L598 sí actualiza local)
 // ============================================================
 
 function divideIntoGroups(total) {
@@ -138,11 +146,11 @@ function generateBattleReport(attackerName, defenderName, attackerTroops, defend
   var defenderRecovered = calculateRecovery(defenderCasualties);
   var html = '<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;max-width:700px;margin:0 auto;">';
   html += '<div style="margin-bottom:20px;"><div style="font-size:1.1rem;font-weight:bold;color:var(--danger);margin-bottom:12px;border-bottom:2px solid var(--danger);padding-bottom:6px;">⚔️ ATACANTES</div>';
-  html += '<div style="color:var(--text);font-size:.85rem;margin-bottom:8px;"><b>' + attackerName + '</b></div>';
+  html += '<div style="color:var(--text);font-size:.85rem;margin-bottom:8px;"><b>' + escapeHtml(attackerName) + '</b></div>';
   html += generateTroopTable(attackerInitial, attackerFinal, attackerRecovered, false);
   html += '<div style="margin-top:8px;color:var(--accent);font-size:.8rem;">📊 Experiencia ganada: ' + fmt(attackerXP) + '</div></div>';
   html += '<div style="margin-bottom:20px;"><div style="font-size:1.1rem;font-weight:bold;color:var(--ok);margin-bottom:12px;border-bottom:2px solid var(--ok);padding-bottom:6px;">🛡️ DEFENSORES</div>';
-  html += '<div style="color:var(--text);font-size:.85rem;margin-bottom:8px;"><b>' + defenderName + '</b></div>';
+  html += '<div style="color:var(--text);font-size:.85rem;margin-bottom:8px;"><b>' + escapeHtml(defenderName) + '</b></div>';
   html += generateTroopTable(defenderInitial, defenderFinal, defenderRecovered, isNPC);
   html += '<div style="margin-top:8px;color:var(--accent);font-size:.8rem;">📊 Experiencia ganada: ' + fmt(defenderXP) + '</div></div>';
   html += '<div style="background:var(--panel2);border-radius:6px;padding:12px;margin-bottom:16px;text-align:center;">';
@@ -166,7 +174,7 @@ function generateBattleReport(attackerName, defenderName, attackerTroops, defend
   if (result.log && result.log.length > 0) {
     html += '<div style="margin-top:16px;"><button onclick="toggleBattleLog(this)" style="width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;cursor:pointer;font-size:.8rem;">Ver detalles de combate ▼</button>';
     html += '<div style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:12px;max-height:300px;overflow-y:auto;font-size:.7rem;font-family:monospace;color:var(--dim);">';
-    result.log.forEach(function (line) { html += line + '<br>'; });
+    result.log.forEach(function (line) { html += escapeHtml(line) + '<br>'; });
     html += '</div></div>';
   }
   html += '</div>';
@@ -435,11 +443,13 @@ function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
           return '<td style="text-align:center;padding:4px 8px;border:1px solid var(--border);color:' + c + ';">' + v + '</td>';
         }).join('') + '</tr>';
     }
+    // Bug-5 fix: solo mostrar fila "SE RECUPERAN" si hay alguna recuperación real (wallResisted=true → recovered={})
+    var hasRecovery = Object.keys(result.recovered || {}).some(function (k) { return (result.recovered[k] || 0) > 0; });
     return '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:.78rem;margin-bottom:4px;">'
       + '<thead><tr><th style="padding:4px 8px;border:1px solid var(--border);"></th>' + hdr + '</tr></thead><tbody>'
       + row('INICIALES', 'var(--text)', result.initial)
       + row('FINALES', 'var(--accent2)', result.survivors)
-      + row('SE RECUPERAN', 'var(--accent)', result.recovered)
+      + (hasRecovery ? row('SE RECUPERAN', 'var(--accent)', result.recovered) : '')
       + '</tbody></table></div>';
   }
 
@@ -463,8 +473,9 @@ function generateBattlePvPReport(battleResult, wallLevel, loot, targetCoords) {
     + (wallLevel > 0 ? 'Muralla nv.' + wallLevel + ' · <span style="color:' + (wallResisted ? 'var(--accent2)' : 'var(--danger)') + ';">' + (wallResisted ? 'resistió' : 'destruida') + '</span>' : 'Sin muralla')
     + '</div></div>';
 
-  var bc = winner === 1 ? '#40c060' : '#e04040';
-  var bt = winner === 1 ? '🏆 HA GANADO EL BANDO ATACANTE' : '🛡️ HA GANADO EL BANDO DEFENSOR';
+  // Bug-3 fix: winner===0 (empate) tenía color rojo y texto "HA GANADO EL BANDO DEFENSOR"
+  var bc = winner === 1 ? '#40c060' : winner === 0 ? '#a0a040' : '#e04040';
+  var bt = winner === 1 ? '🏆 HA GANADO EL BANDO ATACANTE' : winner === 0 ? '⚖️ EMPATE' : '🛡️ HA GANADO EL BANDO DEFENSOR';
   html += '<div style="text-align:center;padding:12px;font-family:VT323,monospace;font-size:1.6rem;letter-spacing:3px;border:1px solid ' + bc + ';color:' + bc + ';background:' + bc + '11;margin-bottom:2px;">' + bt + '</div>';
   html += '<div style="font-family:VT323,monospace;font-size:1.2rem;letter-spacing:2px;padding:8px 16px;border-left:3px solid #e87030;background:linear-gradient(90deg,rgba(232,112,48,.14),transparent);color:#e87030;margin-bottom:2px;">⚔ ATACANTES</div>';
   atkR.forEach(function (r) { html += pBlock(r, '#e87030', 'ATACANTE'); });
@@ -572,9 +583,10 @@ function getTroopLevel(troopType) {
   return levels[troopType] || 1;
 }
 
-// ── FIX [CRÍTICO-2]: cancelSummoningQueue usa RPC — nunca toca resources local ──
-// Antes: vs.resources.esencia += refund + flushVillage() → explotable.
-// Ahora: el servidor valida propiedad, suma esencia y limpia cola en una transacción.
+// ── FIX [CRÍTICO-2 + MENOR-11/12]: cancelSummoningQueue usa RPC ──────────────
+// El servidor valida propiedad, suma esencia y limpia cola en una transacción.
+// Tras RPC exitoso: actualiza esencia local desde respuesta del servidor,
+// luego llama loadMyVillages()+tick() para resync completo de estado.
 async function cancelSummoningQueue() {
   if (!activeVillage) return;
   var vs = activeVillage.state;
@@ -589,16 +601,21 @@ async function cancelSummoningQueue() {
   if (error) {
     showNotif('Error al cancelar: ' + error.message, 'err'); return;
   }
-  if (!data.ok) {
-    showNotif(data.error || 'No se pudo cancelar.', 'err'); return;
+  // Bug-11 fix: null-guard antes de data.ok — RPC puede devolver data:null
+  if (!data || !data.ok) {
+    showNotif((data && data.error) || 'No se pudo cancelar.', 'err'); return;
   }
 
-  // Actualizar estado local desde la respuesta del servidor
+  // Actualizar esencia local desde la respuesta del servidor (patch optimista)
+  // NOTA: este write local es provisional — loadMyVillages()+tick() a continuación
+  // sobreescribe con el estado autoritativo del servidor.
   vs.summoning_queue = [];
   vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
 
   showNotif('Cola cancelada. +' + fmt(data.refunded_esencia || 0) + ' ✨ esencia devuelta.', 'ok');
-  renderCreatures();
+  // Bug-12 fix: resync completo igual que cancelMission/cancelAlliedMission
+  await loadMyVillages();
+  tick();
 }
 
 function getCreatureLevel(creatureType) {
@@ -622,7 +639,7 @@ function canSummon(creatureType, vs) {
   return { ok: true };
 }
 
-// ── FIX [CRÍTICO-1 + MENOR-6]: startSummoning* reescritas con RPC ────────────
+// ── FIX [CRÍTICO-1 + MENOR-6 + MENOR-11/13]: startSummoning* reescritas con RPC ─
 // Las versiones anteriores descontaban esencia directo en cliente.
 // Ahora delegan a start_summoning_secure (igual que startRecruitment en game-troops.js).
 // Estas funciones quedan aquí para compatibilidad con llamadas existentes;
@@ -650,8 +667,9 @@ async function startSummoning(creatureType, amount) {
   if (error) {
     showNotif('Error: ' + error.message, 'err'); return;
   }
-  if (!data.ok) {
-    showNotif(data.error || 'No se pudo invocar.', 'err'); return;
+  // Bug-11 fix: null-guard antes de data.ok — RPC puede devolver data:null
+  if (!data || !data.ok) {
+    showNotif((data && data.error) || 'No se pudo invocar.', 'err'); return;
   }
 
   // Aplicar estado devuelto por el servidor
@@ -664,6 +682,8 @@ async function startSummoning(creatureType, amount) {
 
   showNotif(amount + ' ' + cData.name + '(s) en cola de invocación', 'ok');
   if (typeof renderCreatures === 'function') renderCreatures();
+  // Bug-13 fix: tick() necesario para actualizar recursos, provisiones y resto de UI
+  if (typeof tick === 'function') tick();
 }
 
 var _notifyOnceThrottle = {};

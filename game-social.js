@@ -136,14 +136,28 @@ async function loadResearchData(forceReload) {
   return _researchData;
 }
 
+// FIX [MENOR-6]: en vez de sumar sobre el cache local (que puede estar stale
+// tras múltiples combates rápidos), recargar el XP real desde DB.
+// Se mantiene el parámetro 'amount' para compatibilidad con las llamadas existentes,
+// pero el valor mostrado siempre refleja el estado real del servidor.
 async function updateXPDisplay(amount) {
-  if (!_researchData) await loadResearchData();
-  _researchData.experience = (_researchData.experience || 0) + amount;
-  var xp = _researchData.experience;
-  var el1 = document.getElementById('ovExperience');
-  if (el1) el1.textContent = formatNumber(xp);
-  var el2 = document.getElementById('researchXPDisplay');
-  if (el2) el2.textContent = formatNumber(xp) + ' XP';
+  try {
+    var fresh = await loadResearchData(true);  // forceReload = true
+    var xp = fresh.experience;
+    var el1 = document.getElementById('ovExperience');
+    if (el1) el1.textContent = formatNumber(xp);
+    var el2 = document.getElementById('researchXPDisplay');
+    if (el2) el2.textContent = formatNumber(xp) + ' XP';
+  } catch (e) {
+    // Fallback silencioso: si falla la recarga, al menos mostrar el cache + amount
+    if (!_researchData) return;
+    _researchData.experience = (_researchData.experience || 0) + (amount || 0);
+    var xp = _researchData.experience;
+    var el1 = document.getElementById('ovExperience');
+    if (el1) el1.textContent = formatNumber(xp);
+    var el2 = document.getElementById('researchXPDisplay');
+    if (el2) el2.textContent = formatNumber(xp) + ' XP';
+  }
 }
 
 async function renderResearch() {
@@ -213,35 +227,45 @@ async function renderResearch() {
   grid.innerHTML = html;
 }
 
+// FIX [CRÍTICO-1]: upgrade_troop_level_secure valida XP en servidor y escribe
+// experience + troop_levels en una sola transacción atómica.
+// Antes: valores calculados en cliente → UPDATE directo → explotable con _researchData.experience = 9999999
 async function upgradeTroopLevel(troopKey) {
   if (!currentUser) return;
+
+  // Validación UI rápida (no de seguridad — el servidor revalida todo)
   var rd = await loadResearchData(false);
   var curLvl = rd.troop_levels[troopKey] || 1;
   if (curLvl >= 30) return;
   var cost = xpCostForLevel(curLvl);
   if (rd.experience < cost) { alert('No tienes suficiente XP.'); return; }
 
-  var newLvl = curLvl + 1;
-  var newXP = rd.experience - cost;
-  var newTroopLevels = Object.assign({}, rd.troop_levels);
-  newTroopLevels[troopKey] = newLvl;
-
   try {
-    var { error } = await sbClient
-      .from('profiles')
-      .update({ experience: newXP, troop_levels: newTroopLevels })
-      .eq('id', currentUser.id);
+    var { data, error } = await sbClient.rpc('upgrade_troop_level_secure', {
+      p_troop_key: troopKey
+    });
     if (error) throw error;
+    if (!data.ok) {
+      var msgs = {
+        'not_authenticated': 'No autenticado.',
+        'profile_not_found': 'Perfil no encontrado.',
+        'already_max_level': 'Ya está al nivel máximo.',
+        'insufficient_xp':  'No tienes suficiente XP.'
+      };
+      alert(msgs[data.error] || ('Error: ' + data.error));
+      return;
+    }
 
-    _researchData.experience = newXP;
-    _researchData.troop_levels = newTroopLevels;
+    // Aplicar estado devuelto por el servidor
+    _researchData.experience    = data.new_xp;
+    _researchData.troop_levels  = Object.assign({}, rd.troop_levels, { [troopKey]: data.new_level });
 
     var xpEl = document.getElementById('ovExperience');
-    if (xpEl) xpEl.textContent = formatNumber(newXP);
+    if (xpEl) xpEl.textContent = formatNumber(data.new_xp);
 
     await renderResearch();
     var tDef = TROOP_TYPES[troopKey];
-    _showToast('✅ ' + (tDef ? tDef.icon + ' ' + tDef.name : troopKey) + ' subido a nivel ' + newLvl + '!');
+    _showToast('✅ ' + (tDef ? tDef.icon + ' ' + tDef.name : troopKey) + ' subido a nivel ' + data.new_level + '!');
   } catch (e) {
     console.error('upgradeTroopLevel error:', e);
     alert('Error al subir nivel: ' + e.message);
@@ -651,17 +675,15 @@ async function createAlliance() {
   const tagChk = await sbClient.from('alliances').select('id').eq('tag', tag).maybeSingle();
   if (tagChk.data) { msg.textContent = 'Ese TAG ya está en uso.'; return; }
 
-  let id = null;
+  // FIX [CRÍTICO-3]: eliminado fallback con 2 inserciones independientes.
+  // Si create_alliance RPC falla, se muestra error — no se cae a escrituras
+  // no atómicas que podían dejar alianzas huérfanas sin líder en DB.
   const rpc = await sbClient.rpc('create_alliance', { p_name: name, p_tag: tag });
-  if (!rpc.error && rpc.data) {
-    id = rpc.data;
-  } else {
-    const ins = await sbClient.from('alliances').insert({ name, tag, owner_id: currentUser.id }).select('id').single();
-    if (ins.error) { msg.textContent = 'Error: ' + ins.error.message; return; }
-    id = ins.data.id;
-    const mem = await sbClient.from('alliance_members').insert({ alliance_id: id, user_id: currentUser.id, role: 'leader', status: 'active' });
-    if (mem.error) { msg.textContent = 'Error al unirse: ' + mem.error.message; return; }
+  if (rpc.error || !rpc.data) {
+    msg.textContent = 'Error al crear alianza: ' + (rpc.error ? rpc.error.message : 'sin respuesta de servidor');
+    return;
   }
+  const id = rpc.data;
 
   msg.style.color = 'var(--ok)';
   msg.textContent = '¡Alianza [' + tag + '] creada! ✅';
@@ -733,9 +755,15 @@ async function dissolveAlliance() {
   if (!(await ensureLogged())) return;
   if (_myAllianceRole !== 'leader') { showNotif('Solo el líder puede disolver la alianza.', 'err'); return; }
   if (!confirm('¿Seguro? Esto eliminará la alianza y expulsará a todos sus miembros. Esta acción es IRREVERSIBLE.')) return;
-  await sbClient.from('alliance_members').delete().eq('alliance_id', _myAllianceId);
+
+  // FIX [MENOR-5]: borrar alianza primero; solo si tiene éxito borrar miembros.
+  // Antes: se borraban miembros primero → si el DELETE de alliances fallaba,
+  // la alianza quedaba huérfana sin miembros.
   const del = await sbClient.from('alliances').delete().eq('id', _myAllianceId);
   if (del.error) { showNotif('Error: ' + del.error.message, 'err'); return; }
+
+  await sbClient.from('alliance_members').delete().eq('alliance_id', _myAllianceId);
+
   showNotif('Alianza disuelta.', 'ok');
   _alUpdateOverview(null, null);
   await refreshMyAlliance();
@@ -808,6 +836,9 @@ async function kickMember(userId, username) {
   _loadLeaderData(_myAllianceId);
 }
 
+// FIX [CRÍTICO-2]: transfer_alliance_leadership hace las 3 escrituras en una
+// transacción atómica en el servidor. Antes: 3 UPDATEs independientes → podía
+// quedar la alianza con 2 líderes o owner desincronizado si uno fallaba.
 async function transferLeadership() {
   if (!(await ensureLogged())) return;
   if (_myAllianceRole !== 'leader') { showNotif('Solo el líder puede transferir el liderazgo.', 'err'); return; }
@@ -840,17 +871,20 @@ async function transferLeadership() {
   var newLeaderName = member.profiles.username;
   if (!confirm('¿Transferir el liderazgo a "' + newLeaderName + '"?\nTú pasarás a ser miembro normal.')) return;
 
-  // Nuevo líder
-  var r1 = await sbClient.from('alliance_members').update({ role: 'leader' })
-    .eq('alliance_id', _myAllianceId).eq('user_id', member.user_id);
-  // Antiguo líder → miembro
-  var r2 = await sbClient.from('alliance_members').update({ role: 'member' })
-    .eq('alliance_id', _myAllianceId).eq('user_id', currentUser.id);
-  // Actualizar owner en tabla alliances
-  await sbClient.from('alliances').update({ owner_id: member.user_id }).eq('id', _myAllianceId);
+  var rpc = await sbClient.rpc('transfer_alliance_leadership', {
+    p_alliance_id:   _myAllianceId,
+    p_new_leader_id: member.user_id
+  });
 
-  if (r1.error || r2.error) {
-    showNotif('Error al transferir: ' + (r1.error || r2.error).message, 'err'); return;
+  if (rpc.error || !rpc.data || !rpc.data.ok) {
+    var msgs = {
+      'not_authenticated': 'No autenticado.',
+      'not_leader':        'Ya no eres el líder de esta alianza.',
+      'target_not_member': 'Ese jugador ya no es miembro activo.'
+    };
+    var errKey = (rpc.data && rpc.data.error) || '';
+    showNotif(msgs[errKey] || 'Error al transferir: ' + (rpc.error ? rpc.error.message : errKey), 'err');
+    return;
   }
 
   showNotif('✓ Liderazgo transferido a ' + newLeaderName, 'ok');
@@ -1192,7 +1226,16 @@ async function loadThreadMessages(threadType) {
       if (parsed.body) {
         var b = parsed.body.trim();
         if (b) {
-          bodyHtml = b.startsWith('<') ? b : '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.78rem;">' + escapeHtml(b) + '</pre>';
+          // FIX [MEDIO-4]: sanitizar HTML de mensajes de sistema igual que en openReport
+          if (b.startsWith('<')) {
+            var safe = (typeof DOMPurify !== 'undefined')
+              ? DOMPurify.sanitize(b, { USE_PROFILES: { html: true } })
+              : b.replace(/<script[\s\S]*?<\/script>/gi, '')
+                  .replace(/\son\w+\s*=/gi, ' data-removed=');
+            bodyHtml = safe;
+          } else {
+            bodyHtml = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.78rem;">' + escapeHtml(b) + '</pre>';
+          }
         } else {
           bodyHtml = '<div style="color:var(--dim);font-size:.75rem;padding:8px;">Sin detalles adicionales.</div>';
         }
@@ -1376,8 +1419,15 @@ async function openReport(msgId, body, isRead) {
   bodyDiv.style.cssText = 'flex:1;overflow-y:auto;padding:18px;';
   if (parsed.body) {
     var b = parsed.body.trim();
+    // FIX [MEDIO-4]: sanitizar con DOMPurify si está disponible; si no, escapar.
+    // Los informes de sistema son HTML generado por el juego, pero si la RLS
+    // de messages permitiese inserciones externas podría usarse para XSS.
     if (b.startsWith('<')) {
-      bodyDiv.innerHTML = b;
+      var safe = (typeof DOMPurify !== 'undefined')
+        ? DOMPurify.sanitize(b, { USE_PROFILES: { html: true } })
+        : b.replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/\son\w+\s*=/gi, ' data-removed=');
+      bodyDiv.innerHTML = safe;
     } else {
       bodyDiv.innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.82rem;color:var(--text);line-height:1.6;">' + escapeHtml(b) + '</pre>';
     }

@@ -17,7 +17,12 @@ async function startBuild(id) {
 
   setSave('saving');
   try {
-    // v1.70: pre-sync eliminado — start_build_secure calcula recursos inline (DT-01)
+    // v1.72: snapshot + flush antes del RPC para que el servidor lea recursos reales.
+    // start_build_secure calcula inline desde last_updated en DB — si DB tiene estado
+    // desactualizado (drift de interpolación), el servidor ve menos recursos de los reales.
+    snapshotResources(vs);
+    await flushVillage();
+
     var { data: newState, error } = await sbClient.rpc('start_build_secure', {
       p_village_id:  activeVillage.id,
       p_building_id: id
@@ -40,8 +45,7 @@ async function startBuild(id) {
     renderQueue(activeVillage.state);
   } catch (e) {
     setSave('error');
-    showNotif('Error: ' + (e.message || 'No se pudo iniciar construcción'), 'err');
-  console.error('startBuild error:', e.message, e.details, e.hint, e);
+    console.error('startBuild error:', e.message, e.details, e.hint, e);
     showNotif('Error: ' + (e.message || e.details || e.hint || 'Sin recursos o cola ocupada'), 'err');
   }
 }
@@ -128,11 +132,11 @@ function renderBuildings(res) {
     if (prod.esencia) prodHTML += '<span class="pbadge" style="color:var(--esencia);border-color:rgba(192,132,252,.3);background:rgba(192,132,252,.05)">✨ +' + fmt(prod.esencia) + '/h</span>';
 
     var costHTML = '';
-    if (cost.madera) costHTML += '<span class="cost-i ' + (res.madera >= (cost.madera || 0) ? 'ok' : 'no') + '">🌲 ' + fmt(cost.madera) + '</span>';
-    if (cost.piedra) costHTML += '<span class="cost-i ' + (res.piedra >= (cost.piedra || 0) ? 'ok' : 'no') + '">⛰️ ' + fmt(cost.piedra) + '</span>';
-    if (cost.hierro) costHTML += '<span class="cost-i ' + (res.hierro >= (cost.hierro || 0) ? 'ok' : 'no') + '">⚙️ ' + fmt(cost.hierro) + '</span>';
-    if (cost.provisiones) costHTML += '<span class="cost-i ' + (res.provisiones >= (cost.provisiones || 0) ? 'ok' : 'no') + '">🌾 ' + fmt(cost.provisiones) + '</span>';
-    if (cost.esencia) costHTML += '<span class="cost-i ' + (res.esencia >= (cost.esencia || 0) ? 'ok' : 'no') + '">✨ ' + fmt(cost.esencia) + '</span>';
+    if (cost.madera) costHTML += '<span class="cost-i ' + (res.madera >= (cost.madera || 0) ? 'ok' : 'no') + '">🌲 ' + fmtCost(cost.madera) + '</span>';
+    if (cost.piedra) costHTML += '<span class="cost-i ' + (res.piedra >= (cost.piedra || 0) ? 'ok' : 'no') + '">⛰️ ' + fmtCost(cost.piedra) + '</span>';
+    if (cost.hierro) costHTML += '<span class="cost-i ' + (res.hierro >= (cost.hierro || 0) ? 'ok' : 'no') + '">⚙️ ' + fmtCost(cost.hierro) + '</span>';
+    if (cost.provisiones) costHTML += '<span class="cost-i ' + (res.provisiones >= (cost.provisiones || 0) ? 'ok' : 'no') + '">🌾 ' + fmtCost(cost.provisiones) + '</span>';
+    if (cost.esencia) costHTML += '<span class="cost-i ' + (res.esencia >= (cost.esencia || 0) ? 'ok' : 'no') + '">✨ ' + fmtCost(cost.esencia) + '</span>';
 
     var btnCls = 'avail', btnTxt = 'Mejorar a Nivel ' + next;
     if (inQueue) { btnCls = 'busy'; btnTxt = 'Construyendo... (' + timeLeftSec + 's)'; }
@@ -2588,6 +2592,15 @@ function fmt(n) {
   n = Math.floor(n);
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return '' + n;
+}
+
+// fmtCost: igual que fmt pero exacto hasta 9.999 para evitar falsos "tengo suficiente"
+// Ej: fmt(1040) = "1.0K" == fmt(1020) → confusión. fmtCost(1040) = "1040" != "1020"
+function fmtCost(n) {
+  n = Math.floor(n);
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 10000) return (n / 1000).toFixed(1) + 'K';
   return '' + n;
 }
 
