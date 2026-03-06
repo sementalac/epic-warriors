@@ -250,15 +250,23 @@ async function startMission(type, tx, ty, targetId, troops, guestContingents) {
 
     if (rpcErr) throw rpcErr;
 
+    // Bug-3 fix: ok-check — {ok:false} no lanza excepción pero indica fallo de validación.
+    // Sin este check, el estado basura se aplica y se muestra "¡Misión enviada!" en fallos.
+    if (!newState || newState.ok === false) {
+      vs.troops = _troopsSnapshot;
+      vs.creatures = _creaturesSnapshot;
+      vs.resources.provisiones = _provisionesSnapshot;
+      showNotif((newState && newState.error) || 'No se pudo lanzar la misión.', 'err');
+      return;
+    }
+
     // Sincronizar estado local con el devuelto por el servidor (con red de seguridad)
-    if (newState) {
-      var sNext = newState.state || newState;
-      if (sNext && sNext.buildings) {
-        activeVillage.state = sNext;
-        // v1.65: Re-aplicar descuento de provisiones — el servidor aún no lo refleja
-        // hasta el próximo secure_village_tick. Evita que el jugador vea provisiones sin descontar.
-        activeVillage.state.resources.provisiones = Math.max(0, (activeVillage.state.resources.provisiones || 0) - totalUnits);
-      }
+    var sNext = newState.state || newState;
+    if (sNext && sNext.buildings) {
+      activeVillage.state = sNext;
+      // v1.65: Re-aplicar descuento de provisiones — el servidor aún no lo refleja
+      // hasta el próximo secure_village_tick. Evita que el jugador vea provisiones sin descontar.
+      activeVillage.state.resources.provisiones = Math.max(0, (activeVillage.state.resources.provisiones || 0) - totalUnits);
     }
 
     // Registrar en active_missions para visibilidad de aliados (retrocompatibilidad)
@@ -459,6 +467,9 @@ async function resolveMissions(v) {
       return ft >= sevenDaysAgo;
     });
     vs.mission_queue = remaining;
+    // Bug-6 fix: persistir mission_queue actualizada — sin esto se puede perder
+    // el estado entre ticks si no hay otro write antes del próximo sync de 60s
+    if (typeof scheduleSave === 'function') scheduleSave();
   }
   return vs;
 }
@@ -710,7 +721,7 @@ async function executeAttackMission(m, v) {
 
     reportHTML += '<div style="background:rgba(0,0,0,0.4);padding:12px;border-radius:6px;max-height:300px;overflow-y:auto;font-size:0.85rem;color:var(--text);border:1px solid rgba(255,255,255,0.05);font-family:VT323,monospace;">';
     if (res.log && Array.isArray(res.log)) {
-      res.log.forEach(line => { reportHTML += '<div style="margin-bottom:2px;">' + line + '</div>'; });
+      res.log.forEach(line => { reportHTML += '<div style="margin-bottom:2px;">' + escapeHtml(line) + '</div>'; });
     }
     reportHTML += '</div>';
 
@@ -834,19 +845,22 @@ async function executeAttackPvP(m, v) {
     reportHTML += '<div style="font-size:1.1rem;color:var(--gold);margin-bottom:10px;">' + (victoria ? '🏆 VICTORIA' : '💀 DERROTA') + '</div>';
     reportHTML += '<div style="background:rgba(0,0,0,.3);padding:10px;border-radius:5px;max-height:300px;overflow-y:auto;font-size:0.8rem;color:var(--dim);border:1px solid rgba(255,255,255,0.05);">';
     // FIX Me4: null-check igual que en NPC — bResult.log puede ser null si el servidor falla parcialmente
+    // Bug-1 fix: escapeHtml — log puede contener nombres de jugadores/tropas con HTML
     if (bResult.log && Array.isArray(bResult.log)) {
-      bResult.log.forEach(line => { reportHTML += '<div>' + line + '</div>'; });
+      bResult.log.forEach(line => { reportHTML += '<div>' + escapeHtml(line) + '</div>'; });
     }
     reportHTML += '</div>';
 
     if (victoria && loot) {
       reportHTML += '<div style="margin-top:10px;padding:8px;background:rgba(0,255,100,0.05);border:1px solid rgba(0,255,100,0.1);">';
       reportHTML += '<div style="font-size:0.7rem;text-transform:uppercase;color:var(--accent);">Botín Saqueado:</div>';
+      // Bug-2 fix: esencia añadida al botín — antes se aplicaba en servidor pero no se mostraba
       reportHTML += '<div style="display:flex;gap:10px;font-size:0.9rem;">' +
-        (loot.madera ? '🌲' + fmt(loot.madera) : '') +
-        (loot.piedra ? ' ⛰️' + fmt(loot.piedra) : '') +
-        (loot.hierro ? ' ⚙️' + fmt(loot.hierro) : '') +
-        (loot.provisiones ? ' 🌾' + fmt(loot.provisiones) : '') + '</div>';
+        (loot.madera     ? '🌲' + fmt(loot.madera)      : '') +
+        (loot.piedra     ? ' ⛰️' + fmt(loot.piedra)     : '') +
+        (loot.hierro     ? ' ⚙️' + fmt(loot.hierro)     : '') +
+        (loot.provisiones? ' 🌾' + fmt(loot.provisiones) : '') +
+        (loot.esencia    ? ' ✨' + fmt(loot.esencia)     : '') + '</div>';
       reportHTML += '</div>';
     }
     reportHTML += '</div>';
@@ -910,6 +924,10 @@ async function executeMove(m, v) {
 
     if (rpcErr || !res) throw new Error(rpcErr?.message || 'Error en movimiento');
 
+    // Bug-7 fix: sync completo — tropas permanentes en destino no se reflejan
+    // hasta loadMyVillages(). Patrón consistente con cancelMission/cancelAlliedMission.
+    await loadMyVillages();
+    tick();
     showNotif('Tropas han llegado a su destino.', 'ok');
   } catch (e) {
     console.error('Move error:', e);
@@ -927,6 +945,9 @@ async function executeReinforce(m, v) {
 
     if (rpcErr || !res) throw new Error(rpcErr?.message || 'Error en refuerzo');
 
+    // Bug-7 fix: sync completo — tropas en guest_troops no se reflejan hasta loadMyVillages()
+    await loadMyVillages();
+    tick();
     showNotif('Tus tropas han reforzado la posición aliada.', 'ok');
   } catch (e) {
     console.error('Reinforce error:', e);
@@ -1038,6 +1059,9 @@ function _returnTroopsHome(m, v) {
   var secs = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
   if (!v.state.mission_queue) v.state.mission_queue = [];
   v.state.mission_queue.push({
+    // Bug-4 fix: mid único — sin él finalize_mission_secure usa finish_at como ID,
+    // que puede colisionar si dos retornos llegan al mismo segundo.
+    mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
     type: 'return', tx: v.x, ty: v.y,
     troops: m.troops, loot: {},
     finish_at: new Date(Date.now() + secs * 1000).toISOString(),

@@ -17,17 +17,24 @@ async function startBuild(id) {
 
   setSave('saving');
   try {
-    // v1.72: snapshot + flush antes del RPC para que el servidor lea recursos reales.
-    // start_build_secure calcula inline desde last_updated en DB — si DB tiene estado
-    // desactualizado (drift de interpolación), el servidor ve menos recursos de los reales.
-    snapshotResources(vs);
-    await flushVillage();
-
+    // v1.77: eliminado snapshotResources+flushVillage — causaba el bug inverso.
+    // save_village_client (llamado por flushVillage) NO escribe resources (server-authoritative)
+    // pero SÍ actualizaba last_updated=NOW() en el state. Resultado: start_build_secure
+    // calculaba v_hrs≈0 y veía los recursos viejos del DB → falso "Recursos insuficientes".
+    // La RPC ya tiene cálculo inline propio (DT-01 v1.70): lee el last_updated que el
+    // servidor escribió de forma consistente junto con los recursos → correcto sin flush.
     var { data: newState, error } = await sbClient.rpc('start_build_secure', {
       p_village_id:  activeVillage.id,
       p_building_id: id
     });
     if (error) throw error;
+
+    // v1.76: ok-check — {ok:false} no debe aplicar estado ni mostrar éxito
+    if (!newState || newState.ok === false) {
+      setSave('error');
+      showNotif('Error: ' + (newState && newState.error ? newState.error : 'Sin recursos o cola ocupada'), 'err');
+      return;
+    }
 
     if (newState) {
       // v1.70: start_at viene del servidor incluido en build_queue
@@ -66,8 +73,8 @@ async function cancelBuild() {
     if (newState) {
       activeVillage.state.resources    = newState.resources    || vs.resources;
       activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
+      activeVillage.state.build_queue  = null; // v1.76: mover aquí — solo limpiar si el servidor confirmó
     }
-    activeVillage.state.build_queue = null;
 
     showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
     setSave('saved');
@@ -1495,6 +1502,7 @@ async function executeMoveClick(destVillageId, tx, ty, isAllyDest) {
 
   if (!vs.mission_queue) vs.mission_queue = [];
   vs.mission_queue.push({
+    mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), // v1.76: mid único obligatorio
     type: isAllyDest ? 'reinforce' : 'move',
     tx: tx, ty: ty, targetId: destVillageId,
     troops: selectedTroops,
@@ -1775,6 +1783,7 @@ async function executeTransportClick(destVillageId, tx, ty, isAllyDest) {
 
   if (!vs.mission_queue) vs.mission_queue = [];
   vs.mission_queue.push({
+    mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), // v1.76: mid único obligatorio
     type: 'transport',
     status: 'going', // 'going' -> 'returning'
     tx: tx,
@@ -2115,6 +2124,7 @@ async function processRecalls() {
       var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
       if (!origVillage.state.mission_queue) origVillage.state.mission_queue = [];
       origVillage.state.mission_queue.push({
+        mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), // v1.76: mid único obligatorio
         type: 'return_reinforce', tx: origVillage.x, ty: origVillage.y,
         troops: troops, finish_at: finishAt, start_at: new Date().toISOString()
       });
@@ -2152,10 +2162,12 @@ function showPage(name, el) {
   // Guardar página activa en sessionStorage para restaurar tras F5
   try { sessionStorage.setItem('EW_lastPage', name); } catch (e) { }
   // Resync recursos — solo si han pasado más de 2 minutos desde el último sync
+  // v1.76: usar syncVillageResourcesFromServer (RPC secure_village_tick) en vez de
+  // syncResourcesFromDB (lectura directa a DB) — evita sobrescribir recursos interpolados
   var _nowSync = Date.now();
   if (_nowSync - (_lastResourceSync || 0) > 120000) {
     _lastResourceSync = _nowSync;
-    syncResourcesFromDB();
+    syncVillageResourcesFromServer();
   }
 }
 
@@ -2755,11 +2767,11 @@ function openBuildingDetail(id) {
     var clines = '';
     if (lvl < 100) {
       var c = def.cost(lvl);
-      if (c.madera) clines += '<div class="cl ' + (res.madera >= (c.madera || 0) ? 'can' : 'cant') + '">🌲 ' + fmt(c.madera) + '</div>';
-      if (c.piedra) clines += '<div class="cl ' + (res.piedra >= (c.piedra || 0) ? 'can' : 'cant') + '">⛰️ ' + fmt(c.piedra) + '</div>';
-      if (c.hierro) clines += '<div class="cl ' + (res.hierro >= (c.hierro || 0) ? 'can' : 'cant') + '">⚙️ ' + fmt(c.hierro) + '</div>';
-      if (c.provisiones) clines += '<div class="cl ' + (res.provisiones >= (c.provisiones || 0) ? 'can' : 'cant') + '">🌾 ' + fmt(c.provisiones) + '</div>';
-      if (c.esencia) clines += '<div class="cl ' + (res.esencia >= (c.esencia || 0) ? 'can' : 'cant') + '">✨ ' + fmt(c.esencia) + '</div>';
+      if (c.madera) clines += '<div class="cl ' + (res.madera >= (c.madera || 0) ? 'can' : 'cant') + '">🌲 ' + fmtCost(c.madera) + '</div>';
+      if (c.piedra) clines += '<div class="cl ' + (res.piedra >= (c.piedra || 0) ? 'can' : 'cant') + '">⛰️ ' + fmtCost(c.piedra) + '</div>';
+      if (c.hierro) clines += '<div class="cl ' + (res.hierro >= (c.hierro || 0) ? 'can' : 'cant') + '">⚙️ ' + fmtCost(c.hierro) + '</div>';
+      if (c.provisiones) clines += '<div class="cl ' + (res.provisiones >= (c.provisiones || 0) ? 'can' : 'cant') + '">🌾 ' + fmtCost(c.provisiones) + '</div>';
+      if (c.esencia) clines += '<div class="cl ' + (res.esencia >= (c.esencia || 0) ? 'can' : 'cant') + '">✨ ' + fmtCost(c.esencia) + '</div>';
       if (!clines) clines = '<div class="cl can">—</div>';
     } else {
       clines = '<div class="cl can" style="color:var(--gold)">MAX</div>';

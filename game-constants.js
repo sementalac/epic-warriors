@@ -963,7 +963,7 @@ function almacenCapForLevel(l) {
 }
 
 function getCapacity(blds) {
-  var lvl = (blds['almacen'] && blds['almacen'].level) || 0;
+  var lvl = (blds && blds['almacen'] && blds['almacen'].level) || 0;
   return Math.floor(almacenCapForLevel(lvl));
 }
 

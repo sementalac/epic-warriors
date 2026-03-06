@@ -592,12 +592,18 @@ async function executeAttackCave(m) {
       try {
         var spawnPos = await _findFreeCaveSpot();
         if (spawnPos) {
-          var insR = await sbClient.from('caves').insert({
-            cx: spawnPos.cx, cy: spawnPos.cy, status: 'wild', guardian_type: gType
-          }).select().single();
-          if (!insR.error && insR.data) {
-            _cavesCache.push(insR.data);
-            cavesLookup[spawnPos.cx + ',' + spawnPos.cy] = insR.data;
+          // v1.77: admin_cave_create RPC (SECURITY DEFINER) — INSERT atómico
+          // con verificación de posición libre. El INSERT directo puede fallar
+          // si RLS no permite escritura a jugadores normales en tabla caves.
+          var insR = await sbClient.rpc('admin_cave_create', {
+            p_cx: spawnPos.cx,
+            p_cy: spawnPos.cy,
+            p_guardian_type: gType
+          });
+          if (!insR.error && insR.data && insR.data.id) {
+            var newCave = { id: insR.data.id, cx: spawnPos.cx, cy: spawnPos.cy, status: 'wild', guardian_type: gType };
+            _cavesCache.push(newCave);
+            cavesLookup[spawnPos.cx + ',' + spawnPos.cy] = newCave;
             if (typeof renderMap === 'function') renderMap();
           }
         }
@@ -630,7 +636,7 @@ function _generateCaveReport(m, result, victoria, atkCas, xpGained, cave) {
   var casualtyLines = '';
   Object.keys(atkCas).forEach(function (k) {
     var td = TROOP_TYPES[k] || CREATURE_TYPES[k];
-    casualtyLines += '<div style="color:var(--danger);">- ' + atkCas[k] + ' ' + (td ? td.name : k) + ' perdidos</div>';
+    casualtyLines += '<div style="color:var(--danger);">- ' + atkCas[k] + ' ' + escapeHtml(td ? td.name : k) + ' perdidos</div>';
   });
 
   var survivors = result.survivors1 || {};
@@ -684,10 +690,16 @@ async function onCaveGuardianDied(villageId, ownerId) {
     var oldCave = r.data;
     var newPos = await _findFreeCaveSpot();
 
-    if (!newPos) {
-      await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null }).eq('id', oldCave.id);
-    } else {
-      await sbClient.from('caves').update({ status: 'wild', cx: newPos.cx, cy: newPos.cy, owner_id: null, village_id: null }).eq('id', oldCave.id);
+    // v1.77: admin_cave_respawn RPC — UPDATE atómico con SECURITY DEFINER.
+    // El UPDATE directo a caves puede fallar si RLS no permite al jugador
+    // modificar filas que no le pertenecen (status='wild', owner_id=null).
+    var respawnR = await sbClient.rpc('admin_cave_respawn', {
+      p_cave_id: oldCave.id,
+      p_new_cx:  newPos ? newPos.cx : oldCave.cx,
+      p_new_cy:  newPos ? newPos.cy : oldCave.cy
+    });
+    if (respawnR.error) {
+      console.warn('[Caves] admin_cave_respawn error:', respawnR.error.message);
     }
 
     var cIdx = _cavesCache.findIndex(function (c) { return c.id === oldCave.id; });
@@ -837,9 +849,13 @@ async function loadAdminCaves() {
         var onMission = false;
         var vState = typeof village.state === 'string' ? JSON.parse(village.state) : (village.state || {});
         var mq = (vState && vState.mission_queue) || [];
+        // v1.77: comprobar cualquier tipo de guardián de cueva (no solo guardiancueva)
+        var caveGuardianTypes = Object.keys(CAVE_LIMITS);
         for (var mi = 0; mi < mq.length; mi++) {
           var mission = mq[mi];
-          if (mission.troops && (mission.troops.guardiancueva || 0) > 0) { onMission = true; break; }
+          if (mission.troops && caveGuardianTypes.some(function (gt) { return (mission.troops[gt] || 0) > 0; })) {
+            onMission = true; break;
+          }
         }
         if (onMission) {
           locationHtml = '<span style="color:var(--accent);">🚶 En movimiento</span>';
@@ -912,17 +928,17 @@ async function adminRevokeCave(caveId, username) {
     var villR = await sbClient.from('villages').select('id,state').eq('id', caveR.data.village_id).maybeSingle();
     if (!villR.error && villR.data) {
       var st = typeof villR.data.state === 'string' ? JSON.parse(villR.data.state) : villR.data.state;
-      if (st && st.creatures) {
-        var gType = caveR.data.guardian_type || 'guardiancueva';
-        st.creatures[gType] = 0;
-        // FIX [CRÍTICO-2]: usar save_village_client en vez de UPDATE directo
-        var saveR = await sbClient.rpc('save_village_client', {
-          p_village_id: caveR.data.village_id,
-          p_state:      st
-        });
-        if (saveR.error) {
-          showNotif('Error al actualizar aldea: ' + saveR.error.message, 'err'); return;
-        }
+      // v1.77: admin_clear_cave_guardian — RPC SECURITY DEFINER que hace
+      // jsonb_set(state, '{creatures,<gType>}', '0') en el servidor.
+      // save_village_client no acepta p_state (solo persiste campos seguros),
+      // por lo que no puede borrar creatures de la aldea de otro jugador.
+      var gType2 = caveR.data.guardian_type || 'guardiancueva';
+      var saveR = await sbClient.rpc('admin_clear_cave_guardian', {
+        p_village_id:   caveR.data.village_id,
+        p_guardian_type: gType2
+      });
+      if (saveR.error) {
+        showNotif('Error al actualizar aldea: ' + saveR.error.message, 'err'); return;
       }
     }
   }
@@ -952,12 +968,17 @@ async function adminResetAllCaves() {
       if (!villR.error && villR.data) {
         var st = typeof villR.data.state === 'string' ? JSON.parse(villR.data.state) : villR.data.state;
         if (st && st.creatures) {
-          ['guardiancueva', 'arana_gigante'].forEach(k => st.creatures[k] = 0);
-          // FIX [CRÍTICO-2]: usar save_village_client en vez de UPDATE directo
-          await sbClient.rpc('save_village_client', {
-            p_village_id: vid,
-            p_state:      st
-          });
+          // v1.77: admin_clear_cave_guardian — mismo patrón que adminRevokeCave.
+          // save_village_client no acepta p_state ni toca state.creatures.
+          for (var gi = 0; gi < ['guardiancueva', 'arana_gigante'].length; gi++) {
+            var gk = ['guardiancueva', 'arana_gigante'][gi];
+            if (st.creatures[gk]) {
+              await sbClient.rpc('admin_clear_cave_guardian', {
+                p_village_id:    vid,
+                p_guardian_type: gk
+              });
+            }
+          }
         }
       }
     }

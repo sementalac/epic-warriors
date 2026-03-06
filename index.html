@@ -6,13 +6,13 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.71</title>
+  <title>Epic Warriors Online v1.81</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="game-globals.js?v=1.71"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.71">
+  <script src="game-globals.js?v=1.81"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.81">
 </head>
 
 <body>
@@ -1043,20 +1043,20 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.71</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.81</div>
 
   <script src="game-data.js"></script>
-  <script src="game-constants.js?v=1.71"></script>
-  <script src="game-troops.js?v=1.71"></script>
-  <script src="game-combat.js?v=1.71"></script>
-  <script src="game-engine.js?v=1.71"></script>
-  <script src="game-ui.js?v=1.71"></script>
-  <script src="game-social.js?v=1.71"></script>
-  <script src="game-smithy.js?v=1.71"></script>
-  <script src="game-auth.js?v=1.71"></script>
-  <script src="game-simulator.js?v=1.71"></script>
-  <script src="game-admin.js?v=1.71"></script>
-  <script src="game-caves.js?v=1.71"></script>
+  <script src="game-constants.js?v=1.81"></script>
+  <script src="game-troops.js?v=1.81"></script>
+  <script src="game-combat.js?v=1.81"></script>
+  <script src="game-engine.js?v=1.81"></script>
+  <script src="game-ui.js?v=1.81"></script>
+  <script src="game-social.js?v=1.81"></script>
+  <script src="game-smithy.js?v=1.81"></script>
+  <script src="game-auth.js?v=1.81"></script>
+  <script src="game-simulator.js?v=1.81"></script>
+  <script src="game-admin.js?v=1.81"></script>
+  <script src="game-caves.js?v=1.81"></script>
 
   <script>
     // ============================================================
@@ -1092,7 +1092,7 @@
 
       // ── 2. Misiones propias (todas las aldeas) ─────────────────
       (myVillages || []).forEach(function (v) {
-        var vName = v.name || ('[' + v.cx + ',' + v.cy + ']');
+        var vName = v.name || ('[' + v.x + ',' + v.y + ']');
         ((v.state && v.state.mission_queue) || []).forEach(function (m) {
           var ft = m.finish_at ? new Date(m.finish_at).getTime() : 0;
           if (!ft) return;
@@ -1130,6 +1130,21 @@
       });
 
       box.innerHTML = html || '<span style="color:var(--dim);font-size:.8rem;">Sin movimientos activos.</span>';
+
+      // Event delegation — un único listener para todos los botones de misión.
+      // Reemplaza el nodo para evitar acumulación de listeners en re-renders.
+      var freshBox = box.cloneNode(false);
+      freshBox.innerHTML = box.innerHTML;
+      freshBox.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        var action = btn.getAttribute('data-action');
+        var mid    = btn.getAttribute('data-mid');
+        if (!mid) return;
+        if (action === 'troops'  && typeof showMissionTroops === 'function') showMissionTroops(mid);
+        if (action === 'cancel'  && typeof cancelMission     === 'function') cancelMission(mid);
+      });
+      box.parentNode.replaceChild(freshBox, box);
     }
 
     // ── Genera el HTML de una fila de misión ──────────────────────
@@ -1143,13 +1158,13 @@
       var troopChips = ''; // siempre vacío — el usuario usa el botón para ver detalles
       var btns = '';
       if (o.troops) {
-        btns += '<button onclick="showMissionTroops(\'' + escapeJs(o.mid || '') + '\')" '
-          + 'style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);'
+        btns += '<button data-action="troops" data-mid="' + escapeHtml(o.mid || '') + '"'
+          + ' style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--accent);'
           + 'padding:3px 10px;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:VT323,monospace;">👁 Ver tropas</button>';
       }
       if (o.canCancel && o.mid) {
-        btns += '<button onclick="cancelMission(\'' + escapeJs(o.mid) + '\')" '
-          + 'style="background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);color:var(--danger);'
+        btns += '<button data-action="cancel" data-mid="' + escapeHtml(o.mid) + '"'
+          + ' style="background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.3);color:var(--danger);'
           + 'padding:3px 10px;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:VT323,monospace;">✗ Cancelar</button>';
       }
 
@@ -1443,7 +1458,7 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
 
     async function loadAllVillages() {
       // v1.62: Cargamos también state y mission_queue para ver movimientos en el mapa
-      var r = await sbClient.from('villages').select('id, owner_id, name, cx, cy, state, mission_queue');
+      var r = await sbClient.from('villages').select('id, owner_id, name, cx, cy, state, mission_queue').limit(2000);
       if (r.error) { console.error('Error loading world:', r.error); return; }
       if (r.data) {
         allVillages = r.data.map(function (v) {
@@ -1931,15 +1946,9 @@ if (isTemp) {
     // ALERTS — incoming attacks detection
     // ============================================================
     var _incomingAttacks = [];
-    var _lastAlertsCheck = 0;
-    var _lastMsgPoll = 0;
-
-    var _lastSeenUpdate = 0;
-    var _lastOnlineCheck = 0;
-    var _lastReinforcementsCheck = 0;
-    var _lastAlliancesCheck = 0;
-    var _lastMapLoad = 0;
-    var _lastResourceSync = 0;
+    // v1.76: _lastMapLoad y _lastResourceSync eliminados aquí — ya declarados en game-globals.js (v1.73)
+    // v1.81: _lastAlertsCheck, _lastMsgPoll, _lastSeenUpdate, _lastOnlineCheck,
+    //        _lastReinforcementsCheck, _lastAlliancesCheck — movidos a game-globals.js
 
     async function updateLastSeen() {
       if (!currentUser) return;
@@ -1992,41 +2001,38 @@ if (isTemp) {
         var myCoords = myVillages.map(function (v) { return { x: v.x, y: v.y, id: v.id, name: v.name }; });
         if (myCoords.length === 0) return;
 
-        var { data, error } = await sbClient
-          .from('villages')
-          .select('id, name, cx, cy, owner_id, mission_queue')
-          .neq('owner_id', currentUser.id);
+        // v1.76: RPC get_incoming_attacks — filtra en servidor, devuelve solo ataques
+        // que apuntan a nuestras coordenadas. Evita descargar mission_queue de todas
+        // las aldeas del mundo (query O(n·jugadores) → O(ataques entrantes)).
+        var { data, error } = await sbClient.rpc('get_incoming_attacks', {
+          p_coords: myCoords
+        });
 
         if (error || !data) return;
 
         var attacks = [];
-        var midSet = new Set(); // v1.65: Deduplicación alertas
+        var midSet = new Set(); // Deduplicación alertas
         var now = Date.now();
 
-        data.forEach(function (village) {
-          var mq = village.mission_queue;
-          if (!Array.isArray(mq)) return;
-          mq.forEach(function (m) {
-            if (m.type !== 'attack') return;
-            var target = myCoords.find(function (c) { return c.x === m.tx && c.y === m.ty; });
-            if (!target) return;
+        (Array.isArray(data) ? data : []).forEach(function (a) {
+          var mid = a.mid || a.finish_at;
+          if (midSet.has(mid)) return;
+          midSet.add(mid);
 
-            var mid = m.mid || m.finish_at;
-            if (midSet.has(mid)) return;
-            midSet.add(mid);
+          var finish = new Date(a.finish_at).getTime();
+          if (finish <= now - 5000) return; // Limpieza pasados 5s
 
-            var finish = new Date(m.finish_at).getTime();
-            if (finish <= now - 5000) return; // Limpieza pasados 5s
-            attacks.push({
-              mid: mid,
-              fromName: village.name || '[' + village.cx + ',' + village.cy + ']',
-              fromCoords: [village.cx, village.cy],
-              toName: target.name,
-              toCoords: [m.tx, m.ty],
-              finish_at: m.finish_at,
-              secsLeft: Math.ceil((finish - now) / 1000),
-              troops: m.troops
-            });
+          var target = myCoords.find(function (c) { return c.x === a.tx && c.y === a.ty; });
+
+          attacks.push({
+            mid: mid,
+            fromName: a.from_name || '[' + a.from_cx + ',' + a.from_cy + ']',
+            fromCoords: [a.from_cx, a.from_cy],
+            toName: target ? target.name : '[' + a.tx + ',' + a.ty + ']',
+            toCoords: [a.tx, a.ty],
+            finish_at: a.finish_at,
+            secsLeft: Math.ceil((finish - now) / 1000),
+            troops: a.troops
           });
         });
 
@@ -2047,8 +2053,8 @@ if (isTemp) {
         : attacks.map(function (a) {
           var t = fmtTime(a.secsLeft);
           return '<div class="alert-item">'
-            + '<div class="alert-title">⚔️ Ataque entrante a ' + a.toName + '</div>'
-            + '<div class="alert-sub">Desde: ' + a.fromName + ' [' + a.fromCoords[0] + ',' + a.fromCoords[1] + ']</div>'
+            + '<div class="alert-title">⚔️ Ataque entrante a ' + escapeHtml(a.toName) + '</div>'
+            + '<div class="alert-sub">Desde: ' + escapeHtml(a.fromName) + ' [' + a.fromCoords[0] + ',' + a.fromCoords[1] + ']</div>'
             + '<div class="alert-time">⏱ Llega en: ' + t + '</div>'
             + '</div>';
         }).join('');

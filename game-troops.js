@@ -410,10 +410,10 @@ async function startSummoning(key, amount) {
 
   setSave('saving');
   try {
-    // v1.73: snapshot + flush antes del RPC — mismo patrón que startBuild
-    snapshotResources(activeVillage.state);
-    await flushVillage();
-
+    // v1.77: eliminado snapshotResources+flushVillage — mismo bug que startBuild.
+    // flushVillage actualiza last_updated=NOW() sin escribir resources → el RPC
+    // calcula v_hrs≈0 y ve recursos viejos del DB → falso «Recursos insuficientes».
+    // start_summoning_secure tiene cálculo inline propio (DT-01 v1.70), no lo necesita.
     var { data: newState, error } = await sbClient.rpc('start_summoning_secure', {
       p_village_id:   activeVillage.id,
       p_creature_key: key,
@@ -508,10 +508,10 @@ async function startRecruitment(type, amount) {
 
   setSave('saving');
   try {
-    // v1.73: snapshot + flush antes del RPC — mismo patrón que startBuild
-    snapshotResources(activeVillage.state);
-    await flushVillage();
-
+    // v1.77: eliminado snapshotResources+flushVillage — mismo bug que startBuild.
+    // flushVillage actualiza last_updated=NOW() sin escribir resources → el RPC
+    // calcula v_hrs≈0 y ve recursos viejos del DB → falso «Recursos insuficientes».
+    // start_training_secure tiene cálculo inline propio (DT-01 v1.70), no lo necesita.
     var { data: newState, error } = await sbClient.rpc('start_training_secure', {
       p_village_id: activeVillage.id,
       p_troop_type: type,

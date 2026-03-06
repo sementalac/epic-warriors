@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 3.6 — Última actualización: v1.73 (Auditoría seguridad + robustez multi-archivo)
+> Versión del documento: 4.5 — Última actualización: v1.81 ronda 2 (game-globals, game-constants, game-simulator)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -14,8 +14,6 @@ Este documento debe actualizarse **en la misma entrega** que introduce el cambio
 - Nueva regla de arquitectura o restricción
 - Eliminación de un comportamiento o componente
 - Cambio en el modelo de red, guardado o tick
-
-> 📋 **Registro de auditorías de código → ver `AUDITORIA.md`** (qué archivos ya fueron auditados, bugs hallados y estado)
 
 ### Cómo añadir una versión nueva
 
@@ -73,7 +71,8 @@ El juego está evolucionando de un modelo serverless cliente-céntrico a uno **S
 | Movimiento/Refuerzo | RPC: `execute_move_secure` / `execute_reinforce_secure` |
 | Transporte | RPC: `execute_transport_secure` |
 | Fundación de aldea | RPC: `execute_founding_secure` (Validación de misión en servidor) |
-| Edificios/Training | `flushVillage` (Persistencia del estado para cálculos de servidor) |
+| Detectar ataques entrantes | RPC: `get_incoming_attacks(p_coords)` — filtra en SQL, devuelve solo misiones de tipo `attack` que apuntan a nuestras coordenadas |
+| Edificios/Training | `scheduleSave → flushVillage` (Persistencia de colas y assignments — NO para sincronizar recursos antes de RPCs) |
 
 ---
 
@@ -266,6 +265,26 @@ await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id
   .eq('owner_id', userId);
 ```
 
+### RPCs de cuevas (todas SECURITY DEFINER)
+| RPC | Qué hace |
+|---|---|
+| `admin_cave_create(p_cx, p_cy, p_status, p_guardian_type)` | Crea cueva validando admin server-side |
+| `admin_cave_delete(p_cave_id)` | Borra cueva validando admin server-side |
+| `admin_clear_cave_guardian(p_cave_id)` | Libera guardián de una cueva concreta (v1.77) |
+| `admin_cave_respawn(p_cave_id, p_cx, p_cy)` | Reposiciona cueva tras muerte del guardián (v1.77) |
+
+### RPCs de auth / perfil (todas SECURITY DEFINER)
+| RPC | Qué hace |
+|---|---|
+| `ensure_profile_secure(p_username)` | Crea perfil en registro; normalización y unicidad atómicas |
+| `change_username_secure(p_new_username)` | Cambia username; check + write atómicos, sin race condition |
+| `delete_village_secure(p_village_id)` | Valida propiedad, libera cuevas, borra aldea (v1.80) |
+| `delete_my_account()` | caves → villages → profiles → auth.users en una transacción (v1.80) |
+| `save_motd_secure(p_text)` | Guarda/borra MOTD verificando role=admin en servidor (v1.80) |
+| `save_village_client(p_village_id, p_build_queue, p_mission_queue, p_last_aldeano_at)` | Persiste colas y metadata (NO resources) |
+
+> **Regla:** Toda escritura en `caves` desde `game-caves.js` DEBE ir por RPC. Nunca INSERT/UPDATE directo desde cliente.
+
 ## MÓDULO game-simulator.js — ARQUITECTURA
 
 `renderSimulator()` genera un iframe con un HTML/CSS/JS autónomo via `doc.write()`. El simulador es completamente independiente — se pasan los datos de tropas como JSON al inicializarlo.
@@ -386,6 +405,20 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 
 25. **RPCs de gasto (`start_build_secure`, `start_training_secure`, `start_summoning_secure`) calculan recursos inline.** No deben llamar `secure_village_tick` internamente. La fórmula de producción vive en el cuerpo del RPC. `secure_village_tick` es solo para la sincronización periódica de 60s.
 
+26. **Toda escritura en la tabla `caves` desde `game-caves.js` DEBE ir por RPC SECURITY DEFINER.** Nunca INSERT/UPDATE directo desde cliente — RLS lo bloqueará o dejará datos inconsistentes. RPCs disponibles: `admin_cave_create`, `admin_cave_delete`, `admin_clear_cave_guardian`, `admin_cave_respawn`.
+
+27. **La detección del tipo de guardián en movimiento DEBE comparar contra `CREATURE_TYPES`**, no contra el string literal `'guardiancueva'`. Si se añaden nuevos tipos de guardián, la detección sigue funcionando sin tocar el código.
+
+28. **`startBuild`, `startRecruitment`, `startSummoning` NO DEBEN llamar `flushVillage` antes del RPC.** Los RPCs `start_*_secure` calculan recursos inline (DT-01 v1.70). Un flush previo sobreescribe `last_updated=NOW()` sin escribir resources → el RPC ve `v_hrs≈0` → recursos viejos del DB → falso «Recursos insuficientes».
+
+29. **`flushVillage` / `save_village_client` NO escribe `resources`.** Solo persiste colas (`build_queue`, `training_queue`, etc.), `aldeanos_assigned`, `refugio` y metadata de producción/capacidad. Nunca usarlo como mecanismo de sincronización de recursos antes de un RPC de gasto.
+
+30. **`doDeleteVillage` DEBE usar la RPC `delete_village_secure`.** Nunca `.delete()` directo sobre `villages` desde el cliente. La RPC libera cuevas capturadas (UPDATE caves) y borra la aldea de forma atómica. El client-side cleanup de guardianes fue eliminado en v1.80.
+
+31. **`doDeleteAccount` DEBE usar exclusivamente la RPC `delete_my_account`.** La RPC ejecuta en orden: caves → villages → profiles → auth.users. El cliente no toca ninguna tabla directamente.
+
+32. **`saveMOTD` / `clearMOTD` DEBEN usar la RPC `save_motd_secure`.** La verificación de rol `isAdmin()` en cliente es solo UX — no es barrera de seguridad real. La RPC verifica `profiles.role = 'admin'` en servidor con SECURITY DEFINER.
+
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
 
 ---
@@ -415,6 +448,67 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.81 ronda 2 — Auditoría game-globals + game-constants + game-simulator
+- **[MENOR]** `game-globals.js`: `GAME_VERSION` stale en `'1.71'`. Fix: `'1.81'`.
+- **[MENOR]** `game-globals.js`: 6 timers de polling (`_lastAlertsCheck`, `_lastMsgPoll`, `_lastSeenUpdate`, `_lastOnlineCheck`, `_lastReinforcementsCheck`, `_lastAlliancesCheck`) declarados en `<script>` inline de `index.html` — inconsistente con convención v1.73. Fix: movidos aquí, eliminados de `index.html`.
+- **[MENOR]** `game-constants.js` `getCapacity`: `blds['almacen']` sin null-guard en `blds` — única función del archivo sin el patrón `(blds && blds['x'] && ...)`. Fix: null-guard añadido.
+- `game-simulator.js`: 0 bugs — archivo limpio tras 2 pasadas completas.
+- [Regla nueva] `game-globals.js` es la fuente de verdad de todos los globals de timing. Ningún módulo debe declarar `var _last*` fuera de este archivo.
+
+### v1.81 — Auditoría index.html (2 pasadas) + game-smithy.js event delegation
+- **[CRÍTICO]** `index.html` `toggleAlertsPanel`: `a.toName` y `a.fromName` en innerHTML sin `escapeHtml()` — nombres de aldea y jugador son datos de usuario, vector XSS. Fix: `escapeHtml()` en ambos.
+- **[CRÍTICO]** `index.html` cache-busters: todos los scripts seguían en `?v=1.77` — navegadores con caché cargaban `game-smithy.js` y `game-auth.js` sin los fixes de seguridad de v1.78–v1.80. Fix: actualizados a `?v=1.81`.
+- **[MEDIO]** `index.html` `_missionRow`: botones con `onclick` inline + `escapeJs()` — mismo patrón que disparaba `Trojan:JS/FakeUpdate.B` en smithy. Fix: event delegation con `data-action` + `data-mid`, igual que smithy v1.81.
+- **[MEDIO]** `game-smithy.js`: eliminados todos los `onclick` inline de `renderSmithy` (falso positivo `Trojan:JS/FakeUpdate.B` Defender). Fix: `data-troop` + `data-type` + listener delegado en contenedor con `replaceChild` para evitar acumulación.
+- **[MENOR]** `index.html` `loadAllVillages`: query sin `.limit()` — O(n·jugadores × tamaño state). Fix: `.limit(2000)`.
+- [Regla nueva] Ningún botón generado dinámicamente en innerHTML puede usar `onclick` inline. Usar `data-*` + event delegation en el contenedor.
+
+### v1.80 — Auditoría game-smithy.js + game-auth.js (2 pasadas cada uno)
+- **[CRÍTICO]** `game-auth.js` `doDeleteVillage`: `.delete()` directo sobre `villages` → RPC `delete_village_secure(p_village_id)`. La RPC valida propiedad, libera cuevas capturadas (UPDATE caves) y borra la aldea de forma atómica. El client-side `onCaveGuardianDied` eliminado de esta función — la cueva se liberaba *después* del DELETE de la aldea, dejando posibles FK huérfanas si el cleanup fallaba.
+- **[CRÍTICO]** `game-auth.js` `doDeleteAccount`: `.delete()` directo sobre `villages` + `profiles` sin limpieza de cuevas → consolidado en `delete_my_account` RPC ampliada (caves → villages → profiles → auth.users). El cliente ya no toca ninguna tabla directamente.
+- **[CRÍTICO]** `game-auth.js` `doRegister`: `ensureProfile()` retorno no comprobado — si la RPC fallaba, `initGame()` continuaba sin perfil → crash o estado indefinido. Fix: check de retorno + `signOut` + mensaje de error si `!profileOk`.
+- **[MEDIO]** `game-auth.js` `saveMOTD` / `clearMOTD`: upsert directo a tabla `config` con guardia `isAdmin()` solo en cliente (manipulable desde consola) → nueva RPC `save_motd_secure(p_text)` con SECURITY DEFINER que verifica `profiles.role = 'admin'` en servidor.
+- **[MEDIO]** `game-smithy.js` `upgradeSmithyItem`: `last_updated` no reseteado tras aplicar `new_resources` del servidor — `calcRes()` acumulaba producción desde timestamp antiguo hasta el siguiente sync de 60s. Fix: `activeVillage.state.last_updated = new Date().toISOString()` tras aplicar `new_resources`.
+- **[MENOR]** `game-auth.js` `visibilitychange`: llamaba `flushVillage()` — inconsistente con `beforeunload` (ya corregido en v1.70). Fix: mismo patrón RPC fire-and-forget que `beforeunload`.
+- **[MENOR]** `game-smithy.js` `renderSmithy`: `itemD.name`, `troop.name`, `troop.icon` insertados en innerHTML sin `escapeHtml()`. Fix: `escapeHtml()` aplicado (misma clase que game-caves.js Bug-5 / game-combat.js Bug-1).
+- **[MENOR]** `game-smithy.js` `upgradeSmithyItem`: sin null-guard en `data` antes de `data.ok` — TypeError silencioso si RPC devuelve null. Fix: `!data || !data.ok`.
+- [Supabase] Nueva RPC `delete_village_secure(p_village_id UUID)` — ver SQL en cabecera de `game-auth.js`.
+- [Supabase] RPC `delete_my_account()` ampliada — ver SQL en cabecera de `game-auth.js`.
+- [Supabase] Nueva RPC `save_motd_secure(p_text TEXT)` — ver SQL en cabecera de `game-auth.js`.
+- [Regla nueva 30] `doDeleteVillage` DEBE usar la RPC `delete_village_secure`. Nunca `.delete()` directo sobre `villages`.
+- [Regla nueva 31] `doDeleteAccount` DEBE usar exclusivamente la RPC `delete_my_account`. El cliente no toca ninguna tabla directamente.
+- [Regla nueva 32] `saveMOTD` / `clearMOTD` DEBEN usar la RPC `save_motd_secure`. `isAdmin()` en cliente es solo UX.
+- ✅ **AUDITORÍA COMPLETA** — todos los archivos JS del juego auditados con 2 pasadas.
+
+### v1.79 — Auditoría game-social.js (2 pasadas)
+- **[MEDIO]** `dissolveAlliance`: segunda `DELETE` (`alliance_members`) sin chequeo de error — si fallaba silenciosamente, los registros de miembros quedaban huérfanos en DB. Fix: chequeo explícito con notificación al usuario.
+- **[MEDIO]** `markMsgAsReadAndDelete`: solo hacía `UPDATE read=true` sin `DELETE` real en DB — al recargar el hilo el mensaje reaparecía como leído. Fix: `DELETE` añadido tras el `UPDATE`.
+- **[MENOR]** `_selectedReportIds`: variable global usada en 6 sitios pero nunca declarada — `ReferenceError` en strict mode. Fix: `var _selectedReportIds = new Set()` declarado en ámbito de módulo.
+
+### v1.78 — Auditoría game-admin.js (2 pasadas)
+- **[CRÍTICO]** `adminLaunchHunt`: `missionEntry` nunca se pusheaba a `s.mission_queue` antes del RPC `admin_ghost_sync_hunt` → el Global Admin Tick escaneaba `mission_queue` vacía → ningún ataque admin se resolvía jamás. Fix: `s.mission_queue.push(missionEntry)` antes del sync.
+- **[CRÍTICO]** `adminLaunchHunt`: `sTmp.is_temp = true` era código muerto — `sTmp` era una variable local que se descartaba; el state real (`s`) se re-leía después sin `is_temp` → los puntos de invasión temporales nunca se autodestruían y se acumulaban en el mapa. Fix: `s.is_temp = true` directamente sobre el object persistido; bloque `sTmp` eliminado.
+- **[MEDIO]** `adminFastBuildAll`: leía `build_queue` desde `state` jsonb (siempre null desde v1.64 — se stripea en `saveVillage`) → count siempre 0 → función completamente inútil. Fix: `select('id,build_queue')` sobre la columna real separada.
+- **[MENOR]** `_adminDeleteUserData`: UPDATE directo a `caves` al liberar cuevas del usuario borrado. Fix: bucle con `admin_clear_cave_guardian(p_cave_id)` por cada cueva (regla 26).
+
+### v1.77 — Fix crítico: snapshotResources+flushVillage revertido en RPCs de gasto
+- **[CRÍTICO]** `startBuild` (game-ui.js), `startRecruitment` y `startSummoning` (game-troops.js): eliminado `snapshotResources + flushVillage` antes de los RPCs `start_build_secure`, `start_training_secure`, `start_summoning_secure`. Este patrón introducido en v1.73 causaba el bug inverso: `flushVillage` llama `save_village_client` que NO escribe `resources` (server-authoritative) pero SÍ sobreescribe `last_updated = NOW()` — el RPC calculaba `v_hrs ≈ 0` y veía los recursos viejos del DB → \«Recursos insuficientes\» aunque el cliente mostrara suficientes.
+- **Causa raíz**: conflicto entre v1.73 (snapshot+flush) y v1.70/DT-01 (RPCs con cálculo inline propio) que nunca fue detectado. Los RPCs ya calculan recursos correctamente desde el `last_updated` que ellos mismos escriben — no necesitan ni deben recibir un flush previo.
+- [Regla nueva] **`startBuild`, `startRecruitment`, `startSummoning` NO DEBEN hacer `flushVillage` antes del RPC.** Los RPCs `start_*_secure` tienen cálculo inline de recursos (DT-01 v1.70) y son la autoridad. Un flush previo corrompe `last_updated` sin actualizar resources.
+- [Regla nueva] **`flushVillage` / `save_village_client` NO escribe `resources`.** Solo persiste colas, `aldeanos_assigned`, `refugio` y producción/capacidad. Nunca usarlo como mecanismo de sincronización de recursos antes de un RPC de gasto.
+- [Eliminado] Patrón `snapshotResources(vs); await flushVillage();` en `startBuild`, `startRecruitment`, `startSummoning`.
+
+### v1.77 — Auditoría game-caves.js (2 pasadas)
+- **[CRÍTICO]** `adminRevokeCave` + `adminResetAllCaves`: llamaban a `save_village_client` con firma incorrecta — la RPC ha evolucionado desde que se escribió ese código y la llamada reventaba silenciosamente. Reemplazado por nueva RPC `admin_clear_cave_guardian(p_cave_id)` con firma estable y validación server-side.
+- **[MEDIO]** Auto-respawn post-captura: INSERT directo a `caves` — saltaba RLS. Reemplazado por `admin_cave_create` RPC (ya existía, no se usaba aquí).
+- **[MEDIO]** `onCaveGuardianDied`: UPDATE directo a `caves` al morir el guardián — mismo vector RLS. Reemplazado por nueva RPC `admin_cave_respawn(p_cave_id, p_cx, p_cy)`.
+- **[MEDIO]** `loadAdminCaves`: detección "en movimiento" hardcodeada a `=== 'guardiancueva'` — si el `guardian_type` cambia o se añaden nuevos tipos, la detección fallaba en silencio. Ahora comprueba dinámicamente contra `CREATURE_TYPES`.
+- **[MENOR]** `_generateCaveReport`: nombres de tropa sin `escapeHtml()` — vector XSS consistente con los fixes de v1.74/v1.75. Aplicado `escapeHtml()`.
+- [Supabase] Nueva RPC `admin_clear_cave_guardian(p_cave_id uuid)` — libera guardian de una cueva concreta validando admin server-side. Devuelve `{ok, cave_id}`.
+- [Supabase] Nueva RPC `admin_cave_respawn(p_cave_id uuid, p_cx int, p_cy int)` — reposiciona cueva a coordenadas aleatorias tras muerte del guardián, validando admin server-side.
+- [Regla nueva] **Toda escritura en la tabla `caves` desde `game-caves.js` DEBE ir por RPC SECURITY DEFINER.** Nunca INSERT/UPDATE directo desde cliente — RLS lo bloqueará o dejará datos inconsistentes.
+- [Regla nueva] **La detección del tipo de guardián en movimiento DEBE comparar contra `CREATURE_TYPES`**, no contra el string literal `'guardiancueva'`. Permite añadir tipos nuevos sin romper el panel admin.
 
 ### v1.71 — DT-03: Llegadas de misiones 100% atómicas
 - **Bug**: `executeMove` y `executeTransport` escribían recursos y tropas en el destino con `sbClient.from('villages').update({state})` directo — el cliente leía el state, sumaba y escribía sin lock, dejando una ventana de race condition si dos misiones llegaban simultáneamente.
@@ -635,9 +729,9 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 
 ### v1.73 — Auditoría seguridad + robustez multi-archivo
 - **[CRÍTICO]** `game-admin.js`: 4 operaciones directas a DB sin validación server-side → rerouteadas a RPCs SECURITY DEFINER (`admin_delete_alliance`, `admin_kick_from_alliance`, `admin_cave_create`, `admin_cave_delete`). Vector de ataque: `currentUser.email` manipulable desde consola.
-- **[CRÍTICO]** `game-ui.js` `startBuild`: `snapshotResources + flushVillage` antes del RPC. El servidor calculaba desde `last_updated` desactualizado en DB → falso "Recursos insuficientes" en edificios con coste > 1.000.
+- **[CRÍTICO]** `game-ui.js` `startBuild`: `snapshotResources + flushVillage` añadidos antes del RPC. ⚠️ Este fix introdujo un bug secundario corregido en v1.77: `flushVillage` sobreescribía `last_updated` sin guardar resources → RPC veía `v_hrs≈0`.
 - **[CRÍTICO]** `game-troops.js` `resolveTrainingQueue`: `+1` hardcodeado → `+(t.amount||1)`. Colas de N tropas resolvían como 1.
-- **[MEDIO]** `game-troops.js` `startRecruitment` y `startSummoning`: snapshot+flush antes del RPC (mismo patrón que startBuild).
+- **[MEDIO]** `game-troops.js` `startRecruitment` y `startSummoning`: snapshot+flush añadidos (mismo patrón que startBuild). ⚠️ Mismo bug secundario, corregido en v1.77.
 - **[MEDIO]** `game-admin.js` `adminLaunchHunt`: eliminado `UPDATE villages SET state` directo — `is_temp` ya persiste vía `admin_ghost_sync_hunt`.
 - **[MEDIO]** `game-ui.js`: nueva función `fmtCost()` — exacta hasta 9.999 para evitar ambigüedad visual en costes de edificios (fmt(1020) == fmt(1040) → confusión).
 - **[MENOR]** `game-globals.js`: declarados explícitamente `_lastResourceSync`, `_lastMapLoad`, `_guestTroopsTableExists`, `profileCache`. Antes creados implícitamente → posibles ReferenceError en strict mode.
@@ -648,7 +742,7 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - **[MENOR]** `index.html`: `ensureProfile(currentUser.id, myName)` → `ensureProfile(myName)` (firma cambió, argumento UUID sobraba).
 - [Supabase] Nuevas RPCs: `admin_delete_alliance`, `admin_kick_from_alliance`, `admin_cave_create`, `admin_cave_delete`
 - [Supabase] `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS normalized_username TEXT`
-- [Regla nueva] `startBuild`, `startRecruitment`, `startSummoning` DEBEN hacer `snapshotResources + flushVillage` antes del RPC de gasto. El servidor calcula desde `last_updated` en DB — sin flush previo, ve recursos desactualizados.
+- [Regla REVERTIDA en v1.77] ~~`startBuild`, `startRecruitment`, `startSummoning` DEBEN hacer `snapshotResources + flushVillage` antes del RPC~~ — esta regla era incorrecta. `flushVillage` llama `save_village_client` que NO escribe resources pero SÍ sobreescribe `last_updated=NOW()`, haciendo que el RPC calcule `v_hrs≈0` y vea recursos viejos. Eliminada y corregida en v1.77.
 - [Regla nueva] `fmtCost()` para costes en UI. `fmt()` para producción y cantidades. No intercambiar.
 
 ### v1.72 — Fix } extra en admin global tick + ensureProfile
@@ -663,6 +757,30 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - **[MENOR]** Cache busters de todos los scripts JS/CSS actualizados de `?v=1.50` a `?v=1.71`.
 - [Supabase] Nueva RPC `create_first_village_secure(p_user_id, p_name)`: busca coordenadas libres + INSERT atómico. Buildings todos a level 1. Devuelve `{ok, village_id, cx, cy}`.
 - [Regla nueva] La lista de buildings en `create_first_village_secure` debe ser idéntica a `BUILDINGS.map(b => b.id)` en JS. Actualizarla si se añade un edificio nuevo.
+
+### v1.76 — Auditoría game-ui.js + index.html (2 pasadas cada uno)
+- **[CRÍTICO]** `game-ui.js` `startBuild`: ok-check en `start_build_secure` — sin él `{ok:false}` aplicaba estado basura y mostraba éxito. Misma clase de bug que DT-07/DT-08.
+- **[CRÍTICO]** `game-ui.js` `cancelBuild`: `build_queue = null` fuera del `if (newState)` — se borraba la cola local aunque el servidor no confirmara la cancelación.
+- **[CRÍTICO]** `game-ui.js` `executeMoveClick`, `executeTransportClick`, `processRecalls`: misiones `move`, `transport` y `return_reinforce` generadas sin `mid` — colisionaban en `finalize_mission_secure`. Mismo patrón que DT-09 (`_returnTroopsHome`).
+- **[MEDIO]** `game-ui.js` `showPage`: `syncResourcesFromDB()` (lectura directa a DB) → `syncVillageResourcesFromServer()` (RPC `secure_village_tick`) al cambiar de página. La lectura directa sobrescribía recursos interpolados con valores atrasados de DB.
+- **[MEDIO]** `index.html` `checkIncomingAttacks`: query `.from('villages').select(…).neq('owner_id', …)` sin filtro ni límite — descargaba `mission_queue` de **todas** las aldeas del mundo cada 30s. Reemplazado por RPC `get_incoming_attacks(p_coords)` que filtra en PostgreSQL y devuelve solo los ataques entrantes relevantes. **Coste: O(ataques entrantes) vs O(n·jugadores).**
+- **[MENOR]** `game-ui.js` `openBuildingDetail`: `fmt()` → `fmtCost()` en tabla de costes de edificios — consistencia con regla de v1.73.
+- **[MENOR]** `index.html` `renderMissionsPanel`: `v.cx`/`v.cy` → `v.x`/`v.y` en fallback de nombre de aldea.
+- **[MENOR]** `index.html`: `var _lastMapLoad` y `var _lastResourceSync` eliminados — ya declarados en `game-globals.js` (v1.73).
+- **[MENOR]** `index.html`: cache-busters, título y footer actualizados a `v1.76`.
+- [Supabase] Nueva RPC requerida: `get_incoming_attacks(p_coords jsonb)` — ver sección RPCS DE SUPABASE.
+- [Regla nueva] `checkIncomingAttacks` y cualquier detección de eventos en aldeas ajenas **DEBEN usar una RPC de servidor** que filtre en SQL. Nunca descargar toda la tabla de villages para filtrar en cliente.
+- [Regla nueva] Toda misión creada en cliente (`move`, `transport`, `return_reinforce`, `reinforce`, `found`) **DEBE incluir `mid` único** (`Math.random().toString(36).slice(2,10) + Date.now().toString(36)`). Sin `mid`, `finalize_mission_secure` usa `finish_at` como ID y colisiona con misiones simultáneas del mismo tipo.
+
+### v1.75 — Auditoría game-engine.js (2 pasadas)
+- **[MEDIO]** `startMission`: ok-check en `launch_mission_secure` — sin él `{ok:false}` aplicaba estado basura y mostraba "¡Misión enviada!". Rollback de tropas/criaturas/provisiones también en fallo de validación.
+- **[MEDIO]** `executeAttackPvP` log: `escapeHtml()` en líneas del log de batalla PvP — mismo vector XSS que v1.74.
+- **[MEDIO]** `executeAttackPvP` botín: `esencia` añadida al informe de botín — se aplicaba en servidor pero no se mostraba al jugador.
+- **[MENOR]** `executeAttackMission` (NPC) log: `escapeHtml()` en líneas del log NPC — consistencia con PvP.
+- **[MENOR]** `_returnTroopsHome`: misión de retorno ahora incluye `mid` único — sin él `finalize_mission_secure` usaba `finish_at` como ID, colisionable con retornos simultáneos.
+- **[MENOR]** `resolveMissions`: `scheduleSave()` tras actualizar `mission_queue` — evita pérdida de estado entre ticks.
+- **[MENOR]** `executeMove` + `executeReinforce`: `await loadMyVillages(); tick()` tras RPC exitoso — patrón consistente con `cancelMission`/`cancelAlliedMission`.
+- [Regla nueva] `executeMove` y `executeReinforce` DEBEN llamar `loadMyVillages()+tick()` tras RPC exitoso — las tropas permanentes en destino no se reflejan localmente sin sync.
 
 ### vX.XX — [Plantilla para nuevas versiones]
 - descripción del cambio principal
@@ -727,3 +845,7 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 | ~~DT-03~~ | ~~`executeMove` y `executeTransport` escribían recursos al destino con `villages.update` directo — race condition posible.~~ | ✅ Resuelto v1.71 |
 | ~~DT-04~~ | ~~`resolveTrainingQueue` añadía 1 tropa fija ignorando `t.amount`.~~ | ✅ Resuelto v1.73 |
 | ~~DT-05~~ | ~~`startBuild/startRecruitment/startSummoning` sin flush previo → falsos "Recursos insuficientes".~~ | ✅ Resuelto v1.73 |
+| ~~DT-06~~ | ~~`generateBattleReport`: nombres y log sin `escapeHtml()` — XSS.~~ | ✅ Resuelto v1.74 |
+| ~~DT-07~~ | ~~`startSummoning/startRecruitment/cancelTrainingQueue`: sin check `newState.ok` — fallo RPC mostraba éxito.~~ | ✅ Resuelto v1.74 |
+| ~~DT-08~~ | ~~`startMission`: sin ok-check en `launch_mission_secure` — `{ok:false}` mostraba éxito y no hacía rollback.~~ | ✅ Resuelto v1.75 |
+| ~~DT-09~~ | ~~`executeAttackPvP`: log sin `escapeHtml()`, esencia omitida en botín, `_returnTroopsHome` sin `mid`.~~ | ✅ Resuelto v1.75 |

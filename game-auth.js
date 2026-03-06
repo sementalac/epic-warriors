@@ -1,12 +1,12 @@
 // ============================================================
-// EPIC WARRIORS — game-auth.js  [v1.70 — security patch]
+// EPIC WARRIORS — game-auth.js  [v1.80 — audit pass]
 // Auth: doLogin, doRegister, doLogout, ensureProfile, getMyPlayerData
 // Username: normUsername, isUsernameShapeValid, isUsernameAvailable
 // Profile: openProfile, closeProfile, doChangeUsername
 //          doDeleteVillage, doDeleteAccount
 // Admin MOTD: loadUserRole, saveMOTD, clearMOTD
 // ============================================================
-// FIX SUMMARY (6 issues)
+// FIX SUMMARY (6 issues) [v1.70]
 // [CRÍTICO-1] doRegister: ahora llama RPC ensure_profile_secure en vez de upsert directo
 // [CRÍTICO-2] doChangeUsername: ahora llama RPC change_username_secure (atómica, sin race condition)
 // [CRÍTICO-3] ensureProfile: reescrita para usar la RPC; nunca escribe directo a profiles
@@ -14,6 +14,27 @@
 // [MEDIO-5]   beforeunload: enruta a save_village_client RPC en vez de update directo
 // [MENOR-6]   fetchBannedTerms: caché en memoria para la sesión (0 queries extra)
 // ============================================================
+// FIX SUMMARY (6 issues) [v1.80 — 2 pasadas de auditoría]
+// [CRÍTICO-7]  doRegister: ensureProfile() retorno no comprobado — si fallaba,
+//   el juego entraba en initGame() sin perfil → crash o estado indefinido.
+//   Fix: check del retorno + signOut + mensaje de error si falla.
+// [CRÍTICO-8]  doDeleteVillage: .delete() directo sobre tabla villages desde
+//   cliente — viola regla arquitectónica (Supabase = única autoridad).
+//   Fix: RPC delete_village_secure(p_village_id). La limpieza de cueva y
+//   la validación del guardián ocurren ahora dentro de la RPC antes del DELETE.
+// [CRÍTICO-9]  doDeleteAccount: .delete() directo sobre villages + profiles;
+//   sin limpieza de cuevas capturadas — miembros y recursos huérfanos en DB.
+//   Fix: consolidado en delete_my_account RPC (cave cleanup → villages →
+//   profiles → auth.users). El cliente solo llama la RPC y hace signOut.
+// [MEDIO-10]   saveMOTD / clearMOTD: upsert directo a tabla config — la
+//   guardia isAdmin() es client-side, manipulable desde consola.
+//   Fix: nueva RPC save_motd_secure(p_text) con SECURITY DEFINER que verifica
+//   profiles.role en servidor.
+// [MENOR-11]   visibilitychange: llamaba flushVillage() directamente —
+//   beforeunload ya fue corregido en v1.70 para usar la RPC; visibilitychange
+//   no. Inconsistente y potencialmente un update directo a DB.
+//   Fix: mismo patrón RPC fire-and-forget que beforeunload.
+// SQL requerido: ver migration_v1.80.sql (archivo separado)
 
 function normUsername(u) {
   return (u || '')
@@ -151,8 +172,18 @@ async function doRegister() {
     currentUser = data.user;
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('gameWrapper').classList.add('visible');
-    // FIX: usar RPC segura en lugar de upsert directo
-    await ensureProfile(userRaw);
+    // FIX [CRÍTICO-7]: comprobar retorno de ensureProfile — si falla, el juego
+    // NO debe continuar hacia initGame() sin perfil (crash o estado indefinido).
+    const profileOk = await ensureProfile(userRaw);
+    if (!profileOk) {
+      await sbClient.auth.signOut();
+      document.getElementById('authScreen').style.display = 'flex';
+      document.getElementById('gameWrapper').classList.remove('visible');
+      setMsg('No se pudo crear tu perfil. Inténtalo de nuevo.', 'err');
+      document.getElementById('rBtn').disabled = false;
+      document.getElementById('rBtn').textContent = 'Crear Cuenta';
+      return;
+    }
     await initGame();
   } else {
     setMsg('Revisa tu email para confirmar o inicia sesión.', 'ok');
@@ -274,10 +305,12 @@ async function saveMOTD() {
   var text = (document.getElementById('motdInput').value || '').trim().slice(0, 1000);
   var msg = document.getElementById('motdSaveMsg');
   msg.textContent = '';
-  var r = await sbClient.from('config').upsert({ key: 'motd', value: text }, { onConflict: 'key' });
-  if (r.error) {
+  // FIX [MEDIO-10]: RPC SECURITY DEFINER — la verificación de rol ocurre en
+  // servidor. isAdmin() client-side es solo UX; no es barrera de seguridad real.
+  var { error: rpcErr } = await sbClient.rpc('save_motd_secure', { p_text: text });
+  if (rpcErr) {
     msg.style.color = 'var(--danger)';
-    msg.textContent = 'Error: ' + r.error.message;
+    msg.textContent = 'Error: ' + rpcErr.message;
     return;
   }
   msg.style.color = 'var(--ok)';
@@ -288,7 +321,8 @@ async function saveMOTD() {
 async function clearMOTD() {
   if (!isAdmin()) return;
   if (!confirm('¿Borrar el mensaje del día?')) return;
-  await sbClient.from('config').upsert({ key: 'motd', value: '' }, { onConflict: 'key' });
+  // FIX [MEDIO-10]: RPC SECURITY DEFINER (mismo que saveMOTD con texto vacío)
+  await sbClient.rpc('save_motd_secure', { p_text: '' });
   document.getElementById('motdInput').value = '';
   var msg = document.getElementById('motdSaveMsg');
   msg.style.color = 'var(--ok)';
@@ -371,9 +405,13 @@ async function doChangeUsername() {
 }
 
 // ============================================================
-// FIX v1.45: doDeleteVillage
-// — Añadido DELETE en resources (faltaba → FK constraint o fila huérfana)
-// — Orden correcto: tablas hijas primero, villages al final
+// FIX [CRÍTICO-8] v1.80: doDeleteVillage
+// — .delete() directo sobre villages reemplazado por RPC delete_village_secure
+// — La limpieza del guardián de cueva ahora ocurre DENTRO de la RPC, antes
+//   del DELETE, evitando que una cueva quede con guardián apuntando a una
+//   aldea inexistente si el client-side cleanup fallaba.
+// — Ya no se llama a onCaveGuardianDied desde el cliente: la RPC hace UPDATE
+//   caves SET status='wild' WHERE village_id = p_village_id internamente.
 // ============================================================
 async function doDeleteVillage() {
   if (!activeVillage || !currentUser) return;
@@ -396,22 +434,14 @@ async function doDeleteVillage() {
 
   var vid = activeVillage.id;
   try {
-    // v1.65: Removed legacy table deletes (resources, buildings, troops, creatures)
-    // since they are now part of the villages.state JSONB.
-
-    // Finalmente borrar la aldea principal
-    var r5 = await sbClient.from('villages').delete().eq('id', vid);
-    if (r5.error) throw new Error(r5.error.message);
-
-    // También liberar cueva capturada si tenía guardián
-    if (typeof onCaveGuardianDied === 'function') {
-      var hadGuardian = activeVillage.state &&
-        activeVillage.state.creatures &&
-        (activeVillage.state.creatures.guardiancueva || 0) > 0;
-      if (hadGuardian) {
-        await onCaveGuardianDied(vid, currentUser.id);
-      }
-    }
+    // FIX [CRÍTICO-8]: RPC SECURITY DEFINER — valida propiedad, libera cuevas
+    // y borra la aldea en una sola transacción atómica en el servidor.
+    // Nunca .delete() directo sobre villages desde el cliente.
+    var { data: delData, error: delErr } = await sbClient.rpc('delete_village_secure', {
+      p_village_id: vid
+    });
+    if (delErr) throw new Error(delErr.message);
+    if (!delData || !delData.ok) throw new Error(delData?.error || 'Error al borrar la aldea');
 
     // Recargar localmente
     myVillages = myVillages.filter(function (v) { return v.id !== vid; });
@@ -426,15 +456,17 @@ async function doDeleteVillage() {
   }
 }
 
-// ── FIX [MEDIO-4]: doDeleteAccount borra también auth.users ─────────────────
-// Requiere RPC delete_my_account() en Supabase con SECURITY DEFINER:
-//   DELETE FROM auth.users WHERE id = auth.uid();
-// Sin esa RPC el email queda bloqueado en auth.users para siempre.
-// ============================================================
-// FIX v1.45: doDeleteAccount
-// — Corregido .eq('user_id', ...) → .eq('owner_id', ...) para villages
-// — Añadido borrado de resources/buildings/troops/creatures antes de villages
-// ============================================================
+// ── FIX [CRÍTICO-9] v1.80: doDeleteAccount consolidado en RPC ───────────────
+// Antes: .delete() directo sobre villages + profiles sin limpieza de cuevas.
+//   - Violaba la regla arquitectónica (Supabase = única autoridad)
+//   - No limpiaba cuevas capturadas → owner_id huérfano en tabla caves
+//   - Orden no garantizado → posibles FK failures
+// Ahora: una sola llamada a delete_my_account() (SECURITY DEFINER) que ejecuta:
+//   1. UPDATE caves SET status='wild' WHERE owner_id = auth.uid()
+//   2. DELETE FROM villages WHERE owner_id = auth.uid()
+//   3. DELETE FROM profiles WHERE id = auth.uid()
+//   4. DELETE FROM auth.users WHERE id = auth.uid()
+// El cliente ya no toca ninguna tabla directamente.
 async function doDeleteAccount() {
   var raw = (document.getElementById('profNewName').value || '').trim();
   var myName = document.getElementById('profUsername').textContent;
@@ -448,29 +480,19 @@ async function doDeleteAccount() {
   if (!confirm('¿Estás SEGURO de que quieres eliminar tu cuenta? Todos tus datos se perderán.')) return;
 
   try {
-    // v1.65: Removed legacy table deletes. Everything is inside villages.state now.
-
-    // Borrar aldeas (columna correcta: owner_id)
-    await sbClient.from('villages').delete().eq('owner_id', currentUser.id);
-    // Borrar perfil
-    await sbClient.from('profiles').delete().eq('id', currentUser.id);
-
-    // FIX: Borrar usuario de auth.users via RPC SECURITY DEFINER
-    // SQL necesario en Supabase:
-    //   CREATE OR REPLACE FUNCTION delete_my_account()
-    //   RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
-    //     DELETE FROM auth.users WHERE id = auth.uid();
-    //   $$;
+    // FIX [CRÍTICO-9]: toda la limpieza ocurre en la RPC SECURITY DEFINER:
+    //   cuevas → aldeas → perfil → auth.users (ver SQL en cabecera de este archivo)
     const { error: rpcErr } = await sbClient.rpc('delete_my_account');
     if (rpcErr) {
-      // No bloquear — la sesión se cierra igualmente; el admin puede limpiar auth.users
-      console.warn('delete_my_account RPC failed (create it in Supabase SQL editor):', rpcErr.message);
+      // Loguear pero no bloquear — la sesión se cierra igualmente.
+      // Si la RPC no existe aún, el admin puede limpiar manualmente.
+      console.warn('delete_my_account RPC failed (revisar SQL en cabecera del archivo):', rpcErr.message);
     }
   } catch (e) {
-    console.warn('doDeleteAccount cleanup error:', e);
+    console.warn('doDeleteAccount error:', e);
   }
 
-  // Cerrar sesión
+  // Cerrar sesión y recargar en cualquier caso
   await sbClient.auth.signOut();
   location.reload();
 }
@@ -505,14 +527,22 @@ window.addEventListener('beforeunload', function () {
   }
 })();
 
-// ── Visibilitychange: guardar al ocultar, nada al volver ────────────────
-// No hacemos query a Supabase al volver a la pestaña — los recursos se
-// calculan localmente con calcRes() desde last_updated + producción.
-// Esto evita queries cada vez que el usuario enfoca la pestaña o devtools.
+// ── FIX [MENOR-11]: visibilitychange usa RPC fire-and-forget ─────────────────
+// beforeunload ya fue corregido en v1.70 para usar save_village_client RPC.
+// visibilitychange seguía llamando flushVillage() — inconsistente y potencialmente
+// un update directo a DB. Ahora usa el mismo patrón que beforeunload.
 document.addEventListener('visibilitychange', function () {
-  if (document.hidden) {
-    // Al ocultar: guardar estado actual (mejor esfuerzo)
-    try { flushVillage(); } catch (e) { }
+  if (document.hidden && activeVillage && currentUser) {
+    try {
+      var s = activeVillage.state;
+      // Fire-and-forget intencional: visibilitychange no puede awaitar
+      sbClient.rpc('save_village_client', {
+        p_village_id:      activeVillage.id,
+        p_build_queue:     s.build_queue     || [],
+        p_mission_queue:   s.mission_queue   || [],
+        p_last_aldeano_at: s.last_aldeano_at || null
+      });
+    } catch (e) { }
   }
   // Al volver: no hacemos nada — el tick sigue corriendo con cálculo local
 });

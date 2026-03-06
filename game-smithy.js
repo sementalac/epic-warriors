@@ -1,16 +1,28 @@
 // ============================================================
-// EPIC WARRIORS — game-smithy.js  (v1.74 — security patch)
+// EPIC WARRIORS — game-smithy.js  (v1.81)
 // Herrería: mejora de armas y armaduras individuales por tropa.
 // Los niveles se guardan en profiles.weapon_levels / armor_levels.
 // Nivel máximo de mejora: limitado por nivel de la Herrería (máx 15).
 // Bonificación en combate: +1 stat weapon / +1 stat armor por nivel.
 // ============================================================
-// FIX SUMMARY (2 issues → 1 RPC)
+// FIX SUMMARY (2 issues → 1 RPC) [v1.74]
 // [CRÍTICO-1] upgradeSmithyItem: ahora llama upgrade_smithy_secure en vez de:
 //   - descontar recursos en cliente (manipulable en consola)
 //   - dos escrituras no atómicas (profiles + scheduleSave)
 //   - validar nivel herrería desde cliente (manipulable)
 // [MEDIO-2]   nivel herrería validado en servidor dentro de la misma RPC
+// ============================================================
+// FIX SUMMARY (3 issues) [v1.80 — 2 pasadas de auditoría]
+// [CRÍTICO-3] upgradeSmithyItem: null-guard en data antes de data.ok
+// [MEDIO-4]   upgradeSmithyItem: last_updated reseteado tras aplicar new_resources
+// [MENOR-5]   renderSmithy: escapeHtml() en nombres y iconos de tropa/item
+// ============================================================
+// FIX SUMMARY [v1.81]
+// [MENOR-6]   renderSmithy: eliminados todos los onclick inline — reemplazados
+//   por data-attributes (data-troop, data-type) + un único listener de evento
+//   en el contenedor smithyContent. Elimina el falso positivo
+//   Trojan:JS/FakeUpdate.B de Microsoft Defender y es más limpio:
+//   el listener sobrevive re-renders y no depende de globals de string.
 // ============================================================
 
 // ── Nombres y costes multiplicadores por tropa ─────────────
@@ -107,11 +119,15 @@ function smithyCostHtml(cost, res) {
 }
 
 // ── Upgrade ────────────────────────────────────────────────
-// FIX [CRÍTICO-1 + MEDIO-2]: toda la validación y escritura ocurre en
-// upgrade_smithy_secure. El cliente solo calcula el coste para mostrarlo
-// en la UI; el servidor lo verifica de forma independiente.
+// Toda la validación y escritura ocurre en upgrade_smithy_secure.
+// El cliente solo calcula el coste para mostrarlo en la UI;
+// el servidor lo verifica de forma independiente.
 async function upgradeSmithyItem(troopKey, type) {
   if (!activeVillage || !currentUser) return;
+
+  // Validar que troopKey y type son valores conocidos antes de cualquier RPC
+  if (!SMITHY_DATA[troopKey]) return;
+  if (type !== 'weapon' && type !== 'armor') return;
 
   var rd = await loadResearchData();
   var key = type === 'weapon' ? 'weapon_levels' : 'armor_levels';
@@ -138,7 +154,7 @@ async function upgradeSmithyItem(troopKey, type) {
     });
 
     if (error) throw error;
-    if (!data.ok) {
+    if (!data || !data.ok) {
       var msgs = {
         'village_not_found':      'Aldea no encontrada.',
         'herreria_not_built':     'Construye la Herrería primero.',
@@ -147,7 +163,7 @@ async function upgradeSmithyItem(troopKey, type) {
         'insufficient_resources': 'Recursos insuficientes.',
         'invalid_type':           'Tipo inválido.'
       };
-      showNotif(msgs[data.error] || ('Error: ' + data.error), 'err');
+      showNotif((data && msgs[data.error]) || ('Error: ' + (data && data.error)), 'err');
       setSave('error');
       return;
     }
@@ -155,6 +171,9 @@ async function upgradeSmithyItem(troopKey, type) {
     // Aplicar estado devuelto por servidor
     if (data.new_resources) {
       activeVillage.state.resources = data.new_resources;
+      // Resetar last_updated para que calcRes() no acumule producción desde el
+      // timestamp anterior — el servidor ya contabilizó todo hasta este momento.
+      activeVillage.state.last_updated = new Date().toISOString();
     }
 
     // Actualizar cache local de investigación
@@ -162,11 +181,9 @@ async function upgradeSmithyItem(troopKey, type) {
     rd[key][troopKey] = data.new_level;
 
     var d = SMITHY_DATA[troopKey];
-    var icon = d[type].icon;
-    var name = d[type].name;
-    showNotif(icon + ' ' + name + ' → Nv.' + data.new_level + '!', 'ok');
+    showNotif(d[type].icon + ' ' + d[type].name + ' → Nv.' + data.new_level + '!', 'ok');
     setSave('saved');
-    // OPT-D: pasar rd precargado para que renderSmithy no haga otra query a Supabase
+    // Pasar rd precargado para que renderSmithy no haga otra query a Supabase
     renderSmithy(rd);
   } catch (e) {
     setSave('error');
@@ -176,14 +193,18 @@ async function upgradeSmithyItem(troopKey, type) {
 }
 
 // ── Render ─────────────────────────────────────────────────
+// FIX [v1.81]: los botones de mejora ya NO usan onclick inline.
+// En su lugar llevan data-troop y data-type. Un único listener
+// delegado en el contenedor captura todos los clicks — sin
+// interpolación de strings en atributos de evento.
 
 async function renderSmithy(preloadedRd) {
   var box = document.getElementById('smithyContent');
   if (!box) return;
   if (!activeVillage) { box.innerHTML = '<div class="muted">Cargando…</div>'; return; }
 
-  var vs  = activeVillage.state;
-  var res = calcRes(vs);
+  var vs     = activeVillage.state;
+  var res    = calcRes(vs);
   var bldLvl = (vs.buildings['herreria'] && vs.buildings['herreria'].level) || 0;
 
   if (bldLvl === 0) {
@@ -195,7 +216,7 @@ async function renderSmithy(preloadedRd) {
     return;
   }
 
-  var rd = preloadedRd || await loadResearchData();
+  var rd    = preloadedRd || await loadResearchData();
   var wLvls = rd.weapon_levels || {};
   var aLvls = rd.armor_levels  || {};
 
@@ -221,20 +242,20 @@ async function renderSmithy(preloadedRd) {
     + '<span style="color:var(--accent);">🛡️ +armor</span> en combate'
     + '</div></div></div>';
 
-  // Grid
+  // Grid de tropas
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;">';
 
   Object.keys(SMITHY_DATA).forEach(function(tKey) {
-    var d = SMITHY_DATA[tKey];
+    var d     = SMITHY_DATA[tKey];
     var troop = TROOP_TYPES[tKey];
     if (!troop) return;
 
-    var wLvl  = wLvls[tKey] || 0;
-    var aLvl  = aLvls[tKey] || 0;
-    var wNext = wLvl + 1;
-    var aNxt  = aLvl + 1;
-    var wCost = (wLvl < SMITHY_MAX_LEVEL) ? smithyWeaponCost(tKey, wNext) : null;
-    var aCost = (aLvl < SMITHY_MAX_LEVEL) ? smithyArmorCost(tKey, aNxt)  : null;
+    var wLvl    = wLvls[tKey] || 0;
+    var aLvl    = aLvls[tKey] || 0;
+    var wNext   = wLvl + 1;
+    var aNxt    = aLvl + 1;
+    var wCost   = (wLvl < SMITHY_MAX_LEVEL) ? smithyWeaponCost(tKey, wNext) : null;
+    var aCost   = (aLvl < SMITHY_MAX_LEVEL) ? smithyArmorCost(tKey, aNxt)  : null;
     var wLocked = wLvl >= bldLvl && wLvl < SMITHY_MAX_LEVEL;
     var aLocked = aLvl >= bldLvl && aLvl < SMITHY_MAX_LEVEL;
     var wMaxed  = wLvl >= SMITHY_MAX_LEVEL;
@@ -247,38 +268,43 @@ async function renderSmithy(preloadedRd) {
       return '<div style="height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin:4px 0 8px;">'
         + '<div style="height:3px;border-radius:2px;width:' + pct + '%;background:var(--accent2);"></div></div>';
     }
+
+    // FIX [v1.81]: botón con data-troop + data-type en lugar de onclick inline.
+    // El listener delegado en el contenedor lee estos atributos al hacer click.
     function itemBlock(type, itemD, lvl, nextLvl, cost, canBuy, locked, maxed) {
       var col = type === 'weapon' ? 'var(--ok)' : 'var(--accent)';
       var bdr = type === 'weapon' ? 'rgba(79,255,176,.15)' : 'rgba(0,212,255,.12)';
-      var html = '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;">'
-        + '<span style="font-size:.95rem;">' + itemD.icon + '</span>'
-        + '<span style="font-size:.8rem;color:var(--text);margin:0 6px;">' + itemD.name + '</span>'
+      var h = '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;">'
+        + '<span style="font-size:.95rem;">'  + escapeHtml(itemD.icon) + '</span>'
+        + '<span style="font-size:.8rem;color:var(--text);margin:0 6px;">' + escapeHtml(itemD.name) + '</span>'
         + '<span style="font-size:.65rem;color:var(--dim);flex:1;">(+' + lvl + ' ' + type + ')</span>'
         + '<span style="font-size:.7rem;color:' + (maxed ? 'var(--gold)' : col) + ';">Nv.' + lvl + '/' + SMITHY_MAX_LEVEL + '</span></div>';
-      html += bar(lvl);
+      h += bar(lvl);
       if (maxed) {
-        html += '<div style="font-size:.65rem;color:var(--gold);text-align:center;">★ MÁXIMO ALCANZADO</div>';
+        h += '<div style="font-size:.65rem;color:var(--gold);text-align:center;">★ MÁXIMO ALCANZADO</div>';
       } else if (locked) {
-        html += '<div class="muted" style="font-size:.63rem;text-align:center;">🔒 Requiere Herrería Nv.' + nextLvl + '</div>';
+        h += '<div class="muted" style="font-size:.63rem;text-align:center;">🔒 Requiere Herrería Nv.' + nextLvl + '</div>';
       } else if (cost) {
-        html += '<div style="font-size:.62rem;margin-bottom:6px;">' + smithyCostHtml(cost, res) + '</div>';
-        html += '<button onclick="upgradeSmithyItem(\'' + escapeJs(tKey) + '\',\'' + type + '\')"'
+        h += '<div style="font-size:.62rem;margin-bottom:6px;">' + smithyCostHtml(cost, res) + '</div>';
+        h += '<button'
+          + ' data-troop="' + escapeHtml(tKey) + '"'
+          + ' data-type="'  + escapeHtml(type) + '"'
           + ' style="width:100%;padding:5px 0;border-radius:4px;font-family:VT323,monospace;font-size:.82rem;cursor:pointer;'
           + 'background:' + (canBuy ? bdr : 'rgba(255,255,255,.03)') + ';'
           + 'border:1px solid ' + (canBuy ? col : 'var(--border)') + ';'
           + 'color:' + (canBuy ? col : 'var(--dim)') + ';">'
           + '⬆ Mejorar a Nv.' + nextLvl + '</button>';
       }
-      html += '</div>';
-      return html;
+      h += '</div>';
+      return h;
     }
 
     html += '<div class="card" style="padding:14px;">';
     html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">'
-      + '<span style="font-size:1.8rem;">' + troop.icon + '</span>'
+      + '<span style="font-size:1.8rem;">' + escapeHtml(troop.icon) + '</span>'
       + '<div style="flex:1;">'
-      + '<div style="font-size:.88rem;color:var(--accent);font-family:VT323,monospace;">' + troop.name.toUpperCase() + '</div>'
+      + '<div style="font-size:.88rem;color:var(--accent);font-family:VT323,monospace;">' + escapeHtml(troop.name).toUpperCase() + '</div>'
       + '<div class="muted" style="font-size:.6rem;">Ataque base: ' + troop.weapon + ' · Defensa base: ' + troop.armor + '</div>'
       + (d.magical ? '<div style="font-size:.58rem;color:var(--esencia,#c084fc);margin-top:1px;">✨ Tropa mágica — usa Esencia</div>' : '')
       + '</div>'
@@ -294,5 +320,21 @@ async function renderSmithy(preloadedRd) {
   });
 
   html += '</div>';
-  box.innerHTML = html;
+
+  // Escribir el HTML y enganchar el listener delegado.
+  // Se reemplaza el nodo entero para eliminar listeners anteriores
+  // y evitar que se acumulen en re-renders sucesivos.
+  var fresh = box.cloneNode(false);
+  fresh.innerHTML = html;
+  fresh.addEventListener('click', function(e) {
+    var btn = e.target.closest('button[data-troop]');
+    if (!btn) return;
+    var troop = btn.getAttribute('data-troop');
+    var type  = btn.getAttribute('data-type');
+    // Doble validación: solo keys conocidos llegan a la RPC
+    if (troop && type && SMITHY_DATA[troop] && (type === 'weapon' || type === 'armor')) {
+      upgradeSmithyItem(troop, type);
+    }
+  });
+  box.parentNode.replaceChild(fresh, box);
 }

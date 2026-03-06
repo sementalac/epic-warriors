@@ -762,7 +762,16 @@ async function dissolveAlliance() {
   const del = await sbClient.from('alliances').delete().eq('id', _myAllianceId);
   if (del.error) { showNotif('Error: ' + del.error.message, 'err'); return; }
 
-  await sbClient.from('alliance_members').delete().eq('alliance_id', _myAllianceId);
+  // v1.79 Bug-1: segunda DELETE ahora con chequeo — si falla, los miembros quedarían
+  // huérfanos en DB apuntando a una alianza ya eliminada.
+  const delMembers = await sbClient.from('alliance_members').delete().eq('alliance_id', _myAllianceId);
+  if (delMembers.error) {
+    console.error('dissolveAlliance: error borrando miembros:', delMembers.error.message);
+    showNotif('Alianza eliminada pero error al expulsar miembros. Contacta al admin.', 'err');
+    _alUpdateOverview(null, null);
+    await refreshMyAlliance();
+    return;
+  }
 
   showNotif('Alianza disuelta.', 'ok');
   _alUpdateOverview(null, null);
@@ -894,7 +903,7 @@ async function transferLeadership() {
 
 // ---------------- MESSAGES ----------------
 
-const profileCache = {};
+// profileCache declarado en game-globals.js (v1.73) — no redeclarar aquí
 const PROFILE_CACHE_TTL_MS = 10 * 60 * 1000;
 
 async function getProfileInfo(userId) {
@@ -1145,9 +1154,14 @@ function toggleMsgExpand(id) {
   if (btn) btn.textContent = expanded ? '▼' : '▲';
 }
 
+// v1.79 Bug-2: la función marcaba como leído en DB pero NO borraba el mensaje.
+// Al recargar el hilo el mensaje reaparecía (como leído). Nombre engañoso corregido:
+// ahora hace UPDATE read=true + DELETE para eliminar definitivamente.
 async function markMsgAsReadAndDelete(msgId) {
   try {
     await sbClient.from('messages').update({ read: true }).eq('id', msgId);
+    const del = await sbClient.from('messages').delete().eq('id', msgId);
+    if (del.error) throw del.error;
     var row = document.getElementById('msgRow_' + msgId);
     if (row) {
       row.style.transition = 'opacity .3s';
@@ -1299,6 +1313,7 @@ async function loadThreadMessages(threadType) {
 // ============================================================
 
 var currentReportId = null;
+var _selectedReportIds = new Set(); // v1.79 Bug-3: declaración global — antes implícita, fallaba en strict mode
 
 async function loadSystemReports() {
   _selectedReportIds = new Set();

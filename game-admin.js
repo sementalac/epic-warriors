@@ -874,9 +874,17 @@ async function _adminDeleteUserData(userId, username) {
   if (!vills.error && vills.data && vills.data.length > 0) {
     var villIds = vills.data.map(function (v) { return v.id; });
     // v1.49: troops/resources/creatures ya no tienen FK a villages (datos en state jsonb)
-    // Liberar cuevas capturadas por este usuario (marcarlas wild)
-    await sbClient.from('caves').update({ status: 'wild', owner_id: null, village_id: null })
-      .eq('owner_id', userId).then(function () { }).catch(function () { });
+    // v1.78 Bug-4: UPDATE directo a caves reemplazado por RPC admin_clear_cave_guardian
+    // (regla 26 v1.77 — toda escritura en caves debe ir por RPC SECURITY DEFINER).
+    // Obtenemos las cuevas del usuario y llamamos la RPC por cada una.
+    try {
+      var { data: userCaves } = await sbClient.from('caves').select('id').eq('owner_id', userId);
+      if (userCaves && userCaves.length > 0) {
+        for (var cave of userCaves) {
+          await sbClient.rpc('admin_clear_cave_guardian', { p_cave_id: cave.id });
+        }
+      }
+    } catch (caveErr) { /* no crítico — continuar con el borrado */ }
     // Ahora sí borrar aldeas
     await tryDelete('villages', sbClient.from('villages').delete().eq('owner_id', userId));
   }
@@ -1450,10 +1458,6 @@ async function adminLaunchHunt() {
       if (!newOrig) throw new Error('Error al generar la base de invasión.');
       originId = newOrig.id;
 
-      // Marcar como temporal — se persiste en el write de admin_ghost_sync_hunt más abajo
-      var sTmp = typeof newOrig.state === 'string' ? JSON.parse(newOrig.state) : newOrig.state;
-      if (!sTmp) sTmp = {};
-      sTmp.is_temp = true;
     }
 
     // Calcular velocidad y llegada
@@ -1483,6 +1487,16 @@ async function adminLaunchHunt() {
       else if (CREATURE_TYPES[k]) s.creatures[k] = (s.creatures[k] || 0) + troops[k];
     });
 
+    // v1.78 Bug-2: is_temp se marca en s (el state que se va a persistir),
+    // no en sTmp (variable local descartada). Garantiza autodestrucción del punto de invasión.
+    s.is_temp = true;
+
+    // Descontar inmediatamente las tropas (porque se van de misión)
+    Object.keys(troops).forEach(k => {
+      if (TROOP_TYPES[k]) s.troops[k] = Math.max(0, (s.troops[k] || 0) - troops[k]);
+      else if (CREATURE_TYPES[k]) s.creatures[k] = Math.max(0, (s.creatures[k] || 0) - troops[k]);
+    });
+
     // Crear la misión
     var missionEntry = {
       mid: 'hunt_' + Math.random().toString(36).slice(2, 6) + Date.now().toString(36),
@@ -1498,17 +1512,15 @@ async function adminLaunchHunt() {
       origin_village_id: originId // Para rastreo
     };
 
-    // Descontar inmediatamente las tropas (porque se van de misión)
-    Object.keys(troops).forEach(k => {
-      if (TROOP_TYPES[k]) s.troops[k] = Math.max(0, (s.troops[k] || 0) - troops[k]);
-      else if (CREATURE_TYPES[k]) s.creatures[k] = Math.max(0, (s.creatures[k] || 0) - troops[k]);
-    });
+    // v1.78 Bug-1: push ANTES del sync — sin esto el Global Admin Tick
+    // escanea mission_queue y no encuentra la misión → ataque admin nunca se resuelve.
+    s.mission_queue.push(missionEntry);
 
     // v1.62c: Usar RPC SECURITY DEFINER para persistir en aldeas fantasma (bypass RLS)
     var { error: upErr } = await sbClient.rpc('admin_ghost_sync_hunt', {
       p_id: originId,
       p_state: s,
-      p_mission_queue: s.mission_queue || []
+      p_mission_queue: s.mission_queue
     });
 
     // v1.62d: Asegurar que is_temp también se guarde en la columna por si acaso
@@ -1545,14 +1557,17 @@ async function adminFastBuildAll() {
     // o iteramos por las aldeas cargadas (fallback local).
     // Nota: En un entorno real, esto debería ser un comando de servidor.
 
-    var { data: vills, error: vErr } = await sbClient.from('villages').select('id,state');
+    // v1.78 Bug-3: desde v1.64 build_queue es columna separada y se stripea del state jsonb.
+    // Leer state.build_queue siempre devolvía null → count siempre 0 → función inútil.
+    // Fix: select columna 'build_queue' directamente.
+    var { data: vills, error: vErr } = await sbClient.from('villages').select('id,build_queue');
     if (vErr) throw vErr;
 
     var count = 0;
     for (var v of vills) {
-      var s = v.state;
-      if (s && s.build_queue && s.build_queue.id) {
-        var finishAt = s.build_queue.finish_at ? new Date(s.build_queue.finish_at).getTime() : 0;
+      var bq = v.build_queue;
+      if (bq && bq.id) {
+        var finishAt = bq.finish_at ? new Date(bq.finish_at).getTime() : 0;
         if (finishAt <= Date.now()) {
           // v1.68: usa RPC admin_repair_complete_builds (preserva aldeanos, atómico)
           var { data: repaired } = await sbClient.rpc('admin_repair_complete_builds', { p_village_id: v.id });
