@@ -26,6 +26,15 @@
 // [MENOR-10]  resolveSummoningQueue: scheduleSave() tras reembolso local de esencia
 // [COSMÉTICO] resolveTrainingQueue: changed flag ahora activa scheduleSave() si hubo cambios
 // ============================================================
+// FIX SUMMARY v1.82 (bug persistencia F5)
+// [CRÍTICO-11] startRecruitment: faltaba scheduleSave() tras actualizar training_queue en memoria.
+//              El RPC start_training_secure escribe resources+troops en state jsonb pero NO escribe
+//              la columna separada training_queue. Sin scheduleSave(), un F5 inmediato cargaba
+//              training_queue vacía desde DB → tropa perdida + recursos/aldeano ya descontados.
+// [CRÍTICO-12] startSummoning: mismo patrón — faltaba scheduleSave() tras actualizar
+//              summoning_queue. El RPC escribe resources en state pero no la columna
+//              summoning_queue → misma pérdida de datos en F5.
+// ============================================================
 
 function renderTroops() {
   if (!activeVillage) return;
@@ -403,6 +412,10 @@ function startSummoningFromInput(key) {
 // FIX [MENOR-6]: añadido p_amount a la llamada RPC
 // FIX [MEDIO-7]: añadido check newState.ok — sin él, fallo de RPC con {ok:false}
 //               mostraba éxito y aplicaba estado basura
+// FIX [CRÍTICO-12]: añadido scheduleSave() tras actualizar summoning_queue en memoria.
+//   El RPC escribe resources en state jsonb pero NO escribe la columna separada
+//   summoning_queue. Sin scheduleSave(), un F5 inmediato perdía la cola y el invocador
+//   quedaba en estado inconsistente (esencia descontada, cola vacía).
 // v1.66: server-authoritative — valida invocadores, esencia y torre en servidor
 async function startSummoning(key, amount) {
   if (!activeVillage) return;
@@ -432,6 +445,12 @@ async function startSummoning(key, amount) {
     vs.resources       = newState.resources       || vs.resources;
     vs.summoning_queue = newState.summoning_queue  || [];
     vs.last_updated    = newState.last_updated     || vs.last_updated;
+
+    // FIX [CRÍTICO-12]: persistir summoning_queue a columna separada inmediatamente.
+    // El RPC ya guardó resources en state jsonb, pero summoning_queue es columna
+    // independiente que solo se escribe via save_village_client (flushVillage).
+    // Sin este save, un F5 antes del flush automático perdía la cola entera.
+    scheduleSave();
 
     var c = typeof CREATURE_TYPES !== 'undefined' ? CREATURE_TYPES[key] : null;
     showNotif((c ? c.name : key) + (amount > 1 ? ' ×' + amount : '') + ' añadido(s) a la cola de invocación', 'ok');
@@ -502,6 +521,10 @@ function startRecruitmentFromInput(type) {
 
 // v1.66: server-authoritative — valida barracas, recursos y aldeanos en servidor
 // FIX [MEDIO-8]: añadido check newState.ok — sin él, {ok:false} vaciaba training_queue
+// FIX [CRÍTICO-11]: añadido scheduleSave() tras actualizar training_queue en memoria.
+//   El RPC start_training_secure escribe resources+troops en state jsonb pero NO
+//   escribe la columna separada training_queue. Sin scheduleSave(), un F5 antes del
+//   flush automático (2s) perdía la cola, el aldeano y los recursos ya descontados.
 async function startRecruitment(type, amount) {
   if (!activeVillage) return;
   if (!amount || amount <= 0) return;
@@ -531,6 +554,13 @@ async function startRecruitment(type, amount) {
     vs.troops         = newState.troops          || vs.troops;
     vs.training_queue = newState.training_queue  || [];
     vs.last_updated   = newState.last_updated    || vs.last_updated;
+
+    // FIX [CRÍTICO-11]: persistir training_queue a columna separada inmediatamente.
+    // El RPC ya guardó resources+troops en state jsonb, pero training_queue es columna
+    // independiente que solo se escribe via save_village_client (flushVillage).
+    // Sin este save, un F5 antes del flush automático (2s) perdía la cola entera
+    // y dejaba el aldeano descontado sin tropa asociada.
+    scheduleSave();
 
     var stats = getTroopStatsWithLevel(type, 1);
     showNotif(amount + ' ' + (stats ? stats.name : type) + ' en cola de entrenamiento', 'ok');

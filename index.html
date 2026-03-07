@@ -1380,9 +1380,6 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
         if (!s) {
           console.error('[CRÍTICO] La aldea ' + v.id + ' (' + v.name + ') no tiene estado en la DB. Usando valores por defecto temporales (SIN GUARDAR) para evitar reset permanente.', v);
           s = defaultState();
-          // v1.62d: NO guardamos el s = defaultState() en la DB automáticamente.
-          // Esto evita que un error temporal borre la aldea para siempre.
-          // El usuario verá nivel 1, pero si recarga y la DB se arregla, recuperará sus datos.
         }
 
         s.build_queue = v.build_queue || null;
@@ -1412,9 +1409,6 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
 
         var starterBlds = ['aserradero', 'cantera', 'minehierro', 'granja', 'almacen', 'torre', 'barracas'];
         var allBldKeys = typeof BUILDINGS !== 'undefined' ? BUILDINGS.map(function (b) { return b.id; }) : starterBlds;
-        // v1.71: Todos los edificios arrancan en level 1 — igual que defaultState().
-        // Antes los no-starter se inicializaban en 0, causando "recursos insuficientes"
-        // al intentar mejorarlos (el RPC calculaba coste 0→1 con fórmulas incorrectas).
         allBldKeys.forEach(function (k) {
           if (!s.buildings[k]) {
             s.buildings[k] = { level: 1 };
@@ -1520,7 +1514,6 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
       showNotif('Fundando primera colonia...', 'ok');
 
       // v1.71: RPC atómica — búsqueda de coordenadas + INSERT en una sola transacción.
-      // Antes: 100 queries individuales + INSERT directo → race condition entre jugadores.
       const { data: res, error: err } = await sbClient.rpc('create_first_village_secure', {
         p_user_id: currentUser.id,
         p_name: 'Aldea 1'
@@ -1544,14 +1537,11 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
       snapshotResources(v.state);
 
       const s = v.state;
-      // v1.65: Validación de integridad del estado para evitar pérdidas de datos
       if (!s || !s.buildings || !s.resources || !s.troops) {
         console.error('CRITICAL: Intento de guardado de estado corrupto abortado.', v);
         return;
       }
 
-      // v1.65: troops.aldeano y resources son autoridad del servidor (secure_village_tick).
-      // El cliente ya NO escribe esos campos. Solo persiste campos seguros via RPC.
       s.last_updated = new Date().toISOString();
 
       var { error } = await sbClient.rpc('save_village_client', {
@@ -1841,18 +1831,18 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
           (async function () {
             try {
               var now2 = Date.now();
-              // Buscar todas las misiones admin pendientes en cualquier aldea que NO sea del jugador actual
+              // v1.82 fix: sin 'state' (campo pesado innecesario) + filtro admin_test en servidor
+              // Solo devuelve aldeas que tengan al menos una misión con admin_test:true
               var { data: gVills } = await sbClient
                 .from('villages')
-                .select('id, name, cx, cy, state, mission_queue')
+                .select('id, name, cx, cy, mission_queue')
                 .neq('owner_id', currentUser.id)
-                .neq('mission_queue', '[]');
+                .filter('mission_queue', 'cs', '[{"admin_test":true}]');
 
               for (var gv of (gVills || [])) {
                 var mq = Array.isArray(gv.mission_queue) ? gv.mission_queue : [];
-                // Identificamos como temporal si tiene el flag JSON, la columna DB, o el nombre característico
-                var gs = typeof gv.state === 'string' ? JSON.parse(gv.state) : gv.state;
-                var isTemp = (gs && gs.is_temp) || (gv.name === 'Punto de Invasión Admin');
+                // is_temp ya no necesita state — las aldeas temporales siempre llevan este nombre
+                var isTemp = (gv.name === 'Punto de Invasión Admin');
 
                 var toProcess = mq.filter(function (m2) {
                   return m2.admin_test && m2.finish_at && new Date(m2.finish_at).getTime() <= now2;
@@ -1866,9 +1856,6 @@ if (typeof resetUiAnimation === 'function') resetUiAnimation();
     await executeAttackPvP(hm);
   } catch (he) { console.error('Hunt mission error:', he); }
 
-  // v1.72: RPC atómica — antes escribía mission_queue y borraba aldea
-  // con .update()/.delete() directos sin validación server-side.
-  // Ahora el servidor gestiona queue + autodestrucción + notificación al defensor.
   try {
     await sbClient.rpc('admin_finalize_hunt_mission', {
       p_attacker_village_id: gv.id,
@@ -1922,7 +1909,6 @@ if (isTemp) {
 
       var nowMs = Date.now();
       // v1.71: Sincronización periódica 60s con el servidor (recursos reales)
-      // _lastResourceSync estaba declarado pero nunca se comprobaba dentro del tick.
       if (nowMs - _lastResourceSync > 60000) {
         _lastResourceSync = nowMs;
         syncVillageResourcesFromServer && syncVillageResourcesFromServer().catch(function (e) {
@@ -1934,7 +1920,6 @@ if (isTemp) {
         renderReinforcementsPanel();
       }
       // v1.82: fix — _lastSeenUpdate y _lastOnlineCheck declarados en game-globals.js
-      // pero nunca usados en tick → online count congelado durante la sesión
       if (nowMs - _lastSeenUpdate > 60000) {
         _lastSeenUpdate = nowMs;
         updateLastSeen();
@@ -2014,8 +1999,7 @@ if (isTemp) {
         if (myCoords.length === 0) return;
 
         // v1.76: RPC get_incoming_attacks — filtra en servidor, devuelve solo ataques
-        // que apuntan a nuestras coordenadas. Evita descargar mission_queue de todas
-        // las aldeas del mundo (query O(n·jugadores) → O(ataques entrantes)).
+        // que apuntan a nuestras coordenadas.
         var { data, error } = await sbClient.rpc('get_incoming_attacks', {
           p_coords: myCoords
         });

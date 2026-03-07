@@ -6,9 +6,11 @@
 //   Fórmula ETA: dist / speed * 3600 segundos
 //   Ejemplos: speed 60 = 1 cas/min | speed 200 = 18s/casilla
 //
-// v1.82 — Reequilibrio de costes y capacidades:
-//   • almacenCapForLevel: capacity(L) = phasedVal(L,500,...) × 1.20
-//     Garantiza que almacén lleno siempre cubre su propia siguiente mejora.
+// v1.83 — Fix capacidad almacén:
+//   • almacenCapForLevel: capacity(L) = phasedVal(L+1, 500,...) × 1.20
+//     El almacén de nivel L tiene la capacidad del nivel L+1 anterior,
+//     garantizando que siempre puedes pagar la siguiente mejora.
+//     Nv.1: 2.400 cap (coste nv.2 = 2.000) ✓  |  Nv.2: 4.800 (coste nv.3 = 4.000) ✓
 //   • getBarracksCapacity: nueva curva 3 fases (100→5k→50k→5M en nv.50)
 //   • Costes de edificios reequilibrados por jerarquía:
 //       CARO   (85% almacén) base_max=425: muralla, lab, torreinvocacion
@@ -760,7 +762,7 @@ const BUILDINGS = [
 
   {
     // REFERENCIA — base_max=500 (madera=piedra), hierro/madera=0.50
-    // capacity(L) = phasedVal(L, 500, ...) × 1.20  — ver almacenCapForLevel
+    // capacity(L) = phasedVal(L+1, 500, ...) × 1.20  — ver almacenCapForLevel (v1.83 fix)
     id: 'almacen', name: 'Almacén', icon: '🏛️',
     desc: 'Aumenta la capacidad máxima de madera, piedra, hierro y provisiones.',
     prod: function () { return {}; },
@@ -1009,13 +1011,16 @@ function getAldeanosIntervalMs(blds) {
 // El servidor es la autoridad (secure_village_tick).
 // El contador visual se actualiza desde syncVillageResourcesFromServer cada 60s.
 
-// v1.82 — Nueva fórmula: capacity(L) = phasedVal(L, 500, 2, 10, 1.3, 30, 1.05) × 1.20
-// Garantiza que el almacén lleno siempre puede costear su propia siguiente mejora (+20% margen).
-// Como la base 500 es la más alta de todos los edificios, también cubre cualquier otro edificio
-// del mismo nivel. ACTUALIZAR TAMBIÉN: secure_village_tick y start_build_secure en Supabase.
+// v1.83 fix — capacity(L) = phasedVal(L+1, 500, 2, 10, 1.3, 30, 1.05) × 1.20
+// Usando L+1 en phasedVal, el almacén de nivel L tiene ya la capacidad que antes
+// correspondía al nivel L+1, garantizando que siempre puedes costear tu propia
+// siguiente mejora sin necesidad de acumular recursos de otro edificio primero.
+//   Nv.1: cap=2.400  (cubre coste nv.2: 2.000 madera/piedra) ✓
+//   Nv.2: cap=4.800  (cubre coste nv.3: 4.000 madera/piedra) ✓
+// ACTUALIZAR TAMBIÉN: secure_village_tick y start_build_secure en Supabase.
 function almacenCapForLevel(l) {
   if (l <= 0) return 0;
-  return Math.floor(phasedVal(l, 500, 2, 10, 1.3, 30, 1.05) * 1.20);
+  return Math.floor(phasedVal(l + 1, 500, 2, 10, 1.3, 30, 1.05) * 1.20);
 }
 
 function getCapacity(blds) {

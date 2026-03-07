@@ -45,8 +45,10 @@ async function startBuild(id) {
 
     var def = BUILDINGS.find(function (b) { return b.id === id; });
     var lvl = (vs.buildings[id] && vs.buildings[id].level) || 0;
-    showNotif('Construyendo ' + (def ? def.name : id) + ' nivel ' + (lvl + 1) + '...', 'ok');
+    // DESPUÉS:
+    showNotif('Construyendo ' + ...);
     setSave('saved');
+    await flushVillage(); // v1.82: persiste build_queue inmediatamente
     tick();
     renderBuildings(calcRes(activeVillage.state));
     renderQueue(activeVillage.state);
@@ -76,8 +78,10 @@ async function cancelBuild() {
       activeVillage.state.build_queue  = null; // v1.76: mover aquí — solo limpiar si el servidor confirmó
     }
 
+    // DESPUÉS:
     showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
     setSave('saved');
+    await flushVillage(); // v1.82: persiste build_queue=null inmediatamente
     tick();
     renderBuildings(calcRes(activeVillage.state));
     renderQueue(activeVillage.state);
