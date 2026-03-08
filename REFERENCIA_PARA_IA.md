@@ -1,4 +1,13 @@
-# REFERENCIA PARA IA — Epic Warriors v1.74
+### v1.88 — Reglas de Seguridad SQL y Robustez Extrema
+- **[REGLA - SEGURIDAD SQL]** "Nombres Intocables": Toda variable local en funciones PL/pgSQL DEBE llevar el prefijo `v_` (ej. `v_state`, `v_madera`) para evitar colisiones con nombres de columnas (error `ambiguous column reference`).
+- **[REGLA - SEGURIDAD SQL]** "Simulación Dry Run": Antes de aplicar cambios en producción que afecten a recursos o progreso, proporcionar un script de `SELECT` que simule el resultado.
+- **[REGLA - SEGURIDAD SQL]** "Cambios Atómicos": Preferir la actualización de funciones individuales sobre paquetes masivos para facilitar la depuración.
+- **[REGLA - OCUPACIÓN]** "Tropas vs Criaturas": Todas las unidades en la pestaña "Tropas" (aldeanos, soldados, magos, druidas, exploradores, asesinos, paladines, chamanes e invocadores) ocupan 1 plaza en barracas por defecto.
+- **[REGLA - OCUPACIÓN]** "Criaturas Infinitas": Las criaturas invocadas NO ocupan espacio en barracas y no tienen límite de población. Tampoco consumen provisiones al estar en la aldea.
+- **[REGLA]** Cero `FLOOR()` en cálculos intermedios de SQL: `cur_madera := LEAST(cap, COALESCE(res->>'madera', 0) + prod * hrs)`. El redondeo solo al final del UPDATE.
+- **[REGLA]** `save_village_client` es autoritativa: Resuelve colas usando `NOW()` del servidor.
+- **[REGLA]** `last_aldeano_at` es sagrado: Si el servidor lo actualiza, debe devolverlo al cliente en el JSON para que la barra de progreso no salte.
+
 
 ---
 

@@ -613,6 +613,7 @@ async function cancelSummoningQueue() {
   vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
 
   showNotif('Cola cancelada. +' + fmt(data.refunded_esencia || 0) + ' ✨ esencia devuelta.', 'ok');
+  await flushVillage(); // v1.82: persiste summoning_queue=[] inmediatamente
   // Bug-12 fix: resync completo igual que cancelMission/cancelAlliedMission
   await loadMyVillages();
   tick();
@@ -659,9 +660,9 @@ async function startSummoning(creatureType, amount) {
   if (!amount || amount < 1) amount = 1;
 
   const { data, error } = await sbClient.rpc('start_summoning_secure', {
-    p_village_id:    activeVillage.id,
-    p_creature_key:  creatureType,
-    p_amount:        amount
+    p_village_id: activeVillage.id,
+    p_creature_key: creatureType,
+    p_amount: amount
   });
 
   if (error) {

@@ -1,5 +1,5 @@
 # EPIC WARRIORS — ESTADO DEL PROYECTO v1.82
-*Última actualización: sesión v1.82*
+*Última actualización: sesión v1.82 ronda 2*
 
 ---
 
@@ -11,9 +11,9 @@
 ---
 
 ## PROBLEMA RAÍZ RESUELTO EN v1.82
-**Síntoma:** Si el jugador pulsaba F5 inmediatamente después de construir/entrenar/mover, la acción se perdía.
+**Síntoma:** Si el jugador pulsaba F5 inmediatamente después de construir/entrenar/invocar/mejorar herrería, la acción se perdía.
 
-**Causa:** Las funciones que llaman RPCs de servidor (`startBuild`, `cancelBuild`, `startRecruitment`, `startSummoning`) actualizaban el estado local y llamaban `setSave('saved')`, pero NO llamaban `flushVillage()` inmediatamente. La columna `build_queue` (y `training_queue`) en Supabase no se escribía hasta el siguiente auto-save debounced.
+**Causa:** Las funciones que llaman RPCs de servidor actualizaban el estado local y llamaban `setSave('saved')` o `scheduleSave()`, pero NO llamaban `flushVillage()` inmediatamente. La columna separada (build_queue, training_queue, summoning_queue) en Supabase no se escribía hasta el siguiente auto-save debounced (2s).
 
 **Solución:** Añadir `await flushVillage()` justo después de `setSave('saved')` en cada una de estas funciones.
 
@@ -25,37 +25,34 @@
 
 | Función | Fix | Estado |
 |---|---|---|
-| `startBuild` | Añadir `showNotif(...)` correcto + `await flushVillage()` | ✅ Aplicado y verificado |
-| `cancelBuild` | Añadir `await flushVillage()` tras `setSave('saved')` | ✅ Aplicado y verificado |
-
-**Código correcto en startBuild (líneas ~48-53):**
-```js
-showNotif('Construyendo ' + (def ? def.name : id) + ' nivel ' + (lvl + 1) + '...', 'ok');
-setSave('saved');
-await flushVillage(); // v1.82: persiste build_queue inmediatamente
-tick();
-renderBuildings(calcRes(activeVillage.state));
-renderQueue(activeVillage.state);
-```
-
-**Código correcto en cancelBuild:**
-```js
-showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
-setSave('saved');
-await flushVillage(); // v1.82: persiste build_queue=null inmediatamente
-tick();
-renderBuildings(calcRes(activeVillage.state));
-renderQueue(activeVillage.state);
-```
+| `startBuild` | `await flushVillage()` tras `setSave('saved')` | ✅ Ronda 1 |
+| `cancelBuild` | `await flushVillage()` tras `setSave('saved')` | ✅ Ronda 1 |
 
 ---
 
-### ⏳ game-troops.js — PENDIENTE
+### ✅ game-troops.js — COMPLETADO
 
-| Función | Fix necesario | Estado |
+| Función | Fix | Estado |
 |---|---|---|
-| `startRecruitment` | Añadir `await flushVillage()` tras `setSave('saved')` | ❌ Pendiente |
-| `startSummoning` | Añadir `await flushVillage()` tras `setSave('saved')` | ❌ Pendiente |
+| `startRecruitment` | `scheduleSave()` → `await flushVillage()` | ✅ Ronda 2 |
+| `startSummoning` | `scheduleSave()` → `await flushVillage()` | ✅ Ronda 2 |
+| `cancelTrainingQueue` | `await flushVillage()` añadido tras `setSave('saved')` | ✅ Ronda 2 |
+
+---
+
+### ✅ game-smithy.js — COMPLETADO
+
+| Función | Fix | Estado |
+|---|---|---|
+| `upgradeSmithyItem` | `await flushVillage()` añadido tras `setSave('saved')` | ✅ Ronda 2 |
+
+---
+
+### ✅ game-combat.js — COMPLETADO
+
+| Función | Fix | Estado |
+|---|---|---|
+| `cancelSummoningQueue` | `await flushVillage()` añadido antes de `loadMyVillages()` | ✅ Ronda 2 |
 
 ---
 
@@ -63,7 +60,10 @@ renderQueue(activeVillage.state);
 - `executeMoveClick` → `await flushVillage()` ✅
 - `executeTransportClick` → `await flushVillage()` ✅
 - `confirmMoveGuestTroops` → `await flushVillage()` ✅
-- `foundVillage` → `flushVillage()` (no-await, aceptable) ✅
+- `foundVillage` → `flushVillage()` ✅
+- `startMission` → `await flushVillage()` ✅
+- `launchCaveAttack` → `await flushVillage()` ✅
+- `saveRefugio` → `flushVillage()` ✅
 
 ---
 
@@ -80,4 +80,6 @@ renderQueue(activeVillage.state);
 1. RPC al servidor (start_build_secure, etc.)
 2. Aplicar newState al estado local
 3. setSave('saved')
-4. await
+4. await flushVillage()  ← PERSISTENCIA INMEDIATA
+5. tick() + render
+```

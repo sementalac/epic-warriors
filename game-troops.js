@@ -428,9 +428,9 @@ async function startSummoning(key, amount) {
     // calcula v_hrs≈0 y ve recursos viejos del DB → falso «Recursos insuficientes».
     // start_summoning_secure tiene cálculo inline propio (DT-01 v1.70), no lo necesita.
     var { data: newState, error } = await sbClient.rpc('start_summoning_secure', {
-      p_village_id:   activeVillage.id,
+      p_village_id: activeVillage.id,
       p_creature_key: key,
-      p_amount:       amount   // FIX: antes faltaba este parámetro
+      p_amount: amount   // FIX: antes faltaba este parámetro
     });
     if (error) throw error;
 
@@ -442,15 +442,15 @@ async function startSummoning(key, amount) {
     }
 
     var vs = activeVillage.state;
-    vs.resources       = newState.resources       || vs.resources;
-    vs.summoning_queue = newState.summoning_queue  || [];
-    vs.last_updated    = newState.last_updated     || vs.last_updated;
+    vs.resources = newState.resources || vs.resources;
+    vs.summoning_queue = newState.summoning_queue || [];
+    vs.last_updated = newState.last_updated || vs.last_updated;
 
-    // FIX [CRÍTICO-12]: persistir summoning_queue a columna separada inmediatamente.
+    // v1.82: persistir summoning_queue a columna separada inmediatamente.
     // El RPC ya guardó resources en state jsonb, pero summoning_queue es columna
     // independiente que solo se escribe via save_village_client (flushVillage).
-    // Sin este save, un F5 antes del flush automático perdía la cola entera.
-    scheduleSave();
+    // Sin flushVillage(), un F5 antes del auto-save perdía la cola entera.
+    await flushVillage();
 
     var c = typeof CREATURE_TYPES !== 'undefined' ? CREATURE_TYPES[key] : null;
     showNotif((c ? c.name : key) + (amount > 1 ? ' ×' + amount : '') + ' añadido(s) a la cola de invocación', 'ok');
@@ -538,7 +538,7 @@ async function startRecruitment(type, amount) {
     var { data: newState, error } = await sbClient.rpc('start_training_secure', {
       p_village_id: activeVillage.id,
       p_troop_type: type,
-      p_amount:     amount
+      p_amount: amount
     });
     if (error) throw error;
 
@@ -550,17 +550,17 @@ async function startRecruitment(type, amount) {
     }
 
     var vs = activeVillage.state;
-    vs.resources      = newState.resources      || vs.resources;
-    vs.troops         = newState.troops          || vs.troops;
-    vs.training_queue = newState.training_queue  || [];
-    vs.last_updated   = newState.last_updated    || vs.last_updated;
+    vs.resources = newState.resources || vs.resources;
+    vs.troops = newState.troops || vs.troops;
+    vs.training_queue = newState.training_queue || [];
+    vs.last_updated = newState.last_updated || vs.last_updated;
 
-    // FIX [CRÍTICO-11]: persistir training_queue a columna separada inmediatamente.
+    // v1.82: persistir training_queue a columna separada inmediatamente.
     // El RPC ya guardó resources+troops en state jsonb, pero training_queue es columna
     // independiente que solo se escribe via save_village_client (flushVillage).
-    // Sin este save, un F5 antes del flush automático (2s) perdía la cola entera
+    // Sin flushVillage(), un F5 antes del auto-save perdía la cola entera
     // y dejaba el aldeano descontado sin tropa asociada.
-    scheduleSave();
+    await flushVillage();
 
     var stats = getTroopStatsWithLevel(type, 1);
     showNotif(amount + ' ' + (stats ? stats.name : type) + ' en cola de entrenamiento', 'ok');
@@ -598,13 +598,14 @@ async function cancelTrainingQueue() {
       return;
     }
 
-    vs.resources      = newState.resources   || vs.resources;
-    vs.troops         = newState.troops       || vs.troops;
-    vs.last_updated   = newState.last_updated || vs.last_updated;
+    vs.resources = newState.resources || vs.resources;
+    vs.troops = newState.troops || vs.troops;
+    vs.last_updated = newState.last_updated || vs.last_updated;
     vs.training_queue = [];
 
     showNotif('Cola cancelada. Recursos y aldeanos devueltos.', 'ok');
     setSave('saved');
+    await flushVillage(); // v1.82: persiste training_queue=[] inmediatamente
     tick();
     renderTroops();
     renderTrainingQueue();

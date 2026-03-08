@@ -692,7 +692,7 @@ const BUILDINGS = [
       if (l === 0) return { madera: 0, piedra: 0 };
       return {
         madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        piedra: Math.floor(phasedVal(l, 74,  2, 10, 1.3, 30, 1.05))
+        piedra: Math.floor(phasedVal(l, 74, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 15, 1.6, 10, 1.2, 30, 1.05))); }
@@ -723,7 +723,7 @@ const BUILDINGS = [
       return {
         madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
         piedra: Math.floor(phasedVal(l, 240, 2, 10, 1.3, 30, 1.05)),
-        hierro: Math.floor(phasedVal(l, 88,  2, 10, 1.3, 30, 1.05))
+        hierro: Math.floor(phasedVal(l, 88, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(10, phasedVal(l, 18, 1.6, 10, 1.2, 30, 1.05))); }
@@ -752,9 +752,9 @@ const BUILDINGS = [
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera:  Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        piedra:  Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
-        esencia: Math.floor(phasedVal(l, 65,  2, 10, 1.3, 30, 1.05))
+        madera: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 300, 2, 10, 1.3, 30, 1.05)),
+        esencia: Math.floor(phasedVal(l, 65, 2, 10, 1.3, 30, 1.05))
       };
     },
     time: function (l) { return l === 0 ? 0 : Math.floor(Math.max(20, phasedVal(l, 30, 1.6, 10, 1.2, 30, 1.05))); }
@@ -832,8 +832,8 @@ const BUILDINGS = [
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera:  Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
-        piedra:  Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
+        madera: Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
         esencia: Math.floor(phasedVal(l, 101, 2, 10, 1.3, 30, 1.05))
       };
     },
@@ -879,8 +879,8 @@ const BUILDINGS = [
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, esencia: 0 };
       return {
-        madera:  Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
-        piedra:  Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
+        madera: Math.floor(phasedVal(l, 283, 2, 10, 1.3, 30, 1.05)),
+        piedra: Math.floor(phasedVal(l, 425, 2, 10, 1.3, 30, 1.05)),
         esencia: Math.floor(phasedVal(l, 141, 2, 10, 1.3, 30, 1.05))
       };
     },
@@ -933,15 +933,9 @@ function getCuartelesReduction(blds) {
 function getBarracksCapacity(blds) {
   var lvl = (blds && blds['barracas'] && blds['barracas'].level) || 0;
   if (lvl <= 0) return 0;
-  var base = 100;
-  var m1 = Math.pow(50, 1 / 10);
-  var m2 = Math.pow(10, 1 / 10);
-  var m3 = Math.pow(10, 1 / 15);
-  if (lvl <= 10) return Math.round(base * Math.pow(m1, lvl));
-  var v10 = base * Math.pow(m1, 10);
-  if (lvl <= 20) return Math.round(v10 * Math.pow(m2, lvl - 10));
-  var v20 = v10 * Math.pow(m2, 10);
-  return Math.round(v20 * Math.pow(m3, lvl - 20));
+  // v1.84 Robust: 100 base, crece un 40% por nivel (Estilo OGame/Ikariam)
+  // Nv1: 100, Nv2: 140, Nv3: 196, Nv4: 274, Nv5: 384... Nv10: 2066
+  return Math.floor(100 * Math.pow(1.4, lvl - 1));
 }
 
 function getBarracksUsed(vs) {
@@ -1001,10 +995,10 @@ function getAldeanosProd(blds) {
 function getAldeanosIntervalMs(blds) {
   var lvl = (blds && blds['reclutamiento'] && blds['reclutamiento'].level) || 0;
   if (lvl === 0) return Infinity;
-  var baseMin = 10;
-  var mins = baseMin * (1 - 0.01 * lvl);
-  mins = Math.max(1, mins);
-  return Math.round(mins * 60 * 1000);
+  // v1.84 Robust: 10 minutos base, se divide por el nivel (Estilo OGame)
+  // Nv1: 10 min, Nv2: 5 min, Nv5: 2 min, Nv10: 1 min...
+  var baseMs = 600000;
+  return Math.round(baseMs / lvl);
 }
 
 // v1.71: calcAndApplyAldeanos eliminada — era código muerto.

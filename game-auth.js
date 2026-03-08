@@ -507,9 +507,10 @@ window.addEventListener('beforeunload', function () {
       var s = activeVillage.state;
       // Usar la RPC segura en lugar de update directo
       sbClient.rpc('save_village_client', {
-        p_village_id:      activeVillage.id,
-        p_build_queue:     s.build_queue     || [],
-        p_mission_queue:   s.mission_queue   || [],
+        p_village_id: activeVillage.id,
+        // FIX: build_queue debe ser null si está vacío, nunca [] (Array) para evitar errores "fantasma" SQL
+        p_build_queue: s.build_queue || null,
+        p_mission_queue: s.mission_queue || [],
         p_last_aldeano_at: s.last_aldeano_at || null
       });
       // Fire-and-forget intencional: beforeunload no puede awaitar
@@ -537,9 +538,10 @@ document.addEventListener('visibilitychange', function () {
       var s = activeVillage.state;
       // Fire-and-forget intencional: visibilitychange no puede awaitar
       sbClient.rpc('save_village_client', {
-        p_village_id:      activeVillage.id,
-        p_build_queue:     s.build_queue     || [],
-        p_mission_queue:   s.mission_queue   || [],
+        p_village_id: activeVillage.id,
+        // FIX: build_queue debe ser null si está vacío, nunca [] (Array) para evitar errores "fantasma" SQL
+        p_build_queue: s.build_queue || null,
+        p_mission_queue: s.mission_queue || [],
         p_last_aldeano_at: s.last_aldeano_at || null
       });
     } catch (e) { }

@@ -13,7 +13,8 @@
 async function startBuild(id) {
   if (!activeVillage) return;
   var vs = activeVillage.state;
-  if (vs.build_queue) { showNotif('Ya hay una construccion en curso.', 'err'); return; }
+  // v1.89: guardia robusta — solo bloquear si hay un edificio real en cola (con .id)
+  if (vs.build_queue && vs.build_queue.id) { showNotif('Ya hay una construccion en curso.', 'err'); return; }
 
   setSave('saving');
   try {
@@ -24,7 +25,7 @@ async function startBuild(id) {
     // La RPC ya tiene cálculo inline propio (DT-01 v1.70): lee el last_updated que el
     // servidor escribió de forma consistente junto con los recursos → correcto sin flush.
     var { data: newState, error } = await sbClient.rpc('start_build_secure', {
-      p_village_id:  activeVillage.id,
+      p_village_id: activeVillage.id,
       p_building_id: id
     });
     if (error) throw error;
@@ -38,15 +39,14 @@ async function startBuild(id) {
 
     if (newState) {
       // v1.70: start_at viene del servidor incluido en build_queue
-      activeVillage.state.resources    = newState.resources    || vs.resources;
-      activeVillage.state.build_queue  = newState.build_queue  || null;
+      activeVillage.state.resources = newState.resources || vs.resources;
+      activeVillage.state.build_queue = newState.build_queue || null;
       activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
     }
 
     var def = BUILDINGS.find(function (b) { return b.id === id; });
     var lvl = (vs.buildings[id] && vs.buildings[id].level) || 0;
-    // DESPUÉS:
-    showNotif('Construyendo ' + ...);
+    showNotif('Construyendo ' + (def ? def.name : id) + ' nivel ' + (lvl + 1) + '...', 'ok');
     setSave('saved');
     await flushVillage(); // v1.82: persiste build_queue inmediatamente
     tick();
@@ -73,12 +73,11 @@ async function cancelBuild() {
     if (error) throw error;
 
     if (newState) {
-      activeVillage.state.resources    = newState.resources    || vs.resources;
+      activeVillage.state.resources = newState.resources || vs.resources;
       activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
-      activeVillage.state.build_queue  = null; // v1.76: mover aquí — solo limpiar si el servidor confirmó
+      activeVillage.state.build_queue = null; // v1.76: mover aquí — solo limpiar si el servidor confirmó
     }
 
-    // DESPUÉS:
     showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
     setSave('saved');
     await flushVillage(); // v1.82: persiste build_queue=null inmediatamente
@@ -296,43 +295,87 @@ function showMissionTroops(missionRef) {
 // Las misiones van a su propio panel (movItems/movItemsOv)
 // ============================================================
 function renderQueue(vs) {
-  // ── 1. CONSTRUCCIÓN → contenedores qItems / qItemsOv ──────
   var ids = ['qItems', 'qItemsOv'];
   ids.forEach(function (elId) {
     var el = document.getElementById(elId);
     if (!el) return;
     var emId = elId === 'qItems' ? 'qEmpty' : 'qEmptyOv';
     var em = document.getElementById(emId);
-    if (!vs.build_queue) {
+
+    var html = '';
+    var now = Date.now();
+
+    // 1. EDIFICIOS
+    if (vs.build_queue && typeof vs.build_queue === 'object' && vs.build_queue.id) {
+      var q = vs.build_queue;
+      var def = BUILDINGS.find(function (b) { return b.id === q.id; });
+      var finish = new Date(q.finish_at).getTime();
+      var tl = Math.max(0, Math.ceil((finish - now) / 1000));
+      var lvl = ((vs.buildings[q.id] && vs.buildings[q.id].level) || 0);
+      var total;
+      if (q.start_at) {
+        total = Math.max(1, (finish - new Date(q.start_at).getTime()) / 1000);
+      } else {
+        total = def ? def.time(lvl + 1) : 60;
+      }
+      var pct = Math.min(100, Math.max(0, Math.round(((total - tl) / total) * 100)));
+      var icon = def ? def.icon : '🏗️';
+
+      html += '<div class="queue-item" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        + '<div class="queue-icon">' + icon + '</div>'
+        + '<div class="queue-info" style="flex:1;">'
+        + '<div class="queue-name">' + (def ? def.name : q.id) + ' -> Nivel ' + (lvl + 1) + '</div>'
+        + '<div class="queue-time">' + fmtTime(tl) + ' restantes</div>'
+        + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div>'
+        + '<button onclick="cancelBuild()" style="background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.3);color:#ff6b6b;border-radius:4px;padding:2px 6px;font-size:.65rem;cursor:pointer;flex-shrink:0;">✕</button>'
+        + '</div>';
+    }
+
+    // 2. TROPAS (Solo en Overview)
+    if (elId === 'qItemsOv' && Array.isArray(vs.training_queue) && vs.training_queue.length > 0) {
+      var t = vs.training_queue[0];
+      var ts = TROOP_TYPES[t.type];
+      var tFinish = new Date(t.finish_at).getTime();
+      var tStart = new Date(t.start_at).getTime();
+      var tTl = Math.max(0, Math.ceil((tFinish - now) / 1000));
+      var tTotal = Math.max(1, (tFinish - tStart) / 1000);
+      var tPct = Math.min(100, Math.round(((tTotal - tTl) / tTotal) * 100));
+
+      html += '<div class="queue-item" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;border-left:2px solid var(--accent);padding-left:6px;">'
+        + '<div class="queue-icon">' + (ts ? ts.icon : '⚔️') + '</div>'
+        + '<div class="queue-info" style="flex:1;">'
+        + '<div class="queue-name">' + (ts ? ts.name : t.type) + ' (' + vs.training_queue.length + ' en cola)</div>'
+        + '<div class="queue-time">' + fmtTime(tTl) + ' restantes</div>'
+        + '<div class="qbar"><div class="qbar-fill" style="width:' + tPct + '%;background:var(--accent);"></div></div></div>'
+        + '</div>';
+    }
+
+    // 3. CRIATURAS (Solo en Overview)
+    if (elId === 'qItemsOv' && Array.isArray(vs.summoning_queue) && vs.summoning_queue.length > 0) {
+      var s = vs.summoning_queue[0];
+      var cd = CREATURE_TYPES[s.creature];
+      var sFinish = new Date(s.finish_at).getTime();
+      var sStart = new Date(s.start_at).getTime();
+      var sTl = Math.max(0, Math.ceil((sFinish - now) / 1000));
+      var sTotal = Math.max(1, (sFinish - sStart) / 1000);
+      var sPct = Math.min(100, Math.round(((sTotal - sTl) / sTotal) * 100));
+
+      html += '<div class="queue-item" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;border-left:2px solid var(--esencia);padding-left:6px;">'
+        + '<div class="queue-icon">' + (cd ? cd.icon : '🐉') + '</div>'
+        + '<div class="queue-info" style="flex:1;">'
+        + '<div class="queue-name">' + (cd ? cd.name : s.creature) + ' (' + vs.summoning_queue.length + ' en cola)</div>'
+        + '<div class="queue-time">' + fmtTime(sTl) + ' restantes</div>'
+        + '<div class="qbar"><div class="qbar-fill" style="width:' + sPct + '%;background:var(--esencia);"></div></div></div>'
+        + '</div>';
+    }
+
+    if (!html) {
       if (em) em.style.display = 'block';
       el.innerHTML = '';
-      return;
-    }
-    if (em) em.style.display = 'none';
-    var q = vs.build_queue;
-    var def = BUILDINGS.find(function (b) { return b.id === q.id; });
-    var finish = new Date(q.finish_at).getTime();
-    var tl = Math.max(0, Math.ceil((finish - Date.now()) / 1000));
-    var lvl = ((vs.buildings[q.id] && vs.buildings[q.id].level) || 0);
-    // v1.70: calcular duración total desde start_at→finish_at (evita dep. en def.time)
-    // Fallback: def.time(lvl+1) si no hay start_at (build cargada desde DB sin start_at)
-    var total;
-    if (q.start_at) {
-      total = Math.max(1, (finish - new Date(q.start_at).getTime()) / 1000);
     } else {
-      total = def ? def.time(lvl + 1) : 60;
-      if (!total || total <= 0) total = 60;
+      if (em) em.style.display = 'none';
+      el.innerHTML = html;
     }
-    var pct = Math.min(100, Math.max(0, Math.round(((total - tl) / total) * 100)));
-    var icon = def ? def.icon : '🏗️';
-    el.innerHTML = '<div class="queue-item" style="display:flex;align-items:center;gap:8px;">'
-      + '<div class="queue-icon">' + icon + '</div>'
-      + '<div class="queue-info" style="flex:1;">'
-      + '<div class="queue-name">' + (def ? def.name : q.id) + ' -> Nivel ' + (lvl + 1) + '</div>'
-      + '<div class="queue-time">' + tl + 's restantes</div>'
-      + '<div class="qbar"><div class="qbar-fill" style="width:' + pct + '%"></div></div></div>'
-      + '<button onclick="cancelBuild()" style="background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.3);color:#ff6b6b;border-radius:4px;padding:3px 8px;font-size:.7rem;cursor:pointer;flex-shrink:0;">✕</button>'
-      + '</div>';
   });
 }
 
@@ -1825,10 +1868,10 @@ async function executeMove(m) {
     troopSlots['aldeano'] = 1; // aldeanos: 1 slot cada uno
 
     var { data: result, error: rpcErr } = await sbClient.rpc('apply_move_arrival', {
-      p_village_id:  m.targetId,
-      p_troops:      m.troops    || {},
-      p_creatures:   m.creatures || {},
-      p_cargo:       m.cargo     || {},
+      p_village_id: m.targetId,
+      p_troops: m.troops || {},
+      p_creatures: m.creatures || {},
+      p_cargo: m.cargo || {},
       p_troop_slots: troopSlots
     });
     if (rpcErr) throw rpcErr;
@@ -1839,9 +1882,9 @@ async function executeMove(m) {
 
     // Sincronizar caché local del destino
     if (result.state) {
-      destVillage.state.resources    = result.state.resources    || destVillage.state.resources;
-      destVillage.state.troops       = result.state.troops       || destVillage.state.troops;
-      destVillage.state.creatures    = result.state.creatures    || destVillage.state.creatures;
+      destVillage.state.resources = result.state.resources || destVillage.state.resources;
+      destVillage.state.troops = result.state.troops || destVillage.state.troops;
+      destVillage.state.creatures = result.state.creatures || destVillage.state.creatures;
       destVillage.state.last_updated = result.state.last_updated || destVillage.state.last_updated;
     }
 
@@ -1851,7 +1894,7 @@ async function executeMove(m) {
       if (origV) {
         Object.keys(rejected).forEach(function (k) {
           if ((rejected[k] || 0) <= 0) return;
-          if (TROOP_TYPES[k])   origV.state.troops[k]   = (origV.state.troops[k]   || 0) + rejected[k];
+          if (TROOP_TYPES[k]) origV.state.troops[k] = (origV.state.troops[k] || 0) + rejected[k];
           else if (CREATURE_TYPES[k]) origV.state.creatures[k] = (origV.state.creatures[k] || 0) + rejected[k];
         });
         await saveVillage(origV);
@@ -1948,14 +1991,14 @@ async function executeTransport(m) {
     // v1.71: apply_cargo_arrival — suma atómica en servidor (DT-03)
     var { data: newState, error: rpcErr } = await sbClient.rpc('apply_cargo_arrival', {
       p_village_id: m.targetId,
-      p_cargo:      cargo
+      p_cargo: cargo
     });
     if (rpcErr) throw rpcErr;
 
     // Sincronizar caché local si el destino es una de nuestras aldeas
     var destV = myVillages.find(function (v) { return v.id === m.targetId; });
     if (destV && newState) {
-      destV.state.resources    = newState.resources    || destV.state.resources;
+      destV.state.resources = newState.resources || destV.state.resources;
       destV.state.last_updated = newState.last_updated || destV.state.last_updated;
     }
 
@@ -2238,6 +2281,11 @@ function updateGranjaPanel() {
 
 function renderRecursos() {
   if (!activeVillage) return;
+  // FIX REBOTE: No destrozar la UI si el usuario está deslizando barras interactivos.
+  if (window._workerSettingsDirty) {
+    // Aún así, un refresh visual de los timers de top bar no está mal, pero skip sliders
+    return;
+  }
   var vs = activeVillage.state;
   var res = calcRes(vs);
   var w = vs.aldeanos_assigned || defaultAssignments();
@@ -2331,8 +2379,9 @@ function snapshotResources(vs) {
   return res;
 }
 
-// v1.50: Sincronización PROFESIONAL con el servidor (RPC)
-// v1.52: Sincronización PROFESIONAL con el servidor (RPC) con reducción de flickering
+// v2.0: Modelo Ogame — el servidor es la ÚNICA autoridad.
+// secure_village_tick resuelve edificios, tropas, criaturas y aldeanos.
+// El cliente solo muestra countdowns entre syncs.
 async function syncVillageResourcesFromServer() {
   if (!activeVillage || !activeVillage.id) return;
   try {
@@ -2348,43 +2397,79 @@ async function syncVillageResourcesFromServer() {
 
     if (error) throw error;
     if (newState) {
-      // 2. Mezcla Inteligente (Smart Merge) para evitar saltos visuales
       var oldState = activeVillage.state;
-      var newRes = newState.resources;
-      var oldRes = oldState.resources;
+      var newRes = newState.resources || {};
+      var oldRes = (oldState && oldState.resources) || {};
 
-      // Si la diferencia es pequeña (<5 unidades), mantenemos nuestro valor visual actual
-      // para que el contador fluya suavemente. El servidor mandó el valor "exacto",
-      // pero el cliente es quien anima cada segundo.
+      // Smart Merge anti-flickering: diferencias <5 preservan valor visual local
       ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'].forEach(function (k) {
         var diff = Math.abs((newRes[k] || 0) - (oldRes[k] || 0));
         if (diff < 5) {
-          newRes[k] = oldRes[k]; // Preservar fluidez local
+          newRes[k] = oldRes[k];
         }
       });
 
-      // 3. Mezcla de Colas (Smart Queue Merge)
-      var newMissions = newState.mission_queue || [];
-      var oldMissions = oldState.mission_queue || [];
-      oldMissions.forEach(function (om) {
-        var isNew = (Date.now() - new Date(om.created_at || Date.now()).getTime()) < 10000;
-        var existsInServer = newMissions.some(m => m.mid === om.mid);
-        if (isNew && !existsInServer) newMissions.push(om);
-      });
-      newState.mission_queue = newMissions;
+      // ── Modelo Ogame: aplicar estado del servidor como AUTORIDAD ──
+      // Preservar solo campos que NO maneja el servidor
+      var localMissionQueue = oldState.mission_queue || [];
+      var localAldAssigned = oldState.aldeanos_assigned;
+      var localRefugio = oldState.refugio;
+      var localBattles = {
+        battles_won_pvp: oldState.battles_won_pvp || 0,
+        battles_lost_pvp: oldState.battles_lost_pvp || 0,
+        battles_won_npc: oldState.battles_won_npc || 0
+      };
 
-      // v1.63: Removed training queue override to trust server authority.
-      // If a troop completes on server, client should accept it.
-      // (Removed oldTrain.length > newTrain.length logic)
-      // v1.66: preservar build_queue local — secure_village_tick no la devuelve
-      if (newState && !newState.build_queue && oldState.build_queue) {
-        newState.build_queue = oldState.build_queue;
-      }
+      // Extraer completaciones ANTES de aplicar el state
+      var completedBuilds = newState.completed_builds || [];
+      var completedTroops = newState.completed_troops || [];
+      var completedSummons = newState.completed_summons || [];
+      // Extraer colas del servidor
+      var serverBuildQueue = newState.build_queue;
+      // FIX FANTASMA: Si el servidor devuelve string 'null' o objeto vacío "{}", limpiarlo
+      if (!serverBuildQueue || serverBuildQueue === 'null' || Object.keys(serverBuildQueue).length === 0) serverBuildQueue = null;
+
+      var serverTrainingQueue = newState.training_queue || [];
+      var serverSummoningQueue = newState.summoning_queue || [];
+
+      // Aplicar state del servidor
       activeVillage.state = newState;
+
+      // Re-inyectar colas del SERVIDOR (ya resueltas)
+      activeVillage.state.build_queue = serverBuildQueue;
+      activeVillage.state.training_queue = serverTrainingQueue;
+      activeVillage.state.summoning_queue = serverSummoningQueue;
+
+      // Re-inyectar campos que el servidor no gestiona
+      activeVillage.state.mission_queue = localMissionQueue;
+      // FIX REBOTE: Priorizar SIEMPRE el slider local que el jugador acaba de mover
+      activeVillage.state.aldeanos_assigned = localAldAssigned || newState.aldeanos_assigned || {};
+      activeVillage.state.refugio = newState.refugio || localRefugio || {};
+      activeVillage.state.battles_won_pvp = localBattles.battles_won_pvp;
+      activeVillage.state.battles_lost_pvp = localBattles.battles_lost_pvp;
+      activeVillage.state.battles_won_npc = localBattles.battles_won_npc;
+
+      // ── Notificaciones de completaciones ──
+      completedBuilds.forEach(function (b) {
+        var def = BUILDINGS.find(function (bd) { return bd.id === b.id; });
+        showNotif((def ? def.name : b.id) + ' mejorada a nivel ' + b.new_level + '!', 'ok');
+      });
+      completedTroops.forEach(function (t) {
+        var td = TROOP_TYPES[t.type];
+        showNotif((td ? td.icon + ' ' + td.name : t.type) + ' ×' + t.amount + ' entrenados!', 'ok');
+      });
+      completedSummons.forEach(function (s) {
+        var cd = CREATURE_TYPES[s.creature];
+        showNotif((cd ? cd.icon + ' ' + cd.name : s.creature) + ' invocado!', 'ok');
+      });
 
       // Re-renderizar UI
       if (typeof renderRecursos === 'function') renderRecursos();
       if (typeof renderTroops === 'function') renderTroops();
+      if (typeof renderCreatures === 'function' && completedSummons.length > 0) renderCreatures();
+      if (typeof renderBuildings === 'function' && completedBuilds.length > 0) {
+        renderBuildings(calcRes(activeVillage.state));
+      }
     }
   } catch (e) {
     console.warn('[Robustez] Error sincronizando recursos:', e.message || e);
@@ -2457,6 +2542,7 @@ function applyAllWorkers() {
   vs.aldeanos_granja = w.provisiones || 0;
 
   showNotif('✓ Aldeanos asignados correctamente', 'ok');
+  window._workerSettingsDirty = false;
   debouncedSave(); tick(); updateRecursosSliders();
 }
 
@@ -2478,11 +2564,17 @@ function setWorker(resource, rawValue) {
 }
 
 function syncWorkerInput(key, val) {
+  window._workerSettingsDirty = true;
+  clearTimeout(window._workerSettingsTimer);
+  window._workerSettingsTimer = setTimeout(() => { window._workerSettingsDirty = false; }, 3000);
   var ni = document.getElementById('rw_n_' + key);
   if (ni) ni.value = val;
   _previewWorker(key, parseInt(val) || 0);
 }
 function syncWorkerSlider(key, val, available) {
+  window._workerSettingsDirty = true;
+  clearTimeout(window._workerSettingsTimer);
+  window._workerSettingsTimer = setTimeout(() => { window._workerSettingsDirty = false; }, 3000);
   val = Math.max(0, Math.min(parseInt(val) || 0, available));
   var sl = document.getElementById('rw_s_' + key);
   if (sl) sl.value = val;
@@ -2605,19 +2697,11 @@ function showNotif(msg, type) {
 // FORMAT
 // ============================================================
 function fmt(n) {
-  n = Math.floor(n);
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return '' + n;
+  return '' + Math.floor(n);
 }
 
-// fmtCost: igual que fmt pero exacto hasta 9.999 para evitar falsos "tengo suficiente"
-// Ej: fmt(1040) = "1.0K" == fmt(1020) → confusión. fmtCost(1040) = "1040" != "1020"
 function fmtCost(n) {
-  n = Math.floor(n);
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 10000) return (n / 1000).toFixed(1) + 'K';
-  return '' + n;
+  return '' + Math.floor(n);
 }
 
 
@@ -2879,6 +2963,7 @@ function openBuildingDetail(id) {
     + '<button class="bld-modal-close" onclick="document.getElementById(\'bldModal\').style.display=\'none\';">&#x2715; Cerrar</button>'
     + '</div>'
     + '<div class="bld-modal-body">'
+    + (isReclutamiento ? '<div id="reclutamiento-progress-wrapper" style="margin-bottom:15px;"></div>' : '')
     + '<div style="background:rgba(255,255,255,.04);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.75rem;color:var(--dim);line-height:1.5;border-left:3px solid var(--accent);">'
     + def.desc
     + '</div>'

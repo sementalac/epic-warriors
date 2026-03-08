@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 4.5 — Última actualización: v1.81 ronda 2 (game-globals, game-constants, game-simulator)
+> Versión del documento: 4.7 — Última actualización: v1.88 (Safety First SQL Protocol)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -96,8 +96,19 @@ setInterval(tick, 1000)  ← único loop del juego
 
 Con el modelo de robustez, el servidor es quien manda sobre los números reales.
 
+### Protocolo de Seguridad SQL (v1.88)
+Para evitar errores de ambigüedad y desincronización en Supabase:
+1.  **Nombres Intocables**: Toda variable local en funciones PL/pgSQL DEBE llevar el prefijo `v_` (ej. `v_state`, `v_madera`). NUNCA usar nombres que coincidan con columnas de la tabla.
+2.  **Autoridad Total**: El servidor calcula y descuenta recursos. El cliente solo muestra la animación.
+3.  **Auditoría de Dos Pasadas**: Antes de entregar SQL, se debe verificar la lógica y nombres en una segunda pasada de lectura.
+
+### Reglas de Capacidad y Población (v1.91)
+*   **Barracas**: La capacidad total es la suma de todas las tropas (aldeanos + guerreros + magos + druidas + exploradores + asesinos + paladines + chamanes + invocadores).
+*   **Criaturas**: NO ocupan espacio en barracas y no tienen límite de población (Invasión Infinita).
+*   **Consumo**: Las tropas consumen provisiones al moverse/atacar. Las criaturas son autosuficientes en la aldea.
+
 ```
-snapshotResources() 
+snapshotResources()
   → Congela recursos + PERSISTE producción/capacidad
   → El servidor usa estos valores para calcular el tiempo transcurrido (Time-Based)
 

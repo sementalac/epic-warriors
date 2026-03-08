@@ -29,48 +29,48 @@
 var SMITHY_DATA = {
   aldeano: {
     costMult: 1.0,
-    weapon: { name: 'Guadaña Reforzada',    icon: '🌾', desc: 'Hoja de acero rústico remachada al mango. Más mortal que la hoz original.' },
-    armor:  { name: 'Escudo de Cuero',       icon: '🪵', desc: 'Piel de buey curtida y cosida sobre armazón de madera. Ligero, básico.' }
+    weapon: { name: 'Guadaña Reforzada', icon: '🌾', desc: 'Hoja de acero rústico remachada al mango. Más mortal que la hoz original.' },
+    armor: { name: 'Escudo de Cuero', icon: '🪵', desc: 'Piel de buey curtida y cosida sobre armazón de madera. Ligero, básico.' }
   },
   soldado: {
     costMult: 2.5,
-    weapon: { name: 'Espada de Hierro',      icon: '⚔️',  desc: 'Hoja templada en fragua de campaña. Filo que no cede bajo armaduras ligeras.' },
-    armor:  { name: 'Cota de Mallas',        icon: '🔩', desc: 'Anillas de hierro remachadas a mano. Clásica protección de infantería.' }
+    weapon: { name: 'Espada de Hierro', icon: '⚔️', desc: 'Hoja templada en fragua de campaña. Filo que no cede bajo armaduras ligeras.' },
+    armor: { name: 'Cota de Mallas', icon: '🔩', desc: 'Anillas de hierro remachadas a mano. Clásica protección de infantería.' }
   },
   mago: {
     costMult: 3.0, magical: true,
-    weapon: { name: 'Báculo Arcano',         icon: '🪄', desc: 'Canal de madera estelar grabado con runas de amplificación. Concentra la esencia.' },
-    armor:  { name: 'Túnica Lunar',          icon: '✨', desc: 'Seda imbuida con hilos de esencia solidificada. Barrera invisible ante ataques físicos.' }
+    weapon: { name: 'Báculo Arcano', icon: '🪄', desc: 'Canal de madera estelar grabado con runas de amplificación. Concentra la esencia.' },
+    armor: { name: 'Túnica Lunar', icon: '✨', desc: 'Seda imbuida con hilos de esencia solidificada. Barrera invisible ante ataques físicos.' }
   },
   druida: {
     costMult: 2.8, magical: true,
-    weapon: { name: 'Báculo de Roble',       icon: '🌿', desc: 'Madera del bosque primigenio, reforzada por el propio espíritu del árbol.' },
-    armor:  { name: 'Coraza de Raíces',      icon: '🌲', desc: 'Raíces vivas entrelazadas que se endurecen con el flujo de esencia de la tierra.' }
+    weapon: { name: 'Báculo de Roble', icon: '🌿', desc: 'Madera del bosque primigenio, reforzada por el propio espíritu del árbol.' },
+    armor: { name: 'Coraza de Raíces', icon: '🌲', desc: 'Raíces vivas entrelazadas que se endurecen con el flujo de esencia de la tierra.' }
   },
   explorador: {
     costMult: 2.2,
-    weapon: { name: 'Arco de Caza',          icon: '🏹', desc: 'Madera de tejo curvada en frío y tendón de bestia. Alcance y precisión superiores.' },
-    armor:  { name: 'Cuero Endurecido',      icon: '🦺', desc: 'Capas dobles de cuero animal con placas de hueso cosidas al interior. Ligero y resistente.' }
+    weapon: { name: 'Arco de Caza', icon: '🏹', desc: 'Madera de tejo curvada en frío y tendón de bestia. Alcance y precisión superiores.' },
+    armor: { name: 'Cuero Endurecido', icon: '🦺', desc: 'Capas dobles de cuero animal con placas de hueso cosidas al interior. Ligero y resistente.' }
   },
   asesino: {
     costMult: 4.0,
-    weapon: { name: 'Daga de Sombra',        icon: '🗡️', desc: 'Acero ennegrecido con veneno de araña de caverna. Un rasguño puede ser letal.' },
-    armor:  { name: 'Capucha de Sombras',    icon: '🎭', desc: 'Tejido ocultador tratado con resinas de cueva. Desvía miradas y golpes por igual.' }
+    weapon: { name: 'Daga de Sombra', icon: '🗡️', desc: 'Acero ennegrecido con veneno de araña de caverna. Un rasguño puede ser letal.' },
+    armor: { name: 'Capucha de Sombras', icon: '🎭', desc: 'Tejido ocultador tratado con resinas de cueva. Desvía miradas y golpes por igual.' }
   },
   paladin: {
     costMult: 5.0,
-    weapon: { name: 'Martillo de Guerra',    icon: '🔨', desc: 'Mazo de acero macizo forjado a golpe sagrado. Aplasta escudos y corazas de un impacto.' },
-    armor:  { name: 'Escudo Templario',      icon: '🛡️', desc: 'Plancha de acero grabada con sellos de protección divina. La muralla del campo de batalla.' }
+    weapon: { name: 'Martillo de Guerra', icon: '🔨', desc: 'Mazo de acero macizo forjado a golpe sagrado. Aplasta escudos y corazas de un impacto.' },
+    armor: { name: 'Escudo Templario', icon: '🛡️', desc: 'Plancha de acero grabada con sellos de protección divina. La muralla del campo de batalla.' }
   },
   chaman: {
     costMult: 4.0, magical: true,
-    weapon: { name: 'Tótem del Trueno',      icon: '⚡', desc: 'Bastón ritual tallado en hueso de criatura ancestral, cargado con el relámpago tribal.' },
-    armor:  { name: 'Pelaje Sagrado',        icon: '🐾', desc: 'Piel de bestia mítica engarzada con amuletos de guerra. Protege cuerpo y espíritu.' }
+    weapon: { name: 'Tótem del Trueno', icon: '⚡', desc: 'Bastón ritual tallado en hueso de criatura ancestral, cargado con el relámpago tribal.' },
+    armor: { name: 'Pelaje Sagrado', icon: '🐾', desc: 'Piel de bestia mítica engarzada con amuletos de guerra. Protege cuerpo y espíritu.' }
   },
   invocador: {
     costMult: 2.0, magical: true,
-    weapon: { name: 'Orbe de Invocación',    icon: '🔮', desc: 'Esfera de cristal etéreo. Amplifica el poder de mando sobre las criaturas invocadas.' },
-    armor:  { name: 'Velo Etéreo',           icon: '💫', desc: 'Barrera de esencia comprimida. Desvía los impactos físicos antes de que toquen el cuerpo.' }
+    weapon: { name: 'Orbe de Invocación', icon: '🔮', desc: 'Esfera de cristal etéreo. Amplifica el poder de mando sobre las criaturas invocadas.' },
+    armor: { name: 'Velo Etéreo', icon: '💫', desc: 'Barrera de esencia comprimida. Desvía los impactos físicos antes de que toquen el cuerpo.' }
   }
 };
 
@@ -81,8 +81,8 @@ var SMITHY_MAX_LEVEL = 15;
 function smithyWeaponCost(troopKey, level) {
   var d = SMITHY_DATA[troopKey]; if (!d) return null;
   var m = d.costMult;
-  var h = Math.floor(phasedVal(level, 80 * m,  2, 10, 1.3, 15, 1.05));
-  var w = Math.floor(phasedVal(level, 50 * m,  2, 10, 1.3, 15, 1.05));
+  var h = Math.floor(phasedVal(level, 80 * m, 2, 10, 1.3, 15, 1.05));
+  var w = Math.floor(phasedVal(level, 50 * m, 2, 10, 1.3, 15, 1.05));
   if (d.magical) {
     return { hierro: Math.floor(h * 0.45), esencia: Math.floor(w * 1.2) };
   }
@@ -92,7 +92,7 @@ function smithyWeaponCost(troopKey, level) {
 function smithyArmorCost(troopKey, level) {
   var d = SMITHY_DATA[troopKey]; if (!d) return null;
   var m = d.costMult;
-  var h = Math.floor(phasedVal(level, 60 * m,  2, 10, 1.3, 15, 1.05));
+  var h = Math.floor(phasedVal(level, 60 * m, 2, 10, 1.3, 15, 1.05));
   var p = Math.floor(phasedVal(level, 100 * m, 2, 10, 1.3, 15, 1.05));
   if (d.magical) {
     return { hierro: Math.floor(h * 0.4), esencia: Math.floor(p * 1.1) };
@@ -110,9 +110,9 @@ function smithyCanAfford(cost, res) {
 }
 
 function smithyCostHtml(cost, res) {
-  return Object.keys(cost).map(function(k) {
+  return Object.keys(cost).map(function (k) {
     var ok = (res[k] || 0) >= cost[k];
-    var label = { madera:'🌲', piedra:'🪨', hierro:'⚙️', esencia:'✨' }[k] || k;
+    var label = { madera: '🌲', piedra: '🪨', hierro: '⚙️', esencia: '✨' }[k] || k;
     return '<span style="color:' + (ok ? 'var(--ok)' : 'var(--danger)') + ';margin-right:8px;">'
       + label + ' ' + fmtCost(cost[k]) + '</span>'; // v1.82: fmtCost — exacto hasta 9.999 (regla v1.73)
   }).join('');
@@ -148,20 +148,20 @@ async function upgradeSmithyItem(troopKey, type) {
   try {
     var { data, error } = await sbClient.rpc('upgrade_smithy_secure', {
       p_village_id: activeVillage.id,
-      p_troop_key:  troopKey,
-      p_type:       type,
-      p_cost:       cost
+      p_troop_key: troopKey,
+      p_type: type,
+      p_cost: cost
     });
 
     if (error) throw error;
     if (!data || !data.ok) {
       var msgs = {
-        'village_not_found':      'Aldea no encontrada.',
-        'herreria_not_built':     'Construye la Herrería primero.',
-        'already_max_level':      'Ya está al nivel máximo.',
+        'village_not_found': 'Aldea no encontrada.',
+        'herreria_not_built': 'Construye la Herrería primero.',
+        'already_max_level': 'Ya está al nivel máximo.',
         'herreria_level_too_low': 'La Herrería (nv.' + bldLvl + ') no es suficiente. Sube la Herrería primero.',
         'insufficient_resources': 'Recursos insuficientes.',
-        'invalid_type':           'Tipo inválido.'
+        'invalid_type': 'Tipo inválido.'
       };
       showNotif((data && msgs[data.error]) || ('Error: ' + (data && data.error)), 'err');
       setSave('error');
@@ -183,6 +183,7 @@ async function upgradeSmithyItem(troopKey, type) {
     var d = SMITHY_DATA[troopKey];
     showNotif(d[type].icon + ' ' + d[type].name + ' → Nv.' + data.new_level + '!', 'ok');
     setSave('saved');
+    await flushVillage(); // v1.82: persiste recursos descontados inmediatamente
     // Pasar rd precargado para que renderSmithy no haga otra query a Supabase
     renderSmithy(rd);
   } catch (e) {
@@ -203,8 +204,8 @@ async function renderSmithy(preloadedRd) {
   if (!box) return;
   if (!activeVillage) { box.innerHTML = '<div class="muted">Cargando…</div>'; return; }
 
-  var vs     = activeVillage.state;
-  var res    = calcRes(vs);
+  var vs = activeVillage.state;
+  var res = calcRes(vs);
   var bldLvl = (vs.buildings['herreria'] && vs.buildings['herreria'].level) || 0;
 
   if (bldLvl === 0) {
@@ -216,9 +217,9 @@ async function renderSmithy(preloadedRd) {
     return;
   }
 
-  var rd    = preloadedRd || await loadResearchData();
+  var rd = preloadedRd || await loadResearchData();
   var wLvls = rd.weapon_levels || {};
-  var aLvls = rd.armor_levels  || {};
+  var aLvls = rd.armor_levels || {};
 
   var html = '';
 
@@ -245,21 +246,21 @@ async function renderSmithy(preloadedRd) {
   // Grid de tropas
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;">';
 
-  Object.keys(SMITHY_DATA).forEach(function(tKey) {
-    var d     = SMITHY_DATA[tKey];
+  Object.keys(SMITHY_DATA).forEach(function (tKey) {
+    var d = SMITHY_DATA[tKey];
     var troop = TROOP_TYPES[tKey];
     if (!troop) return;
 
-    var wLvl    = wLvls[tKey] || 0;
-    var aLvl    = aLvls[tKey] || 0;
-    var wNext   = wLvl + 1;
-    var aNxt    = aLvl + 1;
-    var wCost   = (wLvl < SMITHY_MAX_LEVEL) ? smithyWeaponCost(tKey, wNext) : null;
-    var aCost   = (aLvl < SMITHY_MAX_LEVEL) ? smithyArmorCost(tKey, aNxt)  : null;
+    var wLvl = wLvls[tKey] || 0;
+    var aLvl = aLvls[tKey] || 0;
+    var wNext = wLvl + 1;
+    var aNxt = aLvl + 1;
+    var wCost = (wLvl < SMITHY_MAX_LEVEL) ? smithyWeaponCost(tKey, wNext) : null;
+    var aCost = (aLvl < SMITHY_MAX_LEVEL) ? smithyArmorCost(tKey, aNxt) : null;
     var wLocked = wLvl >= bldLvl && wLvl < SMITHY_MAX_LEVEL;
     var aLocked = aLvl >= bldLvl && aLvl < SMITHY_MAX_LEVEL;
-    var wMaxed  = wLvl >= SMITHY_MAX_LEVEL;
-    var aMaxed  = aLvl >= SMITHY_MAX_LEVEL;
+    var wMaxed = wLvl >= SMITHY_MAX_LEVEL;
+    var aMaxed = aLvl >= SMITHY_MAX_LEVEL;
     var wCanBuy = wCost && !wLocked && !wMaxed && smithyCanAfford(wCost, res);
     var aCanBuy = aCost && !aLocked && !aMaxed && smithyCanAfford(aCost, res);
 
@@ -276,7 +277,7 @@ async function renderSmithy(preloadedRd) {
       var bdr = type === 'weapon' ? 'rgba(79,255,176,.15)' : 'rgba(0,212,255,.12)';
       var h = '<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;">';
       h += '<div style="display:flex;justify-content:space-between;align-items:center;">'
-        + '<span style="font-size:.95rem;">'  + escapeHtml(itemD.icon) + '</span>'
+        + '<span style="font-size:.95rem;">' + escapeHtml(itemD.icon) + '</span>'
         + '<span style="font-size:.8rem;color:var(--text);margin:0 6px;">' + escapeHtml(itemD.name) + '</span>'
         + '<span style="font-size:.65rem;color:var(--dim);flex:1;">(+' + lvl + ' ' + type + ')</span>'
         + '<span style="font-size:.7rem;color:' + (maxed ? 'var(--gold)' : col) + ';">Nv.' + lvl + '/' + SMITHY_MAX_LEVEL + '</span></div>';
@@ -289,7 +290,7 @@ async function renderSmithy(preloadedRd) {
         h += '<div style="font-size:.62rem;margin-bottom:6px;">' + smithyCostHtml(cost, res) + '</div>';
         h += '<button'
           + ' data-troop="' + escapeHtml(tKey) + '"'
-          + ' data-type="'  + escapeHtml(type) + '"'
+          + ' data-type="' + escapeHtml(type) + '"'
           + ' style="width:100%;padding:5px 0;border-radius:4px;font-family:VT323,monospace;font-size:.82rem;cursor:pointer;'
           + 'background:' + (canBuy ? bdr : 'rgba(255,255,255,.03)') + ';'
           + 'border:1px solid ' + (canBuy ? col : 'var(--border)') + ';'
@@ -315,7 +316,7 @@ async function renderSmithy(preloadedRd) {
       + (aLvl > 0 ? '<b style="color:var(--accent);">+' + aLvl + '</b>' : '<span style="opacity:.4;">—</span>')
       + '</div></div>';
     html += itemBlock('weapon', d.weapon, wLvl, wNext, wCost, wCanBuy, wLocked, wMaxed);
-    html += itemBlock('armor',  d.armor,  aLvl, aNxt,  aCost, aCanBuy, aLocked, aMaxed);
+    html += itemBlock('armor', d.armor, aLvl, aNxt, aCost, aCanBuy, aLocked, aMaxed);
     html += '</div>';
   });
 
@@ -326,11 +327,11 @@ async function renderSmithy(preloadedRd) {
   // y evitar que se acumulen en re-renders sucesivos.
   var fresh = box.cloneNode(false);
   fresh.innerHTML = html;
-  fresh.addEventListener('click', function(e) {
+  fresh.addEventListener('click', function (e) {
     var btn = e.target.closest('button[data-troop]');
     if (!btn) return;
     var troop = btn.getAttribute('data-troop');
-    var type  = btn.getAttribute('data-type');
+    var type = btn.getAttribute('data-type');
     // Doble validación: solo keys conocidos llegan a la RPC
     if (troop && type && SMITHY_DATA[troop] && (type === 'weapon' || type === 'armor')) {
       upgradeSmithyItem(troop, type);
