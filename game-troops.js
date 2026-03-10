@@ -335,6 +335,14 @@ function renderSummonOptions() {
   var box = document.getElementById('summonBox');
   if (!box || !activeVillage) return;
 
+  // v1.95: Preservar valores de inputs antes de reconstruir el HTML
+  var _savedQtys = {};
+  box.querySelectorAll('input[id^="summonQty_"]').forEach(function (inp) {
+    var key = inp.id.replace('summonQty_', '');
+    var val = parseInt(inp.value);
+    if (val && val !== 1) _savedQtys[key] = val; // solo guardar si el user cambió el valor
+  });
+
   var vs = activeVillage.state;
   var torreLevel = (vs.buildings.torreinvocacion && vs.buildings.torreinvocacion.level) || 0;
 
@@ -399,6 +407,12 @@ function renderSummonOptions() {
 
   html += '</div>';
   box.innerHTML = html;
+
+  // v1.95: Restaurar cantidades que el usuario había escrito antes del re-render
+  Object.keys(_savedQtys).forEach(function (key) {
+    var inp = document.getElementById('summonQty_' + key);
+    if (inp) inp.value = _savedQtys[key];
+  });
 }
 
 // FIX [MEDIO-3]: lee summonQty_ y pasa amount — antes siempre invocaba 1
@@ -442,9 +456,14 @@ async function startSummoning(key, amount) {
     }
 
     var vs = activeVillage.state;
-    vs.resources = newState.resources || vs.resources;
-    vs.summoning_queue = newState.summoning_queue || [];
-    vs.last_updated = newState.last_updated || vs.last_updated;
+    // v1.98 FIX TRP-04: limpiar campo 'ok' del RPC que contamina state.
+    // Preservar aldeanos_assigned (campo del cliente, regla #43).
+    var localAldAssigned = vs.aldeanos_assigned;
+    activeVillage.state = Object.assign({}, vs, newState);
+    delete activeVillage.state.ok;
+    delete activeVillage.state.refunded_esencia;
+    activeVillage.state.summoning_queue = newState.summoning_queue || [];
+    if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
 
     // v1.82: persistir summoning_queue a columna separada inmediatamente.
     // El RPC ya guardó resources en state jsonb, pero summoning_queue es columna
@@ -550,10 +569,11 @@ async function startRecruitment(type, amount) {
     }
 
     var vs = activeVillage.state;
-    vs.resources = newState.resources || vs.resources;
-    vs.troops = newState.troops || vs.troops;
-    vs.training_queue = newState.training_queue || [];
-    vs.last_updated = newState.last_updated || vs.last_updated;
+    // v1.98: merge — preservar aldeanos_assigned (campo del cliente, regla #43)
+    var localAldAssigned = vs.aldeanos_assigned;
+    activeVillage.state = Object.assign({}, vs, newState);
+    activeVillage.state.training_queue = newState.training_queue || [];
+    if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
 
     // v1.82: persistir training_queue a columna separada inmediatamente.
     // El RPC ya guardó resources+troops en state jsonb, pero training_queue es columna
@@ -598,10 +618,12 @@ async function cancelTrainingQueue() {
       return;
     }
 
-    vs.resources = newState.resources || vs.resources;
-    vs.troops = newState.troops || vs.troops;
-    vs.last_updated = newState.last_updated || vs.last_updated;
-    vs.training_queue = [];
+    // v1.98: merge — cancel_training_secure ahora devuelve state completo + colas (SQL-03).
+    // Preservar aldeanos_assigned (campo del cliente, regla #43).
+    var localAldAssigned = activeVillage.state.aldeanos_assigned;
+    activeVillage.state = Object.assign({}, activeVillage.state, newState);
+    activeVillage.state.training_queue = [];
+    if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
 
     showNotif('Cola cancelada. Recursos y aldeanos devueltos.', 'ok');
     setSave('saved');
@@ -1119,9 +1141,17 @@ async function applyRefugio() {
         });
         if (error) throw error;
         if (data && data.ok) {
-          vs.summoning_queue = [];
-          vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
-          showNotif('Invocaciones canceladas por refugio. +' + fmt(data.refunded_esencia || 0) + ' ✨ devuelta.', 'ok');
+          // v1.98 FIX TRP-03: merge completo del state del servidor (regla #40).
+          // Antes: vs.resources.esencia += refunded_esencia (sobre valor local stale).
+          // Ahora: el RPC devuelve state completo con producción acumulada + reembolso.
+          var localAldAssigned = vs.aldeanos_assigned;
+          var refunded = data.refunded_esencia || 0;
+          activeVillage.state = Object.assign({}, vs, data);
+          activeVillage.state.summoning_queue = data.summoning_queue || [];
+          if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
+          // Actualizar referencia local vs para el resto de applyRefugio
+          vs = activeVillage.state;
+          showNotif('Invocaciones canceladas por refugio. +' + fmt(refunded) + ' ✨ devuelta.', 'ok');
           // Bug-9 fix: actualizar paneles de criaturas e invocación tras cancelar
           if (typeof renderSummoningQueue === 'function') renderSummoningQueue();
           if (typeof renderCreatures === 'function') renderCreatures();

@@ -1,5 +1,5 @@
 // ============================================================
-// EPIC WARRIORS — game-combat.js  [v1.74 — audit patch]
+// EPIC WARRIORS — game-combat.js  [v1.75 — audit ronda 2]
 // Motor de combate: executeTurn, simulateBattle, simulateBattlePvP
 // Utiles: divideIntoGroups, createArmy, calculateLoot
 // Reportes: generateBattleReport, generateBattlePvPReport
@@ -21,7 +21,13 @@
 // [MENOR-11]  cancelSummoningQueue/startSummoning: null-guard en data antes de data.ok — evita TypeError
 // [MENOR-12]  cancelSummoningQueue: llama loadMyVillages()+tick() tras RPC exitoso para resync completo
 // [MENOR-13]  startSummoning: llama tick() tras renderCreatures() para actualizar recursos y provisiones
-// [COSMÉTICO] comentarios que afirmaban "nunca toca resources local" corregidos (L598 sí actualiza local)
+// ── Ronda 2 (v1.75) ──────────────────────────────────────────────────────────
+// [CRÍTICO-A] startSummoning: reemplaza activeVillage.state = data.state directo por
+//             Object.assign merge + preservación de aldeanos_assigned (Reglas 40+43)
+// [MEDIO-B]   cancelSummoningQueue: eliminado write directo a vs.resources.esencia —
+//             el servidor es autoridad; loadMyVillages()+tick() traen el valor real
+// [MEDIO-C]   startSummoning: aplica data.resources via merge cuando no hay data.state
+//             completo — la esencia deducida se refleja localmente en la misma acción
 // ============================================================
 
 function divideIntoGroups(total) {
@@ -606,15 +612,14 @@ async function cancelSummoningQueue() {
     showNotif((data && data.error) || 'No se pudo cancelar.', 'err'); return;
   }
 
-  // Actualizar esencia local desde la respuesta del servidor (patch optimista)
-  // NOTA: este write local es provisional — loadMyVillages()+tick() a continuación
-  // sobreescribe con el estado autoritativo del servidor.
+  // El servidor es autoridad — no escribir resources local.
+  // loadMyVillages()+tick() a continuación traen el estado real con la esencia devuelta.
+  // Solo limpiamos summoning_queue para que la UI no muestre la cola cancelada
+  // durante los ms que tarda el resync.
   vs.summoning_queue = [];
-  vs.resources.esencia = (vs.resources.esencia || 0) + (data.refunded_esencia || 0);
 
   showNotif('Cola cancelada. +' + fmt(data.refunded_esencia || 0) + ' ✨ esencia devuelta.', 'ok');
-  await flushVillage(); // v1.82: persiste summoning_queue=[] inmediatamente
-  // Bug-12 fix: resync completo igual que cancelMission/cancelAlliedMission
+  await flushVillage(); // persiste summoning_queue=[] inmediatamente
   await loadMyVillages();
   tick();
 }
@@ -673,13 +678,21 @@ async function startSummoning(creatureType, amount) {
     showNotif((data && data.error) || 'No se pudo invocar.', 'err'); return;
   }
 
-  // Aplicar estado devuelto por el servidor
+  // Aplicar estado devuelto por el servidor usando patrón de merge estándar (Regla 40+43).
+  // start_summoning_secure devuelve {ok, resources, summoning_queue} — sin state completo.
+  // Si en el futuro devuelve data.state completo, el merge también lo cubre correctamente.
+  var localAldAssigned = activeVillage.state.aldeanos_assigned;
   if (data.state) {
-    activeVillage.state = data.state;
+    // RPC devolvió state completo — merge estándar
+    activeVillage.state = Object.assign({}, activeVillage.state, data.state);
+  } else if (data.resources) {
+    // RPC devolvió solo resources parciales — merge solo resources
+    activeVillage.state.resources = Object.assign({}, activeVillage.state.resources, data.resources);
   }
   if (data.summoning_queue !== undefined) {
     activeVillage.state.summoning_queue = data.summoning_queue;
   }
+  if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
 
   showNotif(amount + ' ' + cData.name + '(s) en cola de invocación', 'ok');
   if (typeof renderCreatures === 'function') renderCreatures();

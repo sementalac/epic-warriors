@@ -6,6 +6,15 @@
 //   Fórmula ETA: dist / speed * 3600 segundos
 //   Ejemplos: speed 60 = 1 cas/min | speed 200 = 18s/casilla
 //
+// v1.84 — Auditoría cruzada JS↔SQL completa:
+//   • get_building_cost: 100% sincronizado ✅
+//   • getBarracksCapacity / almacen_cap_for_level: 100% sincronizados ✅
+//   • getAldeanosIntervalMs: 100% sincronizado ✅
+//   • Producción: arquitectura state.production correcta ✅
+//   • desc reclutamiento corregida: Nv.1=10min (era incorrecto "9m54s" que corresponde a Nv.2)
+//   • BUG SQL-B (ver secure_village_tick): v_used_slots no restaba tropas en misión
+//     → corregido en SQL (ver parche adjunto)
+//
 // v1.83 — Fix capacidad almacén:
 //   • almacenCapForLevel: capacity(L) = phasedVal(L+1, 500,...) × 1.20
 //     El almacén de nivel L tiene la capacidad del nivel L+1 anterior,
@@ -796,7 +805,7 @@ const BUILDINGS = [
   {
     // BARATO — max=madera(300), piedra/madera=0.692, hierro/madera=0.346
     id: 'reclutamiento', name: 'Reclutamiento', icon: '⚔️',
-    desc: 'Genera aldeanos automáticamente. Nv.1 ≈ 9 min 54s por aldeano.',
+    desc: 'Genera aldeanos automáticamente. Nv.1 = 10 min por aldeano, -1% por nivel.',
     prod: function () { return {}; },
     cost: function (l) {
       if (l === 0) return { madera: 0, piedra: 0, hierro: 0 };
@@ -995,10 +1004,12 @@ function getAldeanosProd(blds) {
 function getAldeanosIntervalMs(blds) {
   var lvl = (blds && blds['reclutamiento'] && blds['reclutamiento'].level) || 0;
   if (lvl === 0) return Infinity;
-  // v1.84 Robust: 10 minutos base, se divide por el nivel (Estilo OGame)
-  // Nv1: 10 min, Nv2: 5 min, Nv5: 2 min, Nv10: 1 min...
-  var baseMs = 600000;
-  return Math.round(baseMs / lvl);
+  // v1.92: 10 min - 1% por nivel (alineado con secure_village_tick en Supabase)
+  // Fórmula: 600000 * (1 - (nivel - 1) * 0.01)
+  // Nv1: 600s (10m), Nv2: 594s (9m54s), Nv3: 588s (9m48s), Nv10: 546s (9m6s)
+  // [REGLA] Esta fórmula DEBE estar sincronizada con secure_village_tick en Supabase.
+  //         Si se cambia aquí, cambiar también el SQL y viceversa.
+  return Math.round(600000 * (1 - (lvl - 1) * 0.01));
 }
 
 // v1.71: calcAndApplyAldeanos eliminada — era código muerto.

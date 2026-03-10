@@ -1,9 +1,15 @@
 // ============================================================
-// EPIC WARRIORS — game-social.js
+// EPIC WARRIORS — game-social.js  (v1.73)
 // Ranking: rankingCache, renderRanking, forceRefreshRanking
 // Investigación: xpCostForLevel, loadResearchData, renderResearch
 // Alianzas: refreshMyAlliance, createAlliance, leaveAlliance...
 // Mensajes: renderThreads, openThread, sendChatMsg, startDM...
+// ──────────────────────────────────────────────────────────
+// v1.73 — Auditoría:
+//   [CRÍTICO-A] upgradeTroopLevel: null-guard antes de data.ok
+//               (misma bomba corregida en smithy v1.80 CRÍTICO-3)
+//   [MENOR-E]   renderResearch: botón "Subir" migrado a data-troop
+//               + listener delegado (consistente con smithy v1.81)
 // ============================================================
 
 let rankingCache = null;       // {data, fetchedAt}
@@ -199,8 +205,10 @@ async function renderResearch() {
     html += '<div style="text-align:right;flex-shrink:0;">';
     if (!isMax) {
       html += '<div style="font-size:.62rem;color:' + (canAfford ? 'var(--gold)' : 'var(--dim)') + ';margin-bottom:4px;">' + formatNumber(cost) + ' XP</div>';
-      html += '<button class="btn btn-sm" style="' + (!canAfford ? 'opacity:.4;cursor:not-allowed;' : '') + '"'
-        + (canAfford ? ' onclick="upgradeTroopLevel(\'' + key + '\')"' : '')
+      // FIX [MENOR-E v1.73]: data-troop en vez de onclick inline (consistente con smithy v1.81)
+      html += '<button class="btn btn-sm"'
+        + ' data-troop="' + key + '"'
+        + ' style="' + (!canAfford ? 'opacity:.4;cursor:not-allowed;' : '') + '"'
         + '>⬆ Subir</button>';
     } else {
       html += '<div style="font-size:.75rem;color:var(--gold);">✨ Maestría</div>';
@@ -225,6 +233,20 @@ async function renderResearch() {
   });
 
   grid.innerHTML = html;
+
+  // FIX [MENOR-E v1.73]: listener delegado — captura todos los data-troop buttons.
+  // Reemplaza el nodo para eliminar listeners acumulados en re-renders.
+  var fresh = grid.cloneNode(false);
+  fresh.innerHTML = html;
+  fresh.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-troop]');
+    if (!btn || btn.style.opacity === '0.4' || btn.disabled) return;
+    var troop = btn.getAttribute('data-troop');
+    if (troop && typeof TROOP_TYPES !== 'undefined' && TROOP_TYPES[troop]) {
+      upgradeTroopLevel(troop);
+    }
+  });
+  grid.parentNode.replaceChild(fresh, grid);
 }
 
 // FIX [CRÍTICO-1]: upgrade_troop_level_secure valida XP en servidor y escribe
@@ -245,14 +267,16 @@ async function upgradeTroopLevel(troopKey) {
       p_troop_key: troopKey
     });
     if (error) throw error;
-    if (!data.ok) {
+    // FIX [CRÍTICO-A v1.73]: null-guard antes de data.ok — mismo patrón que smithy v1.80.
+    // Si el RPC devuelve null (red, timeout), data.ok lanzaría TypeError.
+    if (!data || !data.ok) {
       var msgs = {
         'not_authenticated': 'No autenticado.',
         'profile_not_found': 'Perfil no encontrado.',
         'already_max_level': 'Ya está al nivel máximo.',
         'insufficient_xp':  'No tienes suficiente XP.'
       };
-      alert(msgs[data.error] || ('Error: ' + data.error));
+      alert((data && msgs[data.error]) || ('Error: ' + (data && data.error)));
       return;
     }
 

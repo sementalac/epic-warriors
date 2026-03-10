@@ -1,6 +1,13 @@
-// game-admin.js — Panel de administración Epic Warriors
+// game-admin.js — Panel de administración Epic Warriors  (v1.82)
 // Depende de: sbClient, currentUser, activeVillage, showNotif, TROOP_TYPES,
 //             escapeHtml, escapeJs, fmt, loadMyVillages, switchVillage
+// ──────────────────────────────────────────────────────────
+// v1.82 — Auditoría:
+//   [MEDIO-B]  _adminDeleteUserData: admin_clear_cave_guardian corregido —
+//              firma era {p_cave_id} (inexistente), ahora {p_village_id, p_guardian_type}
+//              consistente con adminRevokeCave y game-caves.js
+//   [MENOR-C]  loadAdminActivity: columnas x/y → cx/cy en select de villages
+// ──────────────────────────────────────────────────────────
 
 // Función local para escapar atributos HTML (onclick, etc.)
 function escapeAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -876,12 +883,19 @@ async function _adminDeleteUserData(userId, username) {
     // v1.49: troops/resources/creatures ya no tienen FK a villages (datos en state jsonb)
     // v1.78 Bug-4: UPDATE directo a caves reemplazado por RPC admin_clear_cave_guardian
     // (regla 26 v1.77 — toda escritura en caves debe ir por RPC SECURITY DEFINER).
-    // Obtenemos las cuevas del usuario y llamamos la RPC por cada una.
+    // FIX [MEDIO-B]: firma corregida — RPC espera {p_village_id, p_guardian_type},
+    // no {p_cave_id}. Se obtiene village_id y guardian_type de la fila caves antes de llamar.
     try {
-      var { data: userCaves } = await sbClient.from('caves').select('id').eq('owner_id', userId);
+      var { data: userCaves } = await sbClient.from('caves')
+        .select('id,village_id,guardian_type')
+        .eq('owner_id', userId);
       if (userCaves && userCaves.length > 0) {
         for (var cave of userCaves) {
-          await sbClient.rpc('admin_clear_cave_guardian', { p_cave_id: cave.id });
+          if (!cave.village_id) continue; // ya huérfana, nada que limpiar
+          await sbClient.rpc('admin_clear_cave_guardian', {
+            p_village_id: cave.village_id,
+            p_guardian_type: cave.guardian_type || 'guardiancueva'
+          });
         }
       }
     } catch (caveErr) { /* no crítico — continuar con el borrado */ }
@@ -1140,7 +1154,7 @@ async function adminSpawnGhostMap(x, y) {
   if (name === null) return;
 
   var wall = parseInt(prompt('Nivel del muro:', '1')) || 1;
-  var troopKeys = Object.keys(TROOP_TYPES).filter(function(k) { return k !== 'aldeano'; });
+  var troopKeys = Object.keys(TROOP_TYPES).filter(function (k) { return k !== 'aldeano'; });
   var troops = {};
   if (troopKeys[0]) troops[troopKeys[0]] = 100;
   if (troopKeys[1]) troops[troopKeys[1]] = 50;
@@ -1273,9 +1287,9 @@ async function loadAdminActivity() {
   box.innerHTML = '<div style="color:var(--dim);text-align:center;padding:10px;">Cargando actividad...</div>';
 
   try {
-    // 1. Aldeas recientes (Fundaciones)
+    // FIX [MENOR-C]: columnas cx/cy (no x/y — villages usa cx/cy)
     var { data: vills, error: vErr } = await sbClient.from('villages')
-      .select('name,x,y,created_at,owner_id,profiles(username)')
+      .select('name,cx,cy,created_at,owner_id,profiles(username)')
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -1294,7 +1308,7 @@ async function loadAdminActivity() {
       events.push({
         ts: new Date(v.created_at),
         type: '🏠',
-        text: 'NUEVA ALDEA: "' + v.name + '" en [' + v.x + ',' + v.y + '] por ' + (v.profiles ? v.profiles.username : 'desconocido')
+        text: 'NUEVA ALDEA: "' + v.name + '" en [' + v.cx + ',' + v.cy + '] por ' + (v.profiles ? v.profiles.username : 'desconocido')
       });
     });
 
@@ -1512,15 +1526,17 @@ async function adminLaunchHunt() {
       origin_village_id: originId // Para rastreo
     };
 
-    // v1.78 Bug-1: push ANTES del sync — sin esto el Global Admin Tick
-    // escanea mission_queue y no encuentra la misión → ataque admin nunca se resuelve.
-    s.mission_queue.push(missionEntry);
+    // v1.78 Bug-1: El servidor es la fuente de verdad. 
+    // Separamos la misión de la state antes del sync.
+    var missionQueue = s.mission_queue || [];
+    missionQueue.push(missionEntry);
+    delete s.mission_queue;
 
     // v1.62c: Usar RPC SECURITY DEFINER para persistir en aldeas fantasma (bypass RLS)
     var { error: upErr } = await sbClient.rpc('admin_ghost_sync_hunt', {
       p_id: originId,
       p_state: s,
-      p_mission_queue: s.mission_queue
+      p_mission_queue: missionQueue
     });
 
     // v1.62d: Asegurar que is_temp también se guarde en la columna por si acaso

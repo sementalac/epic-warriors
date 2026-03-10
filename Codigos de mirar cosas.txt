@@ -1,0 +1,12 @@
+MIRAR RECURSOS DE UN JUGADOR:
+
+-- Esto calcula recursos al momento exacto (la verdad absoluta)
+SELECT 
+  v.name,
+  (secure_village_tick(v.id)->'resources'->>'madera')::numeric AS madera,
+  (secure_village_tick(v.id)->'resources'->>'piedra')::numeric AS piedra,
+  (secure_village_tick(v.id)->'resources'->>'hierro')::numeric AS hierro,
+  (secure_village_tick(v.id)->'resources'->>'provisiones')::numeric AS provisiones,
+  (secure_village_tick(v.id)->'resources'->>'esencia')::numeric AS esencia
+FROM villages v
+WHERE owner_id = 'bc30daa0-320d-429d-b6ac-eeaa18ad7460';

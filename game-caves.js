@@ -1,7 +1,11 @@
 // ============================================================
-// EPIC WARRIORS — game-caves.js  v1.74 — security patch
+// EPIC WARRIORS — game-caves.js  v1.75 — auditoría
 // Sistema de Cuevas: NPCs especiales en el mapa cuya criatura
 // guardiana puede ser capturada y añadida al ejército del jugador.
+//
+// v1.75 — Auditoría:
+//   [MENOR-D]  executeAttackCave: XP ahora via updateXPDisplay()
+//              (forceReload desde servidor) en vez de suma manual al cache
 //
 // v1.48: Fix loadAdminCaves — muestra ubicación real del guardián
 //        (coordenadas de la aldea actual o "En movimiento")
@@ -459,26 +463,9 @@ async function startCaveMission(caveId, x, y, troops) {
   var seconds = (dist / minSpeed) * ms;
   var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
 
-  snapshotResources(vs);
-  Object.keys(troops).forEach(function (k) {
-    if (TROOP_TYPES[k]) vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - troops[k]);
-    else if (CREATURE_TYPES[k]) vs.creatures[k] = Math.max(0, (vs.creatures[k] || 0) - troops[k]);
-  });
-
-  var missionEntry = {
-    mid: 'cave_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36),
-    type: 'cave_attack',
-    tx: x, ty: y,
-    targetId: caveId,
-    troops: troops,
-    finish_at: finishAt,
-    start_at: new Date().toISOString()
-  };
-
-  vs.mission_queue.push(missionEntry);
-  showNotif('⛏️ Tropas enviadas a la cueva. Llegan en ' + fmtTime(Math.ceil(seconds)), 'ok');
-  await flushVillage();
-  if (typeof tick === 'function') tick();
+  // v2.1: El servidor es autoridad única.
+  // startMission se encargará del optimistic update, cobro de tropas y persistencia.
+  await startMission('cave_attack', x, y, caveId, troops, {}, seconds * 1000);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -543,11 +530,9 @@ async function executeAttackCave(m) {
   var xpGained = victoria ? CAVE_XP : Math.floor(CAVE_XP * 0.1);
   if (xpGained > 0) {
     await sbClient.rpc('add_experience', { amount: xpGained });
-    if (rd) {
-      rd.experience = (rd.experience || 0) + xpGained;
-      var xpEl = document.getElementById('ovExperience');
-      if (xpEl) xpEl.textContent = formatNumber(rd.experience);
-    }
+    // FIX [MENOR-D]: usar updateXPDisplay (forceReload=true desde v1.80)
+    // en vez de sumar al cache stale que podría estar desincronizado.
+    if (typeof updateXPDisplay === 'function') await updateXPDisplay(xpGained);
   }
 
   // 7. Supervivientes propios (con recuperación)
@@ -561,9 +546,9 @@ async function executeAttackCave(m) {
   // 8. Si victoria → capturar via RPC (atómica — elimina race condition)
   if (victoria) {
     var capR = await sbClient.rpc('capture_cave_secure', {
-      p_cave_id:    cave.id,
+      p_cave_id: cave.id,
       p_village_id: activeVillage.id,
-      p_owner_id:   currentUser.id
+      p_owner_id: currentUser.id
     });
 
     if (capR.error || !capR.data || !capR.data.ok) {
@@ -695,8 +680,8 @@ async function onCaveGuardianDied(villageId, ownerId) {
     // modificar filas que no le pertenecen (status='wild', owner_id=null).
     var respawnR = await sbClient.rpc('admin_cave_respawn', {
       p_cave_id: oldCave.id,
-      p_new_cx:  newPos ? newPos.cx : oldCave.cx,
-      p_new_cy:  newPos ? newPos.cy : oldCave.cy
+      p_new_cx: newPos ? newPos.cx : oldCave.cx,
+      p_new_cy: newPos ? newPos.cy : oldCave.cy
     });
     if (respawnR.error) {
       console.warn('[Caves] admin_cave_respawn error:', respawnR.error.message);
@@ -934,7 +919,7 @@ async function adminRevokeCave(caveId, username) {
       // por lo que no puede borrar creatures de la aldea de otro jugador.
       var gType2 = caveR.data.guardian_type || 'guardiancueva';
       var saveR = await sbClient.rpc('admin_clear_cave_guardian', {
-        p_village_id:   caveR.data.village_id,
+        p_village_id: caveR.data.village_id,
         p_guardian_type: gType2
       });
       if (saveR.error) {
@@ -974,7 +959,7 @@ async function adminResetAllCaves() {
             var gk = ['guardiancueva', 'arana_gigante'][gi];
             if (st.creatures[gk]) {
               await sbClient.rpc('admin_clear_cave_guardian', {
-                p_village_id:    vid,
+                p_village_id: vid,
                 p_guardian_type: gk
               });
             }

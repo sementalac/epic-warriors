@@ -1,5 +1,5 @@
 # EPIC WARRIORS — DOCUMENTO DE ARQUITECTURA
-> Versión del documento: 4.7 — Última actualización: v1.88 (Safety First SQL Protocol)
+> Versión del documento: 4.8 — Última actualización: v1.93 (Fix start_training_secure + aldeanos formula + DT-10)
 > Fuentes de verdad: **Supabase** (datos/RPCs) · **GitHub Pages** (código)
 
 ---
@@ -414,7 +414,7 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 23. **Fundación de aldeas**: Usar siempre `execute_founding_secure` RPC. Valida misión previa en servidor.
 24. **Sincronización**: Llamar a `sync_village_resources` RPC tras acciones críticas para evitar "resource drift".
 
-25. **RPCs de gasto (`start_build_secure`, `start_training_secure`, `start_summoning_secure`) calculan recursos inline.** No deben llamar `secure_village_tick` internamente. La fórmula de producción vive en el cuerpo del RPC. `secure_village_tick` es solo para la sincronización periódica de 60s.
+25. **`start_build_secure` y `start_summoning_secure` llaman `PERFORM secure_village_tick` al inicio antes de leer recursos.** `start_training_secure` también (fix v1.93). Nunca duplicar la lógica de producción inline en estos RPCs — producirá doble acumulación o cap incorrecto. Leer siempre el estado tras el tick.
 
 26. **Toda escritura en la tabla `caves` desde `game-caves.js` DEBE ir por RPC SECURITY DEFINER.** Nunca INSERT/UPDATE directo desde cliente — RLS lo bloqueará o dejará datos inconsistentes. RPCs disponibles: `admin_cave_create`, `admin_cave_delete`, `admin_clear_cave_guardian`, `admin_cave_respawn`.
 
@@ -431,6 +431,26 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 32. **`saveMOTD` / `clearMOTD` DEBEN usar la RPC `save_motd_secure`.** La verificación de rol `isAdmin()` en cliente es solo UX — no es barrera de seguridad real. La RPC verifica `profiles.role = 'admin'` en servidor con SECURITY DEFINER.
 
 > Si añades una nueva regla, añádela aquí numerada y con descripción. No eliminar reglas antiguas.
+
+33. **El check de cola ocupada en `start_build_secure` DEBE leer exclusivamente de la columna** (`SELECT build_queue FROM villages`), nunca de `v_state->>'build_queue'`. `secure_village_tick` inyecta las colas en el objeto retornado como `'[]'` cuando son NULL — cualquier check `IS NOT NULL` sobre el state devuelto siempre será true. El check debe ser defensivo: `IS NOT NULL AND != 'null'::jsonb AND != '[]'::jsonb`. El UPDATE final NUNCA debe escribir colas dentro del JSONB `state` — solo en sus columnas dedicadas.
+
+34. **`secure_village_tick`: edificios correctos para aldeanos.** `v_ald_max` usa **`barracas`** con fórmula `FLOOR(100 * POWER(1.4, nivel-1))` — idéntica a `getBarracksCapacity` en JS. `v_ald_interval` usa **`reclutamiento`** con fórmula `(600/3600) * (1-(nivel-1)*0.01)` — idéntica a `getAldeanosIntervalMs` en JS. Nunca intercambiar estos dos edificios ni usar `casa` — ese building no existe en el juego.
+
+35. **`secure_village_tick` es responsable de completar la `build_queue` vencida.** Si `build_queue.finish_at <= NOW()`, aplica el nivel al edificio en `state.buildings`, rellena `completed_builds` para notificar al cliente, y pone `build_queue = NULL`. El campo `completed_builds` NUNCA debe depender de `current_setting()` — inicializar siempre como `'[]'::jsonb` en el DECLARE.
+
+36. **Todo RPC `start_*_secure` y `cancel_*_secure` DEBE llamar `PERFORM secure_village_tick` al inicio**, antes de leer recursos. Nunca calcular producción inline. Nunca usar `phased_val` para el cap del almacén en estos RPCs — el tick ya aplicó el cap correcto con `almacen_cap_for_level`. Ver regla #25.
+
+37. **`switchVillage` DEBE llamar `syncVillageResourcesFromServer()` inmediatamente después de `tick()`** y resetear `_lastResourceSync = Date.now()`. Sin esto, al cambiar de aldea el cliente muestra recursos interpolados en memoria hasta que el sync periódico dispare.
+
+38. **`calcRes()` en modelo OGame puro devuelve `vs.resources` directamente.** NO calcula tiempo transcurrido. NO acumula producción. Para mostrar producción/h usar `getProd()`. Para recursos actuales usar `vs.resources` tal cual vienen del servidor.
+
+39. **`snapshotResources()` solo actualiza metadata** (`production`, `capacity`, `last_updated`). NUNCA sobreescribe `vs.resources` con interpolación local. Los resources solo los escribe el servidor via RPC.
+
+40. **Toda función que recibe respuesta de un RPC de acción DEBE aplicar el state completo:** `resources`, `troops`, `buildings`, `build_queue`, `training_queue`, `summoning_queue`. Nunca aplicar solo los campos que "parecen" relevantes — los campos omitidos quedan desincronizados en el cliente.
+
+41. **No hay polling periódico de recursos.** El servidor calcula al hacer una acción. El único trigger de sync es: (a) acción del jugador, (b) cola que vence en tick. El sync periódico de 60s ha sido eliminado.
+
+42. **El cliente NUNCA modifica `vs.troops.aldeano`, `vs.resources` ni `vs.buildings` localmente.** Estos valores solo cambian cuando el servidor los devuelve en una RPC. Cualquier "optimistic update" local viola el modelo OGame y debe eliminarse.
 
 ---
 
@@ -459,6 +479,29 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 ## HISTORIAL DE VERSIONES
 
 > Añadir siempre al principio. No eliminar entradas antiguas.
+
+### v1.93 — Fix start_training_secure + auditoría cancel_build + cancel_training + informe espionaje
+- **[CRÍTICO]** `start_training_secure`: eliminada producción inline. El RPC ahora llama `PERFORM secure_village_tick(p_village_id)` al inicio y opera sobre el estado ya actualizado — igual que `start_build_secure`. Eliminados ~40 líneas de cálculo de producción/cap duplicados que usaban una fórmula de almacén distinta a la del tick.
+- **[AUDITADA - LIMPIA]** `cancel_build_secure`: no tiene producción inline. Solo devuelve el coste del edificio cancelado. Sin cambios necesarios.
+- **[AUDITADA - LIMPIA]** `cancel_training_secure`: no tiene producción inline. Itera la cola, suma costes a reembolsar. Sin cambios necesarios.
+- **[Supabase]** `start_training_secure` reescrita: tick-first, sin producción inline, sin cap de almacén duplicado.
+- **[Supabase]** `resolve_pending_missions_secure`: informe espionaje rediseñado a tabla horizontal estilo OGame (filas: Cantidad/Nivel/Nv.Arma/Nv.Armadura, columnas: nombre tropa).
+- [Regla nueva] Ver regla #25 actualizada: todos los RPCs `start_*_secure` deben llamar `PERFORM secure_village_tick` al inicio. Nunca duplicar la lógica de producción inline.
+- [DT-11 cerrado] [DT-12 cerrado] [DT-13 cerrado] [DT-14 cerrado]
+
+### v1.92 — DT-10: flag _resourcesFromServer + nueva fórmula aldeanos + fix send_system_message
+- **[CRÍTICO]** DT-10: `snapshotResources()` sobreescribía los recursos recién llegados del servidor con interpolación local. Fix: flag `vs._resourcesFromServer = true` antes de `flushVillage()` en 5 funciones — `startBuild`, `cancelBuild` (game-ui.js), `startSummoning`, `startRecruitment`, `cancelTrainingQueue` (game-troops.js). `snapshotResources` detecta el flag, actualiza producción/capacidad pero NO toca resources.
+- **[CRÍTICO]** `resolve_pending_missions_secure`: `send_system_message` llamaba con firma `(uuid, jsonb)` pero la firma real es `(uuid, text)`. Fix: `jsonb_build_object(...)::text` en los dos PERFORM (ataque + espionaje).
+- **[Fórmula nueva - CRÍTICO sincronizar]** Intervalo de aldeanos: `600000 * (1 - (nivel-1) * 0.01)` ms. Antes: `600000 / nivel`. Aplicado en `secure_village_tick` (Supabase) y `getAldeanosIntervalMs` (game-constants.js) y check hardcodeado en index.html (~línea 1753).
+- [JS] `game-ui.js`: `startBuild`, `cancelBuild` — flag `_resourcesFromServer` + bypass en `snapshotResources`
+- [JS] `game-troops.js`: `startSummoning`, `startRecruitment`, `cancelTrainingQueue` — flag `_resourcesFromServer`
+- [JS] `game-constants.js`: `getAldeanosIntervalMs` — nueva fórmula
+- [JS] `index.html`: check aldeanos ~línea 1753 — usa `getAldeanosIntervalMs` en vez de fórmula hardcodeada
+- [Supabase] `secure_village_tick` — nueva fórmula aldeanos
+- [Supabase] `resolve_pending_missions_secure` — fix firma send_system_message + informe espionaje completo v3
+- [Regla nueva] `_resourcesFromServer`: antes de `flushVillage()` tras RPC que devuelve resources, poner `vs._resourcesFromServer = true`
+- [Regla nueva] Fórmula aldeanos: `600000 * (1 - (nivel-1) * 0.01)`. Debe estar igual en JS y en Supabase siempre.
+- [DT-10 cerrado]
 
 ### v1.81 ronda 2 — Auditoría game-globals + game-constants + game-simulator
 - **[MENOR]** `game-globals.js`: `GAME_VERSION` stale en `'1.71'`. Fix: `'1.81'`.
@@ -793,6 +836,24 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 - **[MENOR]** `executeMove` + `executeReinforce`: `await loadMyVillages(); tick()` tras RPC exitoso — patrón consistente con `cancelMission`/`cancelAlliedMission`.
 - [Regla nueva] `executeMove` y `executeReinforce` DEBEN llamar `loadMyVillages()+tick()` tras RPC exitoso — las tropas permanentes en destino no se reflejan localmente sin sync.
 
+### v1.95 — Fix sistema construcción + aldeanos + modelo OGame puro (en progreso)
+
+**Bugs corregidos esta sesión:**
+- **[CRÍTICO]** `start_build_secure`: check de cola leía `v_state->>'build_queue'` — `secure_village_tick` inyecta `'[]'` cuando la columna es NULL, bloqueando siempre. Fix: leer de columna con check defensivo. UPDATE ya no fosiliza cola en JSONB.
+- **[CRÍTICO]** `secure_village_tick`: `v_ald_max` usaba edificio `casa` (no existe). Fix: `barracas` con `FLOOR(100*POWER(1.4,nivel-1))`. `v_ald_interval` también. Fix: `reclutamiento`.
+- **[CRÍTICO]** `secure_village_tick`: nunca completaba `build_queue` vencida — `completed_builds` dependía de `current_setting()` que nunca se establece. Fix: bloque de completación inline.
+- **[CRÍTICO]** `cancel_build_secure`: sin tick previo, reembolso sobre recursos desactualizados. RETURN sin colas. Ambos corregidos.
+- **[CRÍTICO]** `start_summoning_secure`: producción inline propia con `phased_val` (patrón v1.70 obsoleto). Fix: tick-first.
+- **[MEDIO]** `switchVillage`: no llamaba `syncVillageResourcesFromServer()` ni reseteaba `_lastResourceSync`. Fix: ambas líneas añadidas.
+- **[Supabase]** Eliminados duplicados: `resolve_pending_missions_secure()` sin args y `launch_mission_secure_v2` con firma vieja.
+
+**Auditoría modelo OGame puro — EN PROGRESO (ver AUDITORIA_OGAME_v195.md):**
+- 15 bugs identificados en 2 pasadas completas
+- Objetivo: eliminar interpolación visual, polling y generación local de aldeanos
+- Pendiente de ejecutar en próximo chat
+
+- [Regla nueva] Ver reglas #33–#42.
+
 ### vX.XX — [Plantilla para nuevas versiones]
 - descripción del cambio principal
 - [Supabase] nuevas tablas/columnas/triggers/RPCs si aplica
@@ -860,3 +921,8 @@ Variables críticas definidas en `game-globals.js`: `sbClient`, `SUPABASE_URL`, 
 | ~~DT-07~~ | ~~`startSummoning/startRecruitment/cancelTrainingQueue`: sin check `newState.ok` — fallo RPC mostraba éxito.~~ | ✅ Resuelto v1.74 |
 | ~~DT-08~~ | ~~`startMission`: sin ok-check en `launch_mission_secure` — `{ok:false}` mostraba éxito y no hacía rollback.~~ | ✅ Resuelto v1.75 |
 | ~~DT-09~~ | ~~`executeAttackPvP`: log sin `escapeHtml()`, esencia omitida en botín, `_returnTroopsHome` sin `mid`.~~ | ✅ Resuelto v1.75 |
+| ~~DT-10~~ | ~~`snapshotResources` sobreescribía recursos del servidor con interpolación local tras RPC. Flag `_resourcesFromServer` añadido en 5 funciones.~~ | ✅ Resuelto v1.92 |
+| ~~DT-11~~ | ~~`start_training_secure` calculaba producción inline con fórmulas y cap de almacén distintos a `secure_village_tick` — doble acumulación posible.~~ | ✅ Resuelto v1.93 |
+| ~~DT-12~~ | ~~Auditar `cancel_build_secure` — posible bug producción inline.~~ | ✅ Auditada, limpia v1.93 |
+| ~~DT-13~~ | ~~Actualizar ARQUITECTURA.md y REFERENCIA_PARA_IA.md con historial v1.82–v1.93.~~ | ✅ Resuelto v1.93 |
+| ~~DT-14~~ | ~~Informe espionaje: layout de tarjetas verticales → tabla horizontal estilo OGame.~~ | ✅ Resuelto v1.93 |

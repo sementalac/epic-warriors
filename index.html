@@ -6,13 +6,13 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Warriors Online v1.82</title>
+  <title>Epic Warriors Online v1.98</title>
   <link
     href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&family=MedievalSharp&display=swap"
     rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="game-globals.js?v=1.82"></script>
-  <link rel="stylesheet" href="epic-warriors.css?v=1.82">
+  <script src="game-globals.js?v=1.98"></script>
+  <link rel="stylesheet" href="epic-warriors.css?v=1.98">
 </head>
 
 <body>
@@ -1038,20 +1038,20 @@
     </div>
   </div>
 
-  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.82</div>
+  <div class="version-footer" id="versionFooter">EPIC WARRIORS v1.98</div>
 
   <script src="game-data.js"></script>
-  <script src="game-constants.js?v=1.82"></script>
-  <script src="game-troops.js?v=1.82"></script>
-  <script src="game-combat.js?v=1.82"></script>
-  <script src="game-engine.js?v=1.82"></script>
-  <script src="game-ui.js?v=1.82"></script>
-  <script src="game-social.js?v=1.82"></script>
-  <script src="game-smithy.js?v=1.82"></script>
-  <script src="game-auth.js?v=1.82"></script>
-  <script src="game-simulator.js?v=1.82"></script>
-  <script src="game-admin.js?v=1.82"></script>
-  <script src="game-caves.js?v=1.82"></script>
+  <script src="game-constants.js?v=1.98"></script>
+  <script src="game-troops.js?v=1.98"></script>
+  <script src="game-combat.js?v=1.98"></script>
+  <script src="game-engine.js?v=1.98"></script>
+  <script src="game-ui.js?v=1.98"></script>
+  <script src="game-social.js?v=1.98"></script>
+  <script src="game-smithy.js?v=1.98"></script>
+  <script src="game-auth.js?v=1.98"></script>
+  <script src="game-simulator.js?v=1.98"></script>
+  <script src="game-admin.js?v=1.98"></script>
+  <script src="game-caves.js?v=1.98"></script>
 
   <script>
     // ============================================================
@@ -1197,19 +1197,30 @@
     }
 
     // ── Config visual por tipo de misión ──────────────────────────
+    // v1.95: _missionCoords helper — resuelve tx/ty ausentes desde targetId
+    function _missionCoords(m) {
+      if (m.tx !== undefined && m.ty !== undefined) return '[' + m.tx + ',' + m.ty + ']';
+      // Buscar por targetId en aldeas conocidas
+      if (m.targetId) {
+        var found = (allVillages || []).find(function (v) { return v.id === m.targetId; })
+          || (myVillages || []).find(function (v) { return v.id === m.targetId; });
+        if (found) return '[' + (found.x || found.cx) + ',' + (found.y || found.cy) + ']';
+      }
+      return '[?,?]';
+    }
     function _missionTypeCfg(type) {
       var cfgs = {
-        'spy': { icon: '🔍', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Espionaje → [' + m.tx + ',' + m.ty + ']'; } },
-        'attack': { icon: '⚔️', color: 'var(--danger)', bg: 'rgba(255,61,90,.06)', border: 'rgba(255,61,90,.25)', label: function (m) { return 'Ataque → [' + m.tx + ',' + m.ty + ']'; } },
-        'move': { icon: '⚔', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Moviendo tropas → [' + m.tx + ',' + m.ty + ']'; } },
-        'reinforce': { icon: '🛡️', color: 'var(--accent2)', bg: 'rgba(96,208,96,.05)', border: 'rgba(96,208,96,.2)', label: function (m) { return 'Refuerzo → [' + m.tx + ',' + m.ty + ']'; } },
-        'transport': { icon: '📦', color: 'var(--madera)', bg: 'rgba(200,164,90,.05)', border: 'rgba(200,164,90,.2)', label: function (m) { return 'Caravana → [' + m.tx + ',' + m.ty + ']'; } },
-        'found': { icon: '🏠', color: 'var(--gold)', bg: 'rgba(240,192,64,.05)', border: 'rgba(240,192,64,.2)', label: function (m) { return 'Colonos → [' + m.tx + ',' + m.ty + ']'; } },
-        'cave_attack': { icon: '🧿', color: 'var(--esencia)', bg: 'rgba(192,96,255,.05)', border: 'rgba(192,96,255,.2)', label: function (m) { return 'Cueva [' + m.tx + ',' + m.ty + ']'; } },
+        'spy': { icon: '🔍', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Espionaje → ' + _missionCoords(m); } },
+        'attack': { icon: '⚔️', color: 'var(--danger)', bg: 'rgba(255,61,90,.06)', border: 'rgba(255,61,90,.25)', label: function (m) { return 'Ataque → ' + _missionCoords(m); } },
+        'move': { icon: '⚔', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Tropas → ' + _missionCoords(m); } },
+        'reinforce': { icon: '🛡️', color: 'var(--accent2)', bg: 'rgba(96,208,96,.05)', border: 'rgba(96,208,96,.2)', label: function (m) { return 'Refuerzo → ' + _missionCoords(m); } },
+        'transport': { icon: '📦', color: 'var(--madera)', bg: 'rgba(200,164,90,.05)', border: 'rgba(200,164,90,.2)', label: function (m) { return 'Caravana → ' + _missionCoords(m); } },
+        'found': { icon: '🏠', color: 'var(--gold)', bg: 'rgba(240,192,64,.05)', border: 'rgba(240,192,64,.2)', label: function (m) { return 'Colonos → ' + _missionCoords(m); } },
+        'cave_attack': { icon: '🧿', color: 'var(--esencia)', bg: 'rgba(192,96,255,.05)', border: 'rgba(192,96,255,.2)', label: function (m) { return 'Cueva ' + _missionCoords(m); } },
         'return': { icon: '↩️', color: 'var(--ok)', bg: 'rgba(79,255,176,.04)', border: 'rgba(79,255,176,.15)', label: function (m) { return 'Tropas regresando'; } },
         'return_reinforce': { icon: '↩️', color: 'var(--ok)', bg: 'rgba(79,255,176,.04)', border: 'rgba(79,255,176,.15)', label: function (m) { return 'Refuerzo volviendo a casa'; } }
       };
-      return cfgs[type] || { icon: '⚔️', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Misión → [' + m.tx + ',' + m.ty + ']'; } };
+      return cfgs[type] || { icon: '⚔️', color: 'var(--accent)', bg: 'rgba(0,212,255,.05)', border: 'rgba(0,212,255,.2)', label: function (m) { return 'Misión → ' + _missionCoords(m); } };
     }
 
     // ============================================================
@@ -1278,13 +1289,10 @@
       // v1.67: Boot sync — recursos reales del servidor + colas offline resueltas antes del primer frame
       try {
         clearTimeout(saveDebounce); // cancelar saves pendientes antes de sync
-        await syncVillageResourcesFromServer();
+        await triggerServerTick();
       } catch (bootErr) {
         console.warn('[v1.67] Boot sync error (no crítico):', bootErr);
       }
-
-      if (typeof resetUiAnimation === 'function') resetUiAnimation();
-      if (typeof ensureUiAnim === 'function') ensureUiAnim();
 
       if (typeof loadAllVillages === 'function') loadAllVillages();
       refreshMyAlliance().catch(function () { });
@@ -1420,24 +1428,12 @@
         v.state = s;
         v.x = Number(v.cx); v.y = Number(v.cy);
 
-        // v1.69: resolver todas las colas que vencieron offline, no solo build_queue
-        var needsSave = false;
-        if (v.state.build_queue) {
-          const oldQ = JSON.stringify(v.state.build_queue);
-          v.state = resolveQueue(v.state);
-          if (oldQ !== JSON.stringify(v.state.build_queue)) needsSave = true;
-        }
-        if (v.state.training_queue && v.state.training_queue.length > 0) {
-          const oldT = JSON.stringify(v.state.training_queue);
-          v.state = resolveTrainingQueue(v.state);
-          if (oldT !== JSON.stringify(v.state.training_queue)) needsSave = true;
-        }
-        if (v.state.summoning_queue && v.state.summoning_queue.length > 0) {
-          const oldS = JSON.stringify(v.state.summoning_queue);
-          v.state = resolveSummoningQueue(v.state);
-          if (oldS !== JSON.stringify(v.state.summoning_queue)) needsSave = true;
-        }
-        if (needsSave) await saveVillage(v, { updateScore: false });
+        // v1.98 FIX IDX-01: Eliminada resolución LOCAL de colas (build/training/summoning).
+        // save_village_client lee state de DB (no el local), así que los cambios a
+        // buildings/troops/creatures hechos por resolveQueue/resolveTrainingQueue/resolveSummoningQueue
+        // se perdían permanentemente. El servidor resuelve colas vencidas en:
+        //   - triggerServerTick() del boot (initGame línea ~1292) para aldea activa
+        //   - switchVillage → triggerServerTick() para las demás
 
         loaded.push(v);
       }
@@ -1475,7 +1471,7 @@
       if (activeVillage) sel.value = activeVillage.id;
     }
 
-    function switchVillage(id) {
+    async function switchVillage(id) {
       var v = myVillages.find(function (v) { return v.id === id; });
       if (v) {
         activeVillage = v;
@@ -1487,11 +1483,17 @@
         }
         mapCamX = null;
         mapCamY = null;
-        resetUiAnimation();
         var sel = document.getElementById('villageSel');
         if (sel) sel.value = v.id;
         if (!window._suppressSessionSave) { try { sessionStorage.setItem('EW_lastVillage', v.id); } catch (e) { } }
-        tick();
+        tick(); // paint inmediato con datos locales
+
+        // v1.98 FIX IDX-06: await triggerServerTick para tener recursos reales del servidor
+        // ANTES de re-renderizar la página activa. Sin await, la UI mostraba datos stale.
+        try {
+          if (triggerServerTick) await triggerServerTick();
+        } catch (e) { console.warn('[switchVillage] sync error (no crítico):', e); }
+
         var activePage = document.querySelector('.page.active');
         if (activePage) {
           var pid = activePage.id;
@@ -1546,13 +1548,13 @@
 
       var { error } = await sbClient.rpc('save_village_client', {
         p_village_id: v.id,
-        p_name: v.name,
-        p_aldeanos_assigned: s.aldeanos_assigned || defaultAssignments(),
+        p_build_queue: s.build_queue || null,
+        p_training_queue: s.training_queue || [],
+        p_summoning_queue: s.summoning_queue || [],
         p_refugio: s.refugio || {},
-        p_mission_queue: v.state.mission_queue || [],
-        p_build_queue: v.state.build_queue || null,
-        p_training_queue: v.state.training_queue || [],
-        p_summoning_queue: v.state.summoning_queue || []
+        p_aldeanos_assigned: s.aldeanos_assigned || defaultAssignments(),
+        p_production: s.production || {},
+        p_capacity: s.capacity || {}
       });
 
       if (error) {
@@ -1635,59 +1637,26 @@
     }
 
     // ============================================================
-    // UI ANIMATION
+    // RENDER RECURSOS (OGame puro — lee vs.resources directamente)
     // ============================================================
-    var uiShown = null;
-    var uiTarget = null;
-    var uiAnimStarted = false;
-
     var _elCache = {};
     function _el(id) {
       if (!_elCache[id]) _elCache[id] = document.getElementById(id);
       return _elCache[id];
     }
 
-    function resetUiAnimation() {
-      uiShown = { madera: 0, piedra: 0, hierro: 0, provisiones: 0, esencia: 0, aldeanos: 0, capPctMa: 0, capPctPi: 0, capPctHi: 0, capPctPr: 0, capPctEs: 0, capPctAld: 0 };
-      uiTarget = null;
-    }
-
-    function ensureUiAnim() {
-      if (uiAnimStarted) return;
-      uiAnimStarted = true;
-      function step() {
-        if (uiShown && uiTarget) {
-          var keys = ['madera', 'piedra', 'hierro', 'provisiones', 'esencia', 'aldeanos', 'capPctMa', 'capPctPi', 'capPctHi', 'capPctPr', 'capPctEs', 'capPctAld'];
-          keys.forEach(function (key) { uiShown[key] = uiTarget[key]; });
-          renderAnimatedUi();
-        }
-        requestAnimationFrame(step);
-      }
-      requestAnimationFrame(step);
-    }
-
-    function renderAnimatedUi() {
-      if (!activeVillage || !uiShown) return;
+    function renderTopBar() {
+      if (!activeVillage) return;
       var vs = activeVillage.state;
-      var aldGranja = vs.aldeanos_granja || 0;
-      var barrCap = getBarracksCapacity(vs.buildings);
+      var res = calcRes(vs);
       var cap = getCapacity(vs.buildings);
+      var barrCap = getBarracksCapacity(vs.buildings);
 
-      var madera = Math.round(uiShown.madera || 0);
-      var piedra = Math.round(uiShown.piedra || 0);
-      var hierro = Math.round(uiShown.hierro || 0);
-      var prov = Math.round(uiShown.provisiones || 0);
-      var esencia = Math.round(uiShown.esencia || 0);
-      var aldLibres = Math.round(uiShown.aldeanos || 0);
-
-      var stored = Math.round(uiShown.stored || 0);
-      var capPct = Math.max(0, Math.min(100, uiShown.capPct || 0));
-
-      _el('rMadera').textContent = fmt(madera);
-      _el('rPiedra').textContent = fmt(piedra);
-      _el('rHierro').textContent = fmt(hierro);
-      _el('rProv').textContent = fmt(prov);
-      _el('rEsencia').textContent = fmt(esencia);
+      _el('rMadera').textContent = fmt(res.madera);
+      _el('rPiedra').textContent = fmt(res.piedra);
+      _el('rHierro').textContent = fmt(res.hierro);
+      _el('rProv').textContent = fmt(res.provisiones);
+      _el('rEsencia').textContent = fmt(res.esencia);
 
       function setBar(id, pct, color) {
         var b = _el(id); if (!b) return;
@@ -1696,24 +1665,25 @@
         if (color) b.style.background = color;
         else b.className = 'cap-bar ' + cls;
       }
-      setBar('capBarMa', uiShown.capPctMa || 0);
-      setBar('capBarPi', uiShown.capPctPi || 0);
-      setBar('capBarHi', uiShown.capPctHi || 0);
-      setBar('capBarPr', uiShown.capPctPr || 0);
-      setBar('capBarEs', uiShown.capPctEs || 0, 'var(--esencia)');
-      setBar('capBarAld', uiShown.capPctAld || 0, 'var(--aldeanos)');
+      var capPctMa = cap > 0 ? Math.min(100, Math.round(res.madera / cap * 100)) : 0;
+      var capPctPi = cap > 0 ? Math.min(100, Math.round(res.piedra / cap * 100)) : 0;
+      var capPctHi = cap > 0 ? Math.min(100, Math.round(res.hierro / cap * 100)) : 0;
+      var capPctPr = cap > 0 ? Math.min(100, Math.round(res.provisiones / cap * 100)) : 0;
+      var capPctEs = cap > 0 ? Math.min(100, Math.round(res.esencia / cap * 100)) : 0;
+      var capPctAld = barrCap > 0 ? Math.min(100, Math.round((vs.troops && vs.troops.aldeano || 0) / barrCap * 100)) : 0;
+      setBar('capBarMa', capPctMa);
+      setBar('capBarPi', capPctPi);
+      setBar('capBarHi', capPctHi);
+      setBar('capBarPr', capPctPr);
+      setBar('capBarEs', capPctEs, 'var(--esencia)');
+      setBar('capBarAld', capPctAld, 'var(--aldeanos)');
 
-      if (_el('ovMadera')) _el('ovMadera').textContent = fmt(madera);
-      if (_el('ovPiedra')) _el('ovPiedra').textContent = fmt(piedra);
-      if (_el('ovHierro')) _el('ovHierro').textContent = fmt(hierro);
-      if (_el('ovProv')) _el('ovProv').textContent = fmt(prov);
-      if (_el('ovEsencia')) _el('ovEsencia').textContent = fmt(esencia);
+      // v1.98 FIX IDX-04: eliminados ovMadera/ovPiedra/ovHierro/ovProv/ovEsencia — IDs no existen en el HTML
 
       var tropasEnBase = getBarracksUsed(vs);
-      _el('rAldeanos').textContent = aldLibres;
+      _el('rAldeanos').textContent = res.aldeanos;
       if (_el('rTropasBase')) _el('rTropasBase').textContent = tropasEnBase;
       if (_el('rBarrCap')) _el('rBarrCap').textContent = '/ ' + barrCap;
-      if (_el('ovAldeanos')) _el('ovAldeanos').textContent = aldLibres + ' libres / ' + aldGranja + ' en granja';
     }
 
     // ============================================================
@@ -1750,7 +1720,10 @@
       // ¿Aldeano pendiente?
       var _recLvlCheck = (activeVillage.state.buildings && activeVillage.state.buildings['reclutamiento'] && activeVillage.state.buildings['reclutamiento'].level) || 0;
       if (_recLvlCheck > 0 && activeVillage.state.last_aldeano_at) {
-        var _recMsCheck = 600000 / _recLvlCheck;
+        // v1.92: usar getAldeanosIntervalMs — fórmula alineada con servidor
+        var _recMsCheck = typeof getAldeanosIntervalMs === 'function'
+          ? getAldeanosIntervalMs(activeVillage.state.buildings)
+          : Math.round(600000 * (1 - (_recLvlCheck - 1) * 0.01));
         var _aldElapsed = _tickNow - new Date(activeVillage.state.last_aldeano_at).getTime();
         if (_aldElapsed >= _recMsCheck) _needsServerSync = true;
       }
@@ -1758,7 +1731,7 @@
       // Sync bajo demanda: si algo venció, pedir al servidor que resuelva
       if (_needsServerSync && !window._ogameSyncRunning) {
         window._ogameSyncRunning = true;
-        syncVillageResourcesFromServer().then(function () {
+        triggerServerTick().then(function () {
           window._ogameSyncRunning = false;
         }).catch(function (e) {
           console.warn('[Ogame sync] error:', e);
@@ -1812,36 +1785,15 @@
       var capPctEs = cap > 0 ? Math.min(100, Math.round(res.esencia / cap * 100)) : 0;
       var barrCapTick = getBarracksCapacity(vs.buildings);
       var aldEnBaseTick = Math.max(0, (vs.troops && vs.troops.aldeano) || 0);
-      var capPctAld = barrCapTick > 0 ? Math.min(100, Math.round(aldEnBaseTick / barrCapTick * 100)) : 0;
 
       var usedBarracas = getBarracksUsed(vs);
       var barrPctTick = barrCapTick > 0 ? Math.round(usedBarracas / barrCapTick * 100) : 0;
       var elCapTick = document.getElementById('recAldCap');
       if (elCapTick) elCapTick.textContent = usedBarracas + ' / ' + barrCapTick + ' (' + barrPctTick + '%)';
 
-      // v1.89: GENERACIÓN LOCAL DE ALDEANOS — siempre en cada tick, no solo en modal
+      // v1.95: isFull y recLvl para el modal de reclutamiento (solo visual — no genera aldeanos)
       var isFull = usedBarracas >= barrCapTick;
       var recLvl = (vs.buildings['reclutamiento'] && vs.buildings['reclutamiento'].level) || 0;
-      if (recLvl > 0 && !isFull && barrCapTick > 0 && vs.last_aldeano_at) {
-        var recMs = typeof getAldeanosIntervalMs === 'function' ? getAldeanosIntervalMs(vs.buildings) : 60000;
-        var lastAld = new Date(vs.last_aldeano_at).getTime();
-        var elapsed = Date.now() - lastAld;
-        if (elapsed >= recMs) {
-          var generados = Math.floor(elapsed / recMs);
-          var espacio = barrCapTick - usedBarracas;
-          var aSumar = Math.min(generados, espacio);
-          if (aSumar > 0) {
-            vs.troops.aldeano = (vs.troops.aldeano || 0) + aSumar;
-            if (!vs.resources) vs.resources = {};
-            vs.resources.aldeanos = vs.troops.aldeano;
-            var shiftMs = aSumar * recMs;
-            vs.last_aldeano_at = new Date(lastAld + shiftMs).toISOString();
-            aldEnBaseTick = vs.troops.aldeano;
-            scheduleSave();
-            if (document.getElementById('page-fleet') && document.getElementById('page-fleet').classList.contains('active')) renderTroops();
-          }
-        }
-      }
 
       // MODAL del edificio de reclutamiento — solo renderizar progress bar visual
       var elRecWrap = document.getElementById('reclutamiento-progress-wrapper');
@@ -1877,17 +1829,8 @@
       _el('rProvR').textContent = '+' + fmt(prod.provisiones) + '/h';
       _el('rEsenciaR').textContent = '+' + fmt(prod.esencia) + '/h';
 
-      if (!uiShown) resetUiAnimation();
-      ensureUiAnim();
-      uiTarget = {
-        madera: res.madera,
-        piedra: res.piedra,
-        hierro: res.hierro,
-        provisiones: res.provisiones,
-        esencia: res.esencia,
-        aldeanos: res.aldeanos,
-        capPctMa, capPctPi, capPctHi, capPctPr, capPctEs, capPctAld
-      };
+      // v1.95: actualizar top bar (números y barras de capacidad)
+      renderTopBar();
 
       // v1.62c: Procesador Global de Misiones Admin (DIRECTO — sin resolveMissions)
       if (typeof isAdmin === 'function' && isAdmin()) {
@@ -1975,13 +1918,7 @@
       updateGranjaPanel();
 
       var nowMs = Date.now();
-      // v1.71: Sincronización periódica 60s con el servidor (recursos reales)
-      if (nowMs - _lastResourceSync > 60000) {
-        _lastResourceSync = nowMs;
-        syncVillageResourcesFromServer && syncVillageResourcesFromServer().catch(function (e) {
-          console.warn('[tick] sync 60s error:', e);
-        });
-      }
+      // v1.95: sin polling periódico — solo sync por acción o cola vencida (BUG-05 eliminado)
       if (nowMs - _lastReinforcementsCheck > 60000 && document.getElementById('page-overview').classList.contains('active')) {
         _lastReinforcementsCheck = nowMs;
         renderReinforcementsPanel();

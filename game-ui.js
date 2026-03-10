@@ -38,10 +38,14 @@ async function startBuild(id) {
     }
 
     if (newState) {
-      // v1.70: start_at viene del servidor incluido en build_queue
-      activeVillage.state.resources = newState.resources || vs.resources;
-      activeVillage.state.build_queue = newState.build_queue || null;
-      activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
+      // v1.97: start_build_secure devuelve {ok, state, build_queue} — extraer .state
+      var serverState = newState.state || newState;
+      var _bq = newState.build_queue || serverState.build_queue;
+      if (!_bq || _bq === 'null' || (typeof _bq === 'object' && Object.keys(_bq).length === 0)) _bq = null;
+      var localAldAssigned = activeVillage.state.aldeanos_assigned;
+      activeVillage.state = Object.assign({}, activeVillage.state, serverState);
+      activeVillage.state.build_queue = _bq;
+      if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
     }
 
     var def = BUILDINGS.find(function (b) { return b.id === id; });
@@ -73,9 +77,11 @@ async function cancelBuild() {
     if (error) throw error;
 
     if (newState) {
-      activeVillage.state.resources = newState.resources || vs.resources;
-      activeVillage.state.last_updated = newState.last_updated || vs.last_updated;
-      activeVillage.state.build_queue = null; // v1.76: mover aquí — solo limpiar si el servidor confirmó
+      // v1.97: cancel_build_secure devuelve state plano completo con todas las colas
+      var localAldAssigned = activeVillage.state.aldeanos_assigned;
+      activeVillage.state = Object.assign({}, activeVillage.state, newState);
+      activeVillage.state.build_queue = null;
+      if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
     }
 
     showNotif('Construcción cancelada. Recursos devueltos.', 'ok');
@@ -1523,47 +1529,25 @@ async function executeMoveClick(destVillageId, tx, ty, isAllyDest) {
 
   document.getElementById('bldModal').style.display = 'none';
 
+  // v1.99 FIX: reemplazado logica client-side por RPC launch_mission_secure_v2.
+  // Antes: descuentos manuales en state + flushVillage -> save_village_client no guarda
+  // mission_queue (columna separada) -> servidor nunca sabia de la mision ->
+  // tropas nunca se restaban ni llegaban al destino.
   var dist = Math.max(Math.abs(tx - activeVillage.x), Math.abs(ty - activeVillage.y));
   var minSpeed = window._moveMinSpeed || 1;
   var seconds = Math.ceil((dist / minSpeed) * MISSION_FACTOR);
-  var finishAt = new Date(Date.now() + seconds * 1000).toISOString();
+  var durationMs = seconds * 1000;
 
-  snapshotResources(vs);
-
-  // Descontar recursos
-  for (var rk in cargo) {
-    vs.resources[rk] = Math.max(0, (vs.resources[rk] || 0) - cargo[rk]);
-  }
-
-  // Descontar tropas
+  // Separar tropas y criaturas para el RPC
+  var troopsOnly = {};
+  var creaturesOnly = {};
   Object.keys(selectedTroops).forEach(function (k) {
-    if (k === 'aldeano') {
-      vs.resources.aldeanos = Math.max(0, (vs.resources.aldeanos || 0) - selectedTroops[k]);
-      vs.troops.aldeano = vs.resources.aldeanos;
-    } else if (TROOP_TYPES[k]) {
-      vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - selectedTroops[k]);
-    } else if (CREATURE_TYPES[k]) {
-      vs.creatures[k] = Math.max(0, ((vs.creatures && vs.creatures[k]) || 0) - selectedTroops[k]);
-    }
+    if (CREATURE_TYPES[k]) creaturesOnly[k] = selectedTroops[k];
+    else troopsOnly[k] = selectedTroops[k];
   });
 
-  if (!vs.mission_queue) vs.mission_queue = [];
-  vs.mission_queue.push({
-    mid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), // v1.76: mid único obligatorio
-    type: isAllyDest ? 'reinforce' : 'move',
-    tx: tx, ty: ty, targetId: destVillageId,
-    troops: selectedTroops,
-    cargo: cargo, // Recursos opcionales
-    finish_at: finishAt,
-    start_at: new Date().toISOString(),
-    origin_village_id: activeVillage.id,
-    origin_owner_id: currentUser.id
-  });
-
-  await flushVillage();
-  var cargoMsg = totalLoad > 0 ? ' (con ' + totalLoad + ' recursos)' : '';
-  showNotif((isAllyDest ? '🛡️ Refuerzo enviado' : '⚔ Tropas en camino') + cargoMsg + ' • ' + fmtTime(seconds), 'ok');
-  tick();
+  var missionType = isAllyDest ? 'reinforce' : 'move';
+  await startMission(missionType, tx, ty, destVillageId, troopsOnly, cargo, durationMs, creaturesOnly);
 }
 
 function _calcMinTroopSpeed(troops, aldLibres) {
@@ -2208,14 +2192,8 @@ function showPage(name, el) {
   }
   // Guardar página activa en sessionStorage para restaurar tras F5
   try { sessionStorage.setItem('EW_lastPage', name); } catch (e) { }
-  // Resync recursos — solo si han pasado más de 2 minutos desde el último sync
-  // v1.76: usar syncVillageResourcesFromServer (RPC secure_village_tick) en vez de
-  // syncResourcesFromDB (lectura directa a DB) — evita sobrescribir recursos interpolados
-  var _nowSync = Date.now();
-  if (_nowSync - (_lastResourceSync || 0) > 120000) {
-    _lastResourceSync = _nowSync;
-    syncVillageResourcesFromServer();
-  }
+  // v1.96: sin triggerServerTick al navegar — recursos no interpolan (BUG-03 eliminado)
+  // El sync ocurre solo al vencer una cola, hacer una acción, o F5.
 }
 
 // Resync ligero — actualiza recursos desde DB sin recargar todo el estado
@@ -2361,28 +2339,21 @@ function renderRecursos() {
 // ============================================================
 // WORKER ASSIGNMENT — con reajuste reactivo de todas las barras
 // ============================================================
+// v1.95 OGame puro: snapshotResources() SOLO actualiza metadata de producción.
+// NUNCA sobreescribe vs.resources — el servidor es la única autoridad sobre los valores reales.
+// Se llama antes de flushVillage() para asegurar que production/capacity/last_updated están frescos.
 function snapshotResources(vs) {
-  var res = calcRes(vs);
-  vs.resources.madera = res.madera;
-  vs.resources.piedra = res.piedra;
-  vs.resources.hierro = res.hierro;
-  vs.resources.provisiones = res.provisiones;
-  vs.resources.esencia = res.esencia;
-  // Sincronizar resources.aldeanos desde troops.aldeano (fuente de verdad)
-  vs.resources.aldeanos = res.aldeanos_total;
-
-  // v1.50: Metadata para optimización en servidor (Ogame-style)
   vs.production = getProd(vs.buildings, 0, vs.aldeanos_assigned);
   vs.capacity = getCapacity(vs.buildings);
-
   vs.last_updated = new Date().toISOString();
-  return res;
+  // Sync aldeanos desde troops (fuente de verdad)
+  if (vs.troops) vs.resources.aldeanos = (vs.troops.aldeano || 0);
+  return vs.resources;
 }
 
-// v2.0: Modelo Ogame — el servidor es la ÚNICA autoridad.
-// secure_village_tick resuelve edificios, tropas, criaturas y aldeanos.
-// El cliente solo muestra countdowns entre syncs.
-async function syncVillageResourcesFromServer() {
+// v1.95 OGame puro: triggerServerTick() — disparo puntual al servidor.
+// Se llama solo cuando una cola vence o se cambia de aldea. Sin polling periódico.
+async function triggerServerTick() {
   if (!activeVillage || !activeVillage.id) return;
   try {
     // 1. Sincronizar rates de producción localmente primero
@@ -2398,16 +2369,9 @@ async function syncVillageResourcesFromServer() {
     if (error) throw error;
     if (newState) {
       var oldState = activeVillage.state;
-      var newRes = newState.resources || {};
-      var oldRes = (oldState && oldState.resources) || {};
 
-      // Smart Merge anti-flickering: diferencias <5 preservan valor visual local
-      ['madera', 'piedra', 'hierro', 'provisiones', 'esencia'].forEach(function (k) {
-        var diff = Math.abs((newRes[k] || 0) - (oldRes[k] || 0));
-        if (diff < 5) {
-          newRes[k] = oldRes[k];
-        }
-      });
+      // v1.98 FIX UI-05: eliminado "Smart Merge anti-flickering" (diff<5 preservaba valor local).
+      // En modelo OGame puro el servidor es autoridad absoluta — siempre aceptar su valor.
 
       // ── Modelo Ogame: aplicar estado del servidor como AUTORIDAD ──
       // Preservar solo campos que NO maneja el servidor
@@ -2443,7 +2407,11 @@ async function syncVillageResourcesFromServer() {
       // Re-inyectar campos que el servidor no gestiona
       activeVillage.state.mission_queue = localMissionQueue;
       // FIX REBOTE: Priorizar SIEMPRE el slider local que el jugador acaba de mover
-      activeVillage.state.aldeanos_assigned = localAldAssigned || newState.aldeanos_assigned || {};
+      // v1.95: aldeanos_assigned SIEMPRE viene del cliente — el servidor no lo gestiona.
+      // Si el local tiene valor, gana. Solo usar el del servidor como fallback si no hay nada local.
+      activeVillage.state.aldeanos_assigned = (localAldAssigned && Object.keys(localAldAssigned).length)
+        ? localAldAssigned
+        : (newState.aldeanos_assigned || {});
       activeVillage.state.refugio = newState.refugio || localRefugio || {};
       activeVillage.state.battles_won_pvp = localBattles.battles_won_pvp;
       activeVillage.state.battles_lost_pvp = localBattles.battles_lost_pvp;
@@ -2488,11 +2456,8 @@ function assignWorker(resource, amount) {
   var res = calcRes(vs);
   amount = Math.max(0, Math.min(amount, res.aldeanos));
   if (amount <= 0) { showNotif('No hay aldeanos libres.', 'err'); return; }
-  vs.resources.madera = res.madera; vs.resources.piedra = res.piedra;
-  vs.resources.hierro = res.hierro; vs.resources.provisiones = res.provisiones;
-  vs.resources.esencia = res.esencia;
+  // v1.98 FIX UI-01: eliminada escritura directa a vs.resources (regla #42 — solo el servidor modifica resources)
   vs.aldeanos_assigned[resource] = (vs.aldeanos_assigned[resource] || 0) + amount;
-  vs.aldeanos_granja = vs.aldeanos_assigned.provisiones || 0;
   vs.last_updated = new Date().toISOString();
   debouncedSave(); tick(); updateRecursosSliders();
 }
@@ -2508,7 +2473,6 @@ function unassignWorker(resource, amount) {
   snapshotResources(vs);
 
   vs.aldeanos_assigned[resource] = Math.max(0, (vs.aldeanos_assigned[resource] || 0) - amount);
-  vs.aldeanos_granja = vs.aldeanos_assigned.provisiones || 0;
 
   debouncedSave(); tick(); updateRecursosSliders();
 }
@@ -2539,11 +2503,11 @@ function applyAllWorkers() {
   }
 
   KEYS.forEach(function (k) { w[k] = newVals[k]; });
-  vs.aldeanos_granja = w.provisiones || 0;
 
   showNotif('✓ Aldeanos asignados correctamente', 'ok');
   window._workerSettingsDirty = false;
-  debouncedSave(); tick(); updateRecursosSliders();
+  // v1.95: flushVillage inmediato — aldeanos_assigned debe persistir antes de cualquier F5
+  flushVillage(); tick(); updateRecursosSliders();
 }
 
 function setWorker(resource, rawValue) {
@@ -2558,7 +2522,6 @@ function setWorker(resource, rawValue) {
   var value = Math.max(0, Math.min(parseInt(rawValue) || 0, available));
 
   w[resource] = value;
-  vs.aldeanos_granja = w.provisiones || 0;
 
   debouncedSave(); tick(); updateRecursosSliders();
 }

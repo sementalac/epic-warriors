@@ -13,7 +13,6 @@ function defaultState() {
   return {
     // FIX Me1: aldeanos:0 incluido — requerido por RPCs que reconstruyen resources con jsonb_build_object
     resources: { madera: 800, piedra: 600, hierro: 400, provisiones: 200, esencia: 50, aldeanos: 0 },
-    aldeanos_granja: 0,
     aldeanos_assigned: defaultAssignments(),
     troops: defaultTroops(),
     creatures: defaultCreatures(),
@@ -87,65 +86,40 @@ function getProd(blds, aldGranja, workers) {
   };
 }
 
-// v1.71: calcAndApplyAldeanos() eliminada (era código muerto — servidor autoritativo).
-// calcRes() ya NO tiene side-effects sobre vs. Es seguro usarla en paths de solo lectura.
-// Para obtener solo producción sin recursos calculados, usar getProd() directamente.
+// v1.95 OGame puro: calcRes() devuelve vs.resources directamente — sin interpolación.
+// El servidor es la única autoridad. Solo calculamos aldeanos_libres desde troops.
+// Para producción/h usar getProd() directamente.
 function calcRes(vs) {
-
-  var now = Date.now();
-  var last = new Date(vs.last_updated).getTime();
-  // Cap producción offline a 24h para evitar abuso de tiempo
-  var hrs = Math.max(0, Math.min((now - last) / 3600000, 24));
-  var w = vs.aldeanos_assigned || defaultAssignments();
-  if (w.esencia === undefined) w.esencia = 0;
-  var p = getProd(vs.buildings, 0, w);
-  var cap = getCapacity(vs.buildings);
-
-  var madera = (vs.resources.madera || 0) + p.madera * hrs;
-  var piedra = (vs.resources.piedra || 0) + p.piedra * hrs;
-  var hierro = (vs.resources.hierro || 0) + p.hierro * hrs;
-  var provisiones = (vs.resources.provisiones || 0) + p.provisiones * hrs;
-  var esencia = (vs.resources.esencia || 0) + p.esencia * hrs;
-
   // ═══════════════════════════════════════════════════════════════
-  // NUEVO SISTEMA: 1 SOLO TIPO DE ALDEANO
+  // ALDEANOS: calculados localmente desde troops (no cambian entre syncs)
   // troops.aldeano = TOTAL de aldeanos en la aldea
-  // aldeanos_assigned = { madera: X, piedra: Y } = asignaciones (solo números)
-  // aldeanos_libres = troops.aldeano - sum(assigned) - tropas_en_mision
+  // aldeanos_assigned = { madera: X, piedra: Y } = asignaciones
+  // aldeanos_libres = troops.aldeano - sum(assigned) - en refugio
   // ═══════════════════════════════════════════════════════════════
-
   var assigned = vs.aldeanos_assigned || defaultAssignments();
   if (assigned.esencia === undefined) assigned.esencia = 0;
 
   var totalAssigned = (assigned.madera || 0) + (assigned.piedra || 0) + (assigned.hierro || 0)
     + (assigned.provisiones || 0) + (assigned.esencia || 0);
 
-  // Aldeanos totales en la aldea (fuente de verdad)
   var aldTotal = (vs.troops && vs.troops.aldeano !== undefined) ? vs.troops.aldeano : 0;
-
-  // Aldeanos libres = totales - asignados - en refugio (no pueden trabajar ni entrenarse)
   var aldInRefugio = (vs.refugio && vs.refugio.aldeano) || 0;
   var aldLibres = Math.max(0, aldTotal - totalAssigned - aldInRefugio);
 
-  // Cap almacén: cada recurso tiene su propio límite independiente (no suma total)
-  // Si el almacén es nivel 3 → cap=8000, cada recurso puede llegar a 8000 por separado
-  madera = Math.min(madera, cap);
-  piedra = Math.min(piedra, cap);
-  hierro = Math.min(hierro, cap);
-  provisiones = Math.min(provisiones, cap);
+  // Recursos: exactamente lo que devolvió el servidor, sin tocar
+  var r = vs.resources || {};
 
   return {
-    // Para la UI seguimos devolviendo el entero (lo que ve el jugador)
-    madera: Math.floor(madera),
-    madera_raw: madera,
-    piedra: Math.floor(piedra),
-    piedra_raw: piedra,
-    hierro: Math.floor(hierro),
-    hierro_raw: hierro,
-    provisiones: Math.floor(provisiones),
-    provisiones_raw: provisiones,
-    esencia: Math.floor(esencia),
-    esencia_raw: esencia,
+    madera: Math.floor(r.madera || 0),
+    madera_raw: r.madera || 0,
+    piedra: Math.floor(r.piedra || 0),
+    piedra_raw: r.piedra || 0,
+    hierro: Math.floor(r.hierro || 0),
+    hierro_raw: r.hierro || 0,
+    provisiones: Math.floor(r.provisiones || 0),
+    provisiones_raw: r.provisiones || 0,
+    esencia: Math.floor(r.esencia || 0),
+    esencia_raw: r.esencia || 0,
 
     // compatibilidad: res.aldeanos = libres (UI vieja)
     aldeanos: aldLibres,
@@ -190,78 +164,62 @@ async function cancelMission(missionRef) {
   }
 }
 
-async function startMission(type, tx, ty, targetId, troops, guestContingents) {
-  if (!activeVillage) return;
+/**
+ * Despacha una misión al servidor (Modelo Ogame v2.1)
+ * @param {string} type - 'attack', 'espionage', 'transport', 'move', 'reinforce'
+ * @param {number} tx - X destino (informativo/histórico)
+ * @param {number} ty - Y destino (informativo/histórico)
+ * @param {string} targetId - UUID de aldea destino
+ * @param {object} troops - Mapa de tropas {espada: 10, ...}
+ * @param {object} cargo - Mapa de recursos {madera: 500, ...}
+ * @param {number} durationMs - Duración calculada en cliente
+ * @param {object} creatures - Mapa de criaturas (opcional)
+ */
+async function startMission(type, tx, ty, targetId, troops, cargo, durationMs, creatures) {
+  console.log('[DEBUG startMission] llamada con:', type, targetId, JSON.stringify(troops));
+  if (!activeVillage) { console.log('[DEBUG startMission] abortado: no activeVillage'); return; }
   var vs = activeVillage.state;
+  cargo = cargo || {};
+  creatures = creatures || {};
+  durationMs = durationMs || 0;
 
-  // Snapshot para rollback optimístico (deep copy)
-  snapshotResources(vs);
-  await flushVillage();
-  var _troopsSnapshot = JSON.parse(JSON.stringify(vs.troops || {}));
-  var _creaturesSnapshot = JSON.parse(JSON.stringify(vs.creatures || {}));
-  var _provisionesSnapshot = vs.resources.provisiones;
-
-  // Optimistic update local
-  var totalUnits = 0;
-  Object.keys(troops).forEach(k => {
-    if (TROOP_TYPES[k]) { vs.troops[k] = Math.max(0, (vs.troops[k] || 0) - troops[k]); totalUnits += troops[k]; }
-    else if (CREATURE_TYPES[k]) vs.creatures[k] = Math.max(0, (vs.creatures[k] || 0) - troops[k]);
-  });
-  vs.resources.provisiones = Math.max(0, vs.resources.provisiones - totalUnits);
+  // v1.98 FIX ENG-01: Eliminados snapshotResources + flushVillage antes del RPC.
+  // Misma clase de bug que regla #28: flushVillage escribe last_updated=NOW() sin
+  // acumular producción → secure_village_tick ve v_hrs≈0 → producción perdida.
+  // El RPC (launch_mission_secure_v2) ya llama secure_village_tick que se encarga
+  // de producción, aldeanos y colas vencidas.
 
   showNotif('Calculando y despachando...', 'warn');
-
   try {
     var payload = {
       p_village_id: activeVillage.id,
-      p_type: type,
-      p_tx: tx,
-      p_ty: ty,
       p_target_id: targetId,
-      p_troops: troops
+      p_type: type,
+      p_troops: troops,
+      p_creatures: creatures,
+      p_cargo: cargo,
+      p_duration_ms: durationMs
     };
-    // if (guestContingents) payload.p_guest_contingents = guestContingents; // Se omite p_guest_contingents en v2.0 basic
 
     var { data: newState, error: rpcErr } = await sbClient.rpc('launch_mission_secure_v2', payload);
+    console.log('[DEBUG startMission] respuesta RPC:', JSON.stringify(newState), 'error:', rpcErr);
 
     if (rpcErr) throw rpcErr;
 
-    if (!newState || newState.ok === false) {
-      // Rollback
-      var errStr = newState && newState.error ? newState.error : 'No se pudo lanzar la misión.';
-      vs.troops = _troopsSnapshot; vs.creatures = _creaturesSnapshot; vs.resources.provisiones = _provisionesSnapshot;
-      showNotif(errStr, 'err');
+    if (!newState) {
+      showNotif('Error: El servidor no devolvió estado.', 'err');
       return;
     }
 
-    // Sincronizar estado local con el devuelto por el servidor
-    var sNext = newState.state || newState;
-    if (sNext && sNext.buildings) {
-      activeVillage.state = sNext;
-    }
-
-    var serverMission = newState.mission;
-    if (serverMission) {
-      if (!activeVillage.state.mission_queue) activeVillage.state.mission_queue = [];
-      if (!activeVillage.state.mission_queue.find(m => m.mid === serverMission.mid)) {
-        activeVillage.state.mission_queue.push(serverMission);
-      }
-      var nowT = Date.now();
-      var finT = new Date(serverMission.finish_at).getTime();
-      showNotif('¡Misión enviada! Llegada en ' + fmtTime(Math.ceil((finT - nowT) / 1000)), 'ok');
-    } else {
-      showNotif('Misión enviada con éxito.', 'ok');
-    }
-
-    if (type === 'attack' && guestContingents && guestContingents.length > 0 && serverMission) {
-      _insertActiveMission(serverMission.mid, serverMission, guestContingents);
-    }
-
+    // v1.95: merge — preservar buildings/aldeanos_assigned y reinyectar mission_queue actualizada
+    var localAldAssigned = activeVillage.state.aldeanos_assigned;
+    activeVillage.state = Object.assign({}, activeVillage.state, newState);
+    activeVillage.state.mission_queue = newState.mission_queue || activeVillage.state.mission_queue || [];
+    if (localAldAssigned) activeVillage.state.aldeanos_assigned = localAldAssigned;
+    showNotif('¡Misión enviada correctamente!', 'ok');
     tick();
   } catch (e) {
-    // Rollback
-    vs.troops = _troopsSnapshot; vs.creatures = _creaturesSnapshot; vs.resources.provisiones = _provisionesSnapshot;
-    showNotif('Error de conexión al lanzar misión', 'err');
+    showNotif('Error: ' + (e.message || 'Desconocido'), 'err');
     console.error('startMission error:', e);
   }
 }
@@ -311,7 +269,7 @@ async function resolveMissions(v) {
         // Soft refresh of messages si el usuario está viéndolas (para ver reportes generados en servidor)
         if (typeof renderThreads === 'function') setTimeout(renderThreads, 500);
       }
-      await syncVillageResourcesFromServer();
+      await triggerServerTick();
     } catch (e) {
       console.warn('[Ogame missions sync] error:', e);
     } finally {
@@ -319,7 +277,7 @@ async function resolveMissions(v) {
     }
   }
 
-  return activeVillage.state;
+  return v.state;
 }
 
 // ───────────────────────────────────────────────
